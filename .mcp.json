@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "budget-tracker": {
+      "command": "bun",
+      "args": [
+        "--env-file=/Users/lucasbotelho/Developer/budget-tracker/.env",
+        "/Users/lucasbotelho/Developer/budget-tracker/backend/src/mcp-server.ts"
+      ]
+    }
+  }
+}

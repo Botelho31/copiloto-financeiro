@@ -1,0 +1,11 @@
+services:
+  budget-tracker:
+    build: .
+    container_name: budget-tracker
+    restart: unless-stopped
+    ports:
+      - "8080:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env

@@ -1,0 +1,13 @@
+{
+  "name": "budget-tracker",
+  "private": true,
+  "workspaces": ["backend", "frontend", "shared"],
+  "scripts": {
+    "dev": "bun --watch --jsx-import-source=@kitajs/html backend/src/index.tsx",
+    "dev:frontend": "bun run --cwd frontend dev",
+    "build": "bun run --cwd frontend build",
+    "start": "bun --jsx-import-source=@kitajs/html backend/src/index.tsx",
+    "categorize": "bun backend/src/scripts/categorize.ts",
+    "typecheck": "bun run --cwd backend typecheck && bun run --cwd frontend typecheck"
+  }
+}
