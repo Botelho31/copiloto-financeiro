@@ -56,9 +56,15 @@ export function useUpdateDebt() {
         loanType: "price" | "sac" | null;
         notes: string | null;
         matchingRule: string | null;
+        overrideAutomaticSchedule: boolean;
       }>;
     }) => apiFetch<Debt[]>(`/api/debts/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["debts"] });
+      // A payment-plan change (linked bill, loan terms, rate) reshapes the
+      // projection's debt lines, not just the debt record itself.
+      qc.invalidateQueries({ queryKey: ["projections"] });
+    },
   });
 }
 

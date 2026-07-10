@@ -12,8 +12,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Debt, DebtLinkedTransaction } from "shared";
-import { priceSchedule, sacSchedule, simulateAmortization } from "shared";
+import type { Bill, Debt, DebtLinkedTransaction } from "shared";
+import {
+  addMonthsIso,
+  billAppliesToMonth,
+  localMonthDate,
+  monthlyEquivalentAmount,
+  pricePayment,
+  simulateAmortization,
+} from "shared";
 import {
   useCreateDebt,
   useDebtTransactions,
@@ -25,11 +32,13 @@ import {
   useUnlinkTransactionsFromDebt,
   useUpdateDebt,
 } from "../hooks/useDebts";
+import { useBills, useUpdateBill } from "../hooks/useBills";
+import { useProjections } from "../hooks/useProjections";
 import { useSearchTransactions } from "../hooks/useTransactions";
 import { apiFetch } from "../lib/api";
 import { useSortableTable } from "../hooks/useSortableTable";
 import { SortableTh } from "../components/SortableTh";
-import { formatDate, formatMoney } from "../lib/format";
+import { formatDate, formatMoney, formatMonthLabel } from "../lib/format";
 
 const DIRECTIONS = [
   { value: "owed_by_me", label: "I borrowed (I owe)" },
@@ -241,6 +250,78 @@ function LoanTypeEditor(props: { debt: Debt }) {
   );
 }
 
+function StartDateEditor(props: { debt: Debt }) {
+  const updateDebt = useUpdateDebt();
+  const [value, setValue] = useState(props.debt.start_date);
+
+  useEffect(() => {
+    setValue(props.debt.start_date);
+  }, [props.debt.start_date]);
+
+  function save() {
+    if (!value || value === props.debt.start_date) return;
+    updateDebt.mutate({ id: props.debt.id, input: { startDate: value } });
+  }
+
+  return (
+    <div>
+      <div className="label muted">Start date</div>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        className="money"
+      />
+      {isFutureDebt(props.debt) && <span className="muted" style={{ fontSize: 12 }}> (future)</span>}
+    </div>
+  );
+}
+
+// Editable only for a fixed-amount debt — a split-percentage debt's
+// principal is derived from linked transactions/other debts, not a value of
+// its own to type in.
+function PrincipalEditor(props: { debt: Debt }) {
+  const updateDebt = useUpdateDebt();
+  const d = props.debt;
+  const [value, setValue] = useState(String(d.principal_amount ?? ""));
+
+  useEffect(() => {
+    setValue(String(d.principal_amount ?? ""));
+  }, [d.principal_amount]);
+
+  if (d.split_percentage != null) {
+    return (
+      <div>
+        <div className="label muted">Principal</div>
+        <div className="money">{formatMoney(d.principal)}</div>
+      </div>
+    );
+  }
+
+  function save() {
+    const trimmed = value.trim();
+    const num = trimmed === "" ? null : Number(trimmed);
+    if (num === d.principal_amount) return;
+    updateDebt.mutate({ id: d.id, input: { principalAmount: num } });
+  }
+
+  return (
+    <div>
+      <div className="label muted">Principal</div>
+      <input
+        type="number"
+        step="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        className="money"
+        style={{ width: 130 }}
+      />
+    </div>
+  );
+}
+
 function MatchingRuleEditor(props: { debt: Debt }) {
   const updateDebt = useUpdateDebt();
   const [value, setValue] = useState(props.debt.matching_rule ?? "");
@@ -305,7 +386,14 @@ function LinkedDebtsEditor(props: { debt: Debt; allDebts: Debt[] }) {
             <ul style={{ margin: "4px 0", paddingLeft: 20 }}>
               {props.debt.linked_debts.map((ld) => (
                 <li key={ld.id}>
-                  {ld.name} ({formatMoney(ld.principal)}){" "}
+                  {ld.name} ({formatMoney(ld.principal)}
+                  {!ld.countsTowardOrigin && (
+                    <span className="muted" title="Hasn't started yet — not counted until it has">
+                      {" "}
+                      · not counted yet
+                    </span>
+                  )}
+                  ){" "}
                   <button
                     className="link-button"
                     onClick={() =>
@@ -422,18 +510,46 @@ function recentAvgPayment(payOffTx: DebtLinkedTransaction[]): number | null {
   return recent.reduce((sum, t) => sum + Math.abs(t.amount), 0) / recent.length;
 }
 
+// Monthly-equivalent of everything driving the debt's combined plan (every
+// linked bill, converted to its own monthly-equivalent, plus the automatic
+// heuristic if it's also contributing) — an explicit figure beats a
+// historical average anywhere a forecast needs "what will actually be paid
+// each month".
+function plannedMonthlyPayment(d: Debt): number | null {
+  const plan = d.payment_plan;
+  if (plan.source !== "combined") return null;
+  const billsMonthly = plan.bills.reduce((sum, b) => {
+    switch (b.cadence) {
+      case "weekly":
+        return sum + b.amount * (52 / 12);
+      case "monthly":
+        return sum + b.amount;
+      case "quarterly":
+        return sum + b.amount / 3;
+      case "yearly":
+        return sum + b.amount / 12;
+      default:
+        // A single one-off payment isn't a monthly pace.
+        return sum;
+    }
+  }, 0);
+  const total = billsMonthly + (plan.automatic?.monthly_amount ?? 0);
+  return total > 0 ? total : null;
+}
+
 function PayoffProjection(props: { debt: Debt; payOffTx: DebtLinkedTransaction[] }) {
   const d = props.debt;
 
   const projection = useMemo(() => {
     if (d.status !== "active" || d.remaining <= 0) return null;
-    const avgMonthlyPayment = recentAvgPayment(props.payOffTx);
+    const planned = plannedMonthlyPayment(d);
+    const avgMonthlyPayment = planned ?? recentAvgPayment(props.payOffTx);
     if (avgMonthlyPayment == null) return null;
 
     const monthlyRate = (d.interest_rate_monthly_percent ?? 0) / 100;
     const monthlyInterestCost = d.remaining * monthlyRate;
     if (avgMonthlyPayment <= monthlyInterestCost) {
-      return { avgMonthlyPayment, months: null, payoffDate: null };
+      return { avgMonthlyPayment, fromPlan: planned != null, months: null, payoffDate: null };
     }
 
     let balance = d.remaining;
@@ -444,8 +560,8 @@ function PayoffProjection(props: { debt: Debt; payOffTx: DebtLinkedTransaction[]
     }
     const payoffDate = new Date();
     payoffDate.setMonth(payoffDate.getMonth() + months);
-    return { avgMonthlyPayment, months, payoffDate };
-  }, [d.status, d.remaining, d.interest_rate_monthly_percent, props.payOffTx]);
+    return { avgMonthlyPayment, fromPlan: planned != null, months, payoffDate };
+  }, [d, props.payOffTx]);
 
   if (!projection) return null;
 
@@ -454,8 +570,9 @@ function PayoffProjection(props: { debt: Debt; payOffTx: DebtLinkedTransaction[]
       <div className="label muted">Projected payoff</div>
       {projection.months == null ? (
         <div className="shortfall" style={{ marginTop: 4 }}>
-          At the recent average payment of {formatMoney(projection.avgMonthlyPayment)}/mo, this isn't
-          even covering the interest — the balance will keep growing, not shrink.
+          At {projection.fromPlan ? "the planned payment" : "the recent average payment"} of{" "}
+          {formatMoney(projection.avgMonthlyPayment)}/mo, this isn't even covering the interest —
+          the balance will keep growing, not shrink.
         </div>
       ) : (
         <>
@@ -472,11 +589,339 @@ function PayoffProjection(props: { debt: Debt; payOffTx: DebtLinkedTransaction[]
             </span>
           </div>
           <div className="muted" style={{ fontSize: "0.85em", marginTop: 2 }}>
-            Based on your recent average payment of {formatMoney(projection.avgMonthlyPayment)}/mo
+            Based on{" "}
+            {projection.fromPlan
+              ? "the planned payment from the linked bill"
+              : "your recent average payment"}{" "}
+            of {formatMoney(projection.avgMonthlyPayment)}/mo
             {d.interest_rate_monthly_percent ? ` at ${d.interest_rate_monthly_percent}% monthly interest` : ""}.
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// 18 months so even a loan starting next year (e.g. the CAIXA mortgage in
+// 2027-07) still shows its upcoming payments; only the first few applicable
+// months are displayed.
+const PLAN_PREVIEW_HORIZON = 18;
+const PLAN_PREVIEW_COUNT = 6;
+
+const PLAN_CADENCE_LABEL: Record<Bill["cadence"], string> = {
+  weekly: "every week",
+  monthly: "every month",
+  quarterly: "every quarter",
+  yearly: "every year",
+  once: "as a single payment",
+};
+
+// One bill row in the "Paid by recurring bill(s)" control — used both for the
+// bills already linked to this debt (checked, unchecking unlinks) and for the
+// picker of candidates (unchecked, checking links). A bill that currently
+// pays a DIFFERENT debt says so, since checking it would move it here.
+function PlanBillRow(props: {
+  bill: Bill;
+  linked: boolean;
+  first: boolean;
+  onToggle: (checked: boolean) => void;
+}) {
+  const b = props.bill;
+  const linkedElsewhere = !props.linked && b.debt_id !== null;
+  return (
+    <label
+      style={{
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 10px",
+        borderTop: props.first ? undefined : "1px solid var(--rule)",
+        cursor: "pointer",
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={props.linked}
+        onChange={(e) => props.onToggle(e.target.checked)}
+      />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span
+          style={{
+            display: "block",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            opacity: linkedElsewhere ? 0.7 : undefined,
+          }}
+        >
+          {b.name}
+        </span>
+        {linkedElsewhere && (
+          <span className="muted" style={{ display: "block", fontSize: 12 }}>
+            currently pays "{b.debt_name ?? "another debt"}" — checking moves it here
+          </span>
+        )}
+      </span>
+      {b.category_name && <span className="badge">{b.category_name}</span>}
+      <span
+        className={`money ${b.category_kind === "income" ? "gain" : "shortfall"}`}
+        style={{ fontSize: 13 }}
+      >
+        {formatMoney(b.expected_amount)}
+      </span>
+      <span className="muted" style={{ fontSize: 12, minWidth: 64, textAlign: "right" }}>
+        {PLAN_CADENCE_LABEL[b.cadence]}
+      </span>
+    </label>
+  );
+}
+
+// The explicit answer to "how is this debt's payment calculated" — states the
+// resolved method in plain terms, previews the coming months straight from
+// the projection engine (the same numbers the Projections page shows, not a
+// separately computed version), and holds the one control that changes it:
+// which recurring bill pays this debt down.
+function PaymentPlanSection(props: { debt: Debt }) {
+  const d = props.debt;
+  const plan = d.payment_plan;
+  const { data: bills } = useBills();
+  const { data: projections } = useProjections(PLAN_PREVIEW_HORIZON);
+  const updateDebt = useUpdateDebt();
+  const updateBill = useUpdateBill();
+
+  // Only confirmed, active, non-card bills can act as a schedule — but any
+  // bill already linked to THIS debt stays listed even if it no longer
+  // qualifies, so unchecking it is always possible.
+  const linkableBills = (bills ?? []).filter(
+    (b) => (b.confirmed && b.active && !b.is_card_expense) || b.debt_id === d.id
+  );
+
+  // Typically only 1-3 of the linkable bills actually pay this debt, so the
+  // linked ones get their own always-visible list; everything else lives in
+  // a collapsed, filterable picker instead of one long undifferentiated list.
+  const [billPickerOpen, setBillPickerOpen] = useState(false);
+  const [billFilter, setBillFilter] = useState("");
+  const linkedBills = linkableBills.filter((b) => b.debt_id === d.id);
+  const candidateBills = linkableBills
+    .filter((b) => b.debt_id !== d.id)
+    // Free bills first, then ones that would be moved off another debt.
+    .sort(
+      (a, b) =>
+        Number(a.debt_id !== null) - Number(b.debt_id !== null) || a.name.localeCompare(b.name)
+    );
+  const billQuery = billFilter.trim().toLowerCase();
+  const visibleCandidates = billQuery
+    ? candidateBills.filter(
+        (b) =>
+          b.name.toLowerCase().includes(billQuery) ||
+          (b.category_name ?? "").toLowerCase().includes(billQuery)
+      )
+    : candidateBills;
+
+  const preview = (projections?.months ?? [])
+    .map((m) => ({
+      label: m.label,
+      amount: m.bills.find((l) => l.kind === "debt" && l.id === -d.id)?.amount,
+    }))
+    .filter((p): p is { label: string; amount: number } => p.amount != null)
+    .slice(0, PLAN_PREVIEW_COUNT);
+
+  if (d.status !== "active") return null;
+
+  return (
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--rule)" }}>
+      <div className="label muted">Payment plan</div>
+      <div style={{ marginTop: 4 }}>
+        {plan.source === "loan" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div>
+              <span style={{ fontWeight: 600 }}>{formatMoney(plan.monthly_amount)}/mo</span>{" "}
+              <span className="muted">
+                — computed from the {LOAN_TYPE_LABEL[plan.loan_type]} loan formula:{" "}
+                {plan.rate_monthly_percent}% a.m. over {plan.term_months} months
+                {plan.loan_type === "sac" && " (the payment declines as principal amortizes)"}.
+              </span>
+            </div>
+            {plan.extra_bills.map((b) => (
+              <div key={b.bill_id}>
+                <span style={{ fontWeight: 600 }}>{formatMoney(b.amount)}</span>{" "}
+                <span className="muted">
+                  {PLAN_CADENCE_LABEL[b.cadence]} — extra amortization from the "{b.bill_name}"
+                  recurring bill, on top of the installment above.
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {plan.source === "combined" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {plan.bills.map((b) => (
+              <div key={b.bill_id}>
+                <span style={{ fontWeight: 600 }}>{formatMoney(b.amount)}</span>{" "}
+                <span className="muted">
+                  {PLAN_CADENCE_LABEL[b.cadence]} — from the "{b.bill_name}" recurring bill.
+                </span>
+              </div>
+            ))}
+            {plan.automatic && (
+              <div>
+                <span style={{ fontWeight: 600 }}>≈{formatMoney(plan.automatic.monthly_amount)}/mo</span>{" "}
+                <span className="muted">
+                  — inferred from the average of your {plan.automatic.payment_count} linked repayments.
+                </span>
+              </div>
+            )}
+            <div className="muted" style={{ fontSize: "0.85em" }}>
+              {plan.bills.length > 0 && plan.automatic ? "Combined, each " : ""}
+              Bounded by what's still remaining ({formatMoney(d.remaining)}).
+            </div>
+          </div>
+        )}
+        {plan.source === "none" && (
+          <span className="muted">
+            {plan.payment_count < 2
+              ? "No schedule yet — fewer than two repayments are linked, so there's no cadence to infer."
+              : "No schedule — the linked repayments vary too much to infer a reliable amount."}{" "}
+            This debt stays out of cash-flow projections until a payment bill is linked below
+            {plan.payment_count < 2 ? " or more repayments accumulate" : ""}.
+          </span>
+        )}
+      </div>
+
+      {preview.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          {preview.map((p) => (
+            <div
+              key={p.label}
+              style={{ border: "1px solid var(--rule)", borderRadius: 6, padding: "4px 10px" }}
+            >
+              <div className="label muted" style={{ fontSize: 11 }}>
+                {formatMonthLabel(p.label)}
+              </div>
+              <div className={`money ${p.amount >= 0 ? "gain" : "shortfall"}`} style={{ fontSize: 13 }}>
+                {p.amount >= 0 ? "+" : "-"}
+                {formatMoney(Math.abs(p.amount))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {preview.length === 0 && plan.source !== "none" && projections && (
+        <p className="muted" style={{ fontSize: "0.85em", marginTop: 8, marginBottom: 0 }}>
+          No projected payments in the next {PLAN_PREVIEW_HORIZON} months
+          {isFutureDebt(d) ? ` — this debt only starts ${formatDate(d.start_date)}` : ""}.
+        </p>
+      )}
+
+      <div style={{ marginTop: 12 }}>
+        <div className="label muted" style={{ marginBottom: 6 }}>
+          Paid by recurring bill(s)
+        </div>
+        {linkableBills.length === 0 ? (
+          <p className="muted" style={{ fontSize: "0.85em", margin: 0 }}>
+            No confirmed bills available to link yet.
+          </p>
+        ) : (
+          <>
+            {linkedBills.length === 0 ? (
+              <p className="muted" style={{ fontSize: "0.85em", margin: 0 }}>
+                No bills linked yet — link one below to make this debt's payment explicit.
+              </p>
+            ) : (
+              <div style={{ border: "1px solid var(--rule)", borderRadius: 6 }}>
+                {linkedBills.map((b, i) => (
+                  <PlanBillRow
+                    key={b.id}
+                    bill={b}
+                    linked
+                    first={i === 0}
+                    onToggle={(checked) =>
+                      updateBill.mutate({ id: b.id, input: { debtId: checked ? d.id : null } })
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {candidateBills.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setBillPickerOpen((open) => !open)}
+                  style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  {billPickerOpen ? <FiChevronDown /> : <FiChevronRight />}
+                  Link {linkedBills.length > 0 ? "another" : "a"} bill ({candidateBills.length}{" "}
+                  available)
+                </button>
+                {billPickerOpen && (
+                  <div style={{ marginTop: 6 }}>
+                    {candidateBills.length > 6 && (
+                      <input
+                        type="text"
+                        value={billFilter}
+                        onChange={(e) => setBillFilter(e.target.value)}
+                        placeholder="Filter by name or category…"
+                        style={{ width: "100%", marginBottom: 6 }}
+                      />
+                    )}
+                    {visibleCandidates.length === 0 ? (
+                      <p className="muted" style={{ fontSize: "0.85em", margin: 0 }}>
+                        No bills match "{billFilter.trim()}".
+                      </p>
+                    ) : (
+                      <div
+                        style={{
+                          border: "1px solid var(--rule)",
+                          borderRadius: 6,
+                          maxHeight: 220,
+                          overflowY: "auto",
+                        }}
+                      >
+                        {visibleCandidates.map((b, i) => (
+                          <PlanBillRow
+                            key={b.id}
+                            bill={b}
+                            linked={false}
+                            first={i === 0}
+                            onToggle={(checked) =>
+                              updateBill.mutate({
+                                id: b.id,
+                                input: { debtId: checked ? d.id : null },
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      {plan.source !== "loan" && (
+        <label
+          style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}
+          title="Skip the payment-history heuristic even if it would otherwise pass — useful once the bills above are already accounting for this debt's payments."
+        >
+          <input
+            type="checkbox"
+            checked={d.override_automatic_schedule}
+            onChange={(e) =>
+              updateDebt.mutate({ id: d.id, input: { overrideAutomaticSchedule: e.target.checked } })
+            }
+          />
+          Don't infer a schedule from payment history (use only the bills above)
+        </label>
+      )}
+      <p className="muted" style={{ fontSize: "0.85em", marginTop: 6, marginBottom: 0 }}>
+        {plan.source === "loan"
+          ? "A formal loan's monthly installment always comes from the loan formula, unchanged — but any bill linked here counts as an extra amortization payment on top of it, paying the balance down (and off) faster than the plain schedule alone."
+          : "Every linked bill's amount and cadence adds to this debt's expected payment, bounded by what's still remaining — explicit, instead of only inferred from history."}
+      </p>
     </div>
   );
 }
@@ -489,13 +934,6 @@ const chartMonthLabel = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-// Day clamped to 28 so stepping month-by-month never skips a short month
-// (Jan 31 + 1 month would otherwise land in March).
-function addMonthsIso(startIso: string, n: number): string {
-  const [y, m, day] = startIso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1 + n, Math.min(day, 28))).toISOString().slice(0, 10);
-}
-
 function compactMoney(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -507,101 +945,247 @@ function moneyTooltip(value: any): string {
   return formatMoney(Number(value));
 }
 
+interface BalancePoint {
+  date: string;
+  balance: number;
+  kind: "actual" | "projected";
+}
+
+// One debt's month-by-month balance, real history first then projection.
+// With an interest rate the history is interest-aware (simulateAmortization);
+// without one it's the server-computed remaining stepped back through each
+// payment. Projection comes from the loan's own schedule when there is one,
+// else the recent-average-payment heuristic. Shared by the per-debt chart and
+// the page-level overview so both agree on what a debt's trajectory is.
+// A loan-type debt's own PRICE/SAC schedule, but with every extra
+// amortization bill linked to it (see DebtPaymentPlan's "loan" variant — the
+// computed installment stays authoritative, these are on top of it) counted
+// against the same shared remainingBalance cap the backend's projection
+// engine uses (see activeDebtSchedules/debtLineAmountForMonth in
+// projectionEngine.ts): the installment's own interest/amortization split
+// still comes from the plain, extras-ignorant formula every month (the
+// contract's fixed payment never changes because of an extra payment), but
+// cumulative cash toward the debt — installment plus every extra bill — is
+// tracked against startBalance and trims/stops the schedule the moment it's
+// exhausted, exactly like the backend does. A naive "recompute interest off
+// a balance already reduced by extras" model would pay off measurably slower
+// than this and would silently disagree with the real projection.
+interface LoanStep {
+  balance: number;
+  interest: number;
+}
+
+function loanStepsWithExtras(
+  startBalance: number,
+  ratePercent: number,
+  loanType: "price" | "sac",
+  termMonths: number,
+  anchorDate: string,
+  extraBills: Bill[]
+): LoanStep[] {
+  const r = ratePercent / 100;
+  const fixedPayment = loanType === "price" ? pricePayment(startBalance, ratePercent, termMonths) : null;
+  const fixedAmortization = loanType === "sac" ? startBalance / termMonths : null;
+  const steps: LoanStep[] = [];
+  let scheduleBalance = startBalance;
+  let paidSoFar = 0;
+  for (let month = 1; month <= termMonths && paidSoFar < startBalance - 0.005; month++) {
+    // Aligned with the backend's own monthOfLoan convention (see
+    // debtLineAmountForMonth in projectionEngine.ts): loan-month 1 is the
+    // start date's own calendar month, not the month after — so an extra
+    // bill due in the same month the loan starts (like a closing-day upfront
+    // payment) fires on loan-month 1, matching the real projection exactly.
+    const targetMonth = localMonthDate(anchorDate, month - 1);
+    const interest = scheduleBalance * r;
+    const amort = fixedPayment != null ? fixedPayment - interest : fixedAmortization!;
+    const rawPayment = interest + amort;
+    scheduleBalance = Math.max(0, scheduleBalance - amort);
+
+    const cappedPayment = Math.min(rawPayment, startBalance - paidSoFar);
+    if (cappedPayment <= 0.005) break;
+    const interestThisMonth = cappedPayment < rawPayment ? interest * (cappedPayment / rawPayment) : interest;
+    paidSoFar += cappedPayment;
+
+    let extraThisMonth = 0;
+    if (paidSoFar < startBalance - 0.005) {
+      const extra = extraBills.reduce((sum, b) => {
+        const info = {
+          cadence: b.cadence,
+          nextDueDate: b.next_due_date,
+          recurrenceStartDate: b.recurrence_start_date,
+          recurrenceEndDate: b.recurrence_end_date,
+        };
+        if (!billAppliesToMonth(info, targetMonth)) return sum;
+        return sum + monthlyEquivalentAmount({ cadence: b.cadence, expectedAmount: b.expected_amount }, undefined);
+      }, 0);
+      extraThisMonth = Math.min(extra, startBalance - paidSoFar);
+      paidSoFar += extraThisMonth;
+    }
+    steps.push({ balance: Math.max(0, startBalance - paidSoFar), interest: interestThisMonth });
+  }
+  return steps;
+}
+
+function debtBalanceSeries(
+  d: Debt,
+  payOffTx: DebtLinkedTransaction[],
+  today: string,
+  extraBills: Bill[] = []
+): BalancePoint[] {
+  const rate = d.interest_rate_monthly_percent;
+  const hasRate = rate != null && rate > 0 && d.principal > 0;
+
+  // Hasn't started yet — there's no "actual" portion at all, only whatever can
+  // be projected forward from the debt's own future start date: the loan's own
+  // schedule if it has one, else the planned-payment amortization loop.
+  if (d.start_date > today) {
+    if (d.status !== "active") return [];
+    const hasSchedule = hasRate && d.loan_type != null && d.target_payoff_date != null;
+    const r = hasRate ? rate! / 100 : 0;
+    const avg = hasSchedule ? null : plannedMonthlyPayment(d);
+    if (!hasSchedule && !(avg != null && avg > 0 && avg > d.principal * r)) return [];
+
+    const points: BalancePoint[] = [{ date: d.start_date, balance: d.principal, kind: "projected" }];
+    if (hasSchedule) {
+      let term = 0;
+      while (term < MAX_CHART_MONTHS && addMonthsIso(d.start_date, term + 1) <= d.target_payoff_date!) term++;
+      loanStepsWithExtras(d.principal, rate!, d.loan_type!, Math.max(1, term), d.start_date, extraBills).forEach(
+        (step, i) => points.push({ date: addMonthsIso(d.start_date, i + 1), balance: step.balance, kind: "projected" })
+      );
+    } else {
+      let balance = d.principal;
+      while (balance > 0 && points.length - 1 < MAX_CHART_MONTHS) {
+        balance = Math.max(0, balance * (1 + r) - avg!);
+        points.push({ date: addMonthsIso(d.start_date, points.length), balance, kind: "projected" });
+      }
+    }
+    return points;
+  }
+
+  const payments = payOffTx.map((t) => ({ id: t.id, date: t.date, amount: Math.abs(t.amount) }));
+
+  let elapsed = 0;
+  while (elapsed < MAX_CHART_MONTHS && addMonthsIso(d.start_date, elapsed + 1) <= today) elapsed++;
+
+  // A debt marked paid off is settled, whatever its arithmetic remaining says.
+  const anchor = d.status === "paid_off" ? 0 : Math.max(0, d.remaining);
+  const points: BalancePoint[] = [];
+  for (let m = 0; m <= elapsed; m++) {
+    const date = addMonthsIso(d.start_date, m);
+    const balance = hasRate
+      ? Math.max(
+          0,
+          simulateAmortization(
+            d.principal,
+            rate!,
+            d.start_date,
+            payments.filter((p) => p.date <= date),
+            date
+          ).currentPayoffBalance
+        )
+      : Math.max(0, anchor + payments.filter((p) => p.date > date).reduce((sum, p) => sum + p.amount, 0));
+    points.push({ date, balance, kind: "actual" });
+  }
+
+  const anchorBalance = points[points.length - 1].balance;
+  if (d.status !== "active" || anchorBalance <= 0.005) return points;
+
+  const anchorDate = points[points.length - 1].date;
+  const hasSchedule = hasRate && d.loan_type != null && d.target_payoff_date != null;
+  let futureBalances: number[] = [];
+  if (hasSchedule) {
+    let term = 0;
+    while (term < MAX_CHART_MONTHS && addMonthsIso(anchorDate, term + 1) <= d.target_payoff_date!) term++;
+    futureBalances = loanStepsWithExtras(
+      anchorBalance,
+      rate!,
+      d.loan_type!,
+      Math.max(1, term),
+      anchorDate,
+      extraBills
+    ).map((step) => step.balance);
+  } else {
+    const avg = plannedMonthlyPayment(d) ?? recentAvgPayment(payOffTx);
+    const r = hasRate ? rate! / 100 : 0;
+    if (avg != null && avg > 0 && avg > anchorBalance * r) {
+      let balance = anchorBalance;
+      while (balance > 0 && futureBalances.length < MAX_CHART_MONTHS) {
+        balance = Math.max(0, balance * (1 + r) - avg);
+        futureBalances.push(balance);
+      }
+    }
+  }
+  futureBalances.forEach((balance, i) =>
+    points.push({ date: addMonthsIso(anchorDate, i + 1), balance, kind: "projected" })
+  );
+  return points;
+}
+
 interface TrajectoryPoint {
   label: string;
-  ifUnpaid: number;
+  ifUnpaid: number | null;
   actual: number | null;
   projected: number | null;
 }
 
-// The argument for paying, made visible: one line is this debt left to
-// compound with nothing ever paid, the other is the balance with payments —
-// real ones up to today, then the loan's own schedule (or the recent-average-
-// payment heuristic) out to payoff. The widening gap is what paying it down
-// is worth.
+// Two tiers. With an interest rate, the argument for paying made visible: one
+// line is this debt left to compound with nothing ever paid, the other is the
+// balance with payments — the widening gap is what paying it down is worth.
+// Without a rate there's no hypothetical-growth line to draw, but the real
+// balance declining through each repayment (plus the average-payment
+// projection) is still the story; with fewer than two payments there's no
+// story at all, so a short note stands in for the chart.
 function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransaction[] }) {
   const d = props.debt;
   const { payOffTx } = props;
+  const { data: bills } = useBills();
+  const extraBills = useMemo(() => (bills ?? []).filter((b) => b.debt_id === d.id), [bills, d.id]);
 
   const chart = useMemo(() => {
-    const rate = d.interest_rate_monthly_percent;
-    if (rate == null || rate <= 0 || d.principal <= 0) return null;
-    const payments = payOffTx.map((t) => ({ id: t.id, date: t.date, amount: Math.abs(t.amount) }));
-    const hasSchedule = d.loan_type != null && d.target_payoff_date != null;
-    if (payments.length === 0 && !hasSchedule) return null;
-
     const today = new Date().toISOString().slice(0, 10);
-    const r = rate / 100;
-    const ifUnpaidAt = (m: number) => d.principal * (1 + r) ** m;
-
-    let elapsed = 0;
-    while (elapsed < MAX_CHART_MONTHS && addMonthsIso(d.start_date, elapsed + 1) <= today) elapsed++;
-
-    const points: TrajectoryPoint[] = [];
-    for (let m = 0; m <= elapsed; m++) {
-      const date = addMonthsIso(d.start_date, m);
-      const actual =
-        date <= today
-          ? Math.max(
-              0,
-              simulateAmortization(
-                d.principal,
-                rate,
-                d.start_date,
-                payments.filter((p) => p.date <= date),
-                date
-              ).currentPayoffBalance
-            )
-          : null;
-      points.push({ label: chartMonthLabel.format(new Date(date)), ifUnpaid: ifUnpaidAt(m), actual, projected: null });
+    const isFuture = d.start_date > today;
+    const rate = d.interest_rate_monthly_percent;
+    const hasRate = rate != null && rate > 0 && d.principal > 0;
+    const hasSchedule = hasRate && d.loan_type != null && d.target_payoff_date != null;
+    // A declared payment bill gives the projection a basis even before any
+    // repayment history exists, so it unlocks the chart the same way a loan
+    // schedule does.
+    const hasPlannedPayment = plannedMonthlyPayment(d) != null;
+    if (
+      !isFuture &&
+      (hasRate
+        ? payOffTx.length === 0 && !hasSchedule && !hasPlannedPayment
+        : payOffTx.length < 2 && !hasPlannedPayment)
+    ) {
+      return null;
     }
+    if (isFuture && !hasSchedule && !hasPlannedPayment) return null;
 
-    const lastReal = points[elapsed].actual;
-    const anchorBalance = lastReal ?? d.principal;
+    const series = debtBalanceSeries(d, payOffTx, today, extraBills);
+    if (series.length < 2) return null;
 
-    let futureBalances: number[] = [];
-    if (d.status === "active" && anchorBalance > 0.005) {
-      if (hasSchedule) {
-        const anchorDate = addMonthsIso(d.start_date, elapsed);
-        let term = 0;
-        while (term < MAX_CHART_MONTHS && addMonthsIso(anchorDate, term + 1) <= d.target_payoff_date!) term++;
-        futureBalances = (d.loan_type === "price" ? priceSchedule : sacSchedule)(
-          anchorBalance,
-          rate,
-          Math.max(1, term)
-        ).map((row) => row.balance);
-      } else {
-        const avg = recentAvgPayment(payOffTx);
-        if (avg != null && avg > anchorBalance * r) {
-          let balance = anchorBalance;
-          while (balance > 0 && futureBalances.length < MAX_CHART_MONTHS) {
-            balance = Math.max(0, balance * (1 + r) - avg);
-            futureBalances.push(balance);
-          }
-        }
-      }
-    }
+    const r = hasRate ? rate! / 100 : 0;
+    const hasProjection = series[series.length - 1].kind === "projected";
+    let lastActualIdx = 0;
+    series.forEach((p, i) => {
+      if (p.kind === "actual") lastActualIdx = i;
+    });
 
-    if (futureBalances.length > 0) {
-      points[elapsed].projected = anchorBalance;
-      futureBalances.forEach((balance, i) => {
-        const m = elapsed + 1 + i;
-        points.push({
-          label: chartMonthLabel.format(new Date(addMonthsIso(d.start_date, m))),
-          ifUnpaid: ifUnpaidAt(m),
-          actual: null,
-          projected: balance,
-        });
-      });
-    }
-
-    if (points.length < 2) return null;
+    // Series points are exactly one month apart from start_date, so the index
+    // doubles as "months elapsed" for the compounding line.
+    const points: TrajectoryPoint[] = series.map((p, i) => ({
+      label: chartMonthLabel.format(new Date(p.date)),
+      ifUnpaid: hasRate ? d.principal * (1 + r) ** i : null,
+      actual: p.kind === "actual" ? p.balance : null,
+      projected: p.kind === "projected" || (hasProjection && i === lastActualIdx) ? p.balance : null,
+    }));
 
     // Hypothetical minus actual minus everything paid in = the compounding
     // dodged purely by keeping the balance low — not just the money put in.
     let avoided: { amount: number; ifUnpaidNow: number; actualNow: number } | null = null;
-    if (lastReal != null && payments.length > 0 && d.direction === "owed_by_me") {
-      const sim = simulateAmortization(d.principal, rate, d.start_date, payments, today);
+    if (hasRate && payOffTx.length > 0 && d.direction === "owed_by_me") {
+      const payments = payOffTx.map((t) => ({ id: t.id, date: t.date, amount: Math.abs(t.amount) }));
+      const sim = simulateAmortization(d.principal, rate!, d.start_date, payments, today);
       const monthsNow = Math.max(0, (Date.parse(today) - Date.parse(d.start_date)) / (1000 * 60 * 60 * 24) / 30.44);
       const ifUnpaidNow = d.principal * (1 + r) ** monthsNow;
       const actualNow = Math.max(0, sim.currentPayoffBalance);
@@ -609,23 +1193,57 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
       if (amount > 0.5) avoided = { amount, ifUnpaidNow, actualNow };
     }
 
-    const hasReal = points.some((p) => p.actual != null);
     return {
       points,
       avoided,
-      hasReal,
-      hasProjection: futureBalances.length > 0,
-      todayLabel: hasReal && futureBalances.length > 0 ? points[elapsed].label : null,
-      projectionSource: hasSchedule ? ("schedule" as const) : ("heuristic" as const),
-      rate,
+      hasRate,
+      rate: hasRate ? rate! : null,
+      hasProjection,
+      isFuture,
+      // For a future debt every point is projected — there's no "today" split
+      // inside the chart to mark, since the whole thing hasn't happened yet.
+      todayLabel: hasProjection && !isFuture ? points[lastActualIdx].label : null,
+      projectionSource: hasSchedule
+        ? ("schedule" as const)
+        : hasPlannedPayment
+          ? ("bill" as const)
+          : ("heuristic" as const),
+      // Straight off the debt's own server-computed fields (see
+      // computeProjectedFinishDate in backend/src/routes/debts.ts) rather
+      // than re-simulated here — the one thing this chart must never do is
+      // disagree with what the real projection converges on.
+      lifetimeTotals:
+        hasRate && d.projected_remaining_interest != null
+          ? {
+              totalInterest: (d.interest_paid_so_far ?? 0) + d.projected_remaining_interest,
+              totalPaid: d.principal + (d.interest_paid_so_far ?? 0) + d.projected_remaining_interest,
+              reachesPayoff: d.projected_finish_date != null,
+            }
+          : null,
     };
-  }, [d, payOffTx]);
+  }, [d, payOffTx, extraBills]);
 
-  if (!chart) return null;
+  if (!chart) {
+    if (d.status !== "active" || isFutureDebt(d)) return null;
+    return (
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--rule)" }}>
+        <p className="muted" style={{ fontSize: "0.85em", margin: 0 }}>
+          Not enough history to chart yet — once a couple of repayments are linked, this debt's
+          balance-over-time chart appears here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--rule)" }}>
-      <div className="label muted">Growing with interest vs being paid off</div>
+      <div className="label muted">
+        {chart.isFuture
+          ? "Projected schedule (hasn't started yet)"
+          : chart.hasRate
+            ? "Growing with interest vs being paid off"
+            : "Balance over time"}
+      </div>
       {chart.avoided && (
         <div style={{ marginTop: 4 }}>
           <span style={{ fontWeight: 600 }}>{formatMoney(chart.avoided.amount)}</span>{" "}
@@ -641,27 +1259,27 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
             <XAxis dataKey="label" stroke="var(--text-muted)" minTickGap={24} />
             <YAxis stroke="var(--text-muted)" tickFormatter={compactMoney} />
             <Tooltip formatter={moneyTooltip} />
-            <Legend />
+            {(chart.hasRate || chart.hasProjection) && <Legend />}
             {chart.todayLabel && <ReferenceLine x={chart.todayLabel} stroke="var(--rule)" />}
-            <Line
-              type="monotone"
-              dataKey="ifUnpaid"
-              name="If never paid"
-              stroke="var(--danger)"
-              strokeWidth={2}
-              strokeDasharray="5 4"
-              dot={false}
-            />
-            {chart.hasReal && (
+            {chart.hasRate && (
               <Line
                 type="monotone"
-                dataKey="actual"
-                name="Balance (real)"
-                stroke="var(--accent)"
+                dataKey="ifUnpaid"
+                name="If never paid"
+                stroke="var(--danger)"
                 strokeWidth={2}
+                strokeDasharray="5 4"
                 dot={false}
               />
             )}
+            <Line
+              type="monotone"
+              dataKey="actual"
+              name="Balance (real)"
+              stroke="var(--accent)"
+              strokeWidth={2}
+              dot={false}
+            />
             {chart.hasProjection && (
               <Line
                 type="monotone"
@@ -678,13 +1296,255 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
         </ResponsiveContainer>
       </div>
       <p className="muted" style={{ fontSize: "0.85em", marginTop: 6, marginBottom: 0 }}>
-        The rust line is this debt compounding at {chart.rate}% a month with nothing ever paid; the
-        green line is the balance with payments — solid where real
-        {chart.hasProjection &&
-          (chart.projectionSource === "schedule"
-            ? ", dashed where projected from the loan's own schedule"
-            : ", dashed where projected from your recent average payment")}
-        . The gap between them is what paying it down is worth.
+        {chart.isFuture ? (
+          <>
+            This debt hasn't started yet, so there's no real history — the whole line is projected
+            {chart.projectionSource === "schedule"
+              ? " from the loan's own schedule"
+              : chart.projectionSource === "bill"
+                ? " from the linked payment bill"
+                : " from the planned payment"}
+            , starting from its own start date.
+          </>
+        ) : chart.hasRate ? (
+          <>
+            The rust line is this debt compounding at {chart.rate}% a month with nothing ever paid;
+            the green line is the balance with payments — solid where real
+            {chart.hasProjection &&
+              (chart.projectionSource === "schedule"
+                ? ", dashed where projected from the loan's own schedule"
+                : chart.projectionSource === "bill"
+                  ? ", dashed where projected from the linked payment bill"
+                  : ", dashed where projected from your recent average payment")}
+            . The gap between them is what paying it down is worth.
+          </>
+        ) : (
+          <>
+            The remaining balance as each repayment posted — solid where real
+            {chart.hasProjection &&
+              (chart.projectionSource === "bill"
+                ? ", dashed where projected from the linked payment bill"
+                : ", dashed where projected from your recent average payment")}
+            .
+          </>
+        )}
+      </p>
+      {chart.lifetimeTotals && (
+        <div
+          style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--rule)" }}
+        >
+          <div>
+            <div className="label muted" style={{ fontSize: 11 }}>
+              Total interest {chart.lifetimeTotals.reachesPayoff ? "over the life of this debt" : "so far + projected"}
+            </div>
+            <div style={{ fontWeight: 600 }}>{formatMoney(chart.lifetimeTotals.totalInterest)}</div>
+          </div>
+          <div>
+            <div className="label muted" style={{ fontSize: 11 }}>
+              Total paid {chart.lifetimeTotals.reachesPayoff ? "by payoff" : "so far + projected"}
+            </div>
+            <div style={{ fontWeight: 600 }}>{formatMoney(chart.lifetimeTotals.totalPaid)}</div>
+          </div>
+          {!chart.lifetimeTotals.reachesPayoff && (
+            <p className="muted" style={{ fontSize: "0.8em", margin: 0, flexBasis: "100%" }}>
+              The planned payment doesn't clearly outpace interest, so this is only a running total
+              through the charted horizon above, not a true end-of-loan figure.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface OverviewPoint {
+  label: string;
+  owedActual: number | null;
+  owedProjected: number | null;
+  lentActual: number | null;
+  lentProjected: number | null;
+}
+
+// The whole ledger at a glance: every debt's own trajectory (the same series
+// the per-debt chart draws) summed by direction. Owed-to-me stays its own
+// line rather than netting against what I owe — money someone owes me doesn't
+// pay my debts until it actually arrives. Same-direction linked child debts
+// are skipped (see the childIds comment below for why only same-direction
+// links double-count); future debts haven't started.
+function DebtOverviewChart(props: { debts: Debt[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  // Only a same-direction link double-counts a child's principal into its
+  // parent's total (e.g. two "owed_by_me" debts where one folds into the
+  // other). A cross-direction link — Foz (owed_by_me, a real debt to the
+  // architect) feeding into Juliana's unrelated owed_to_me receivable — is
+  // two separate obligations that both belong in their own bucket; only
+  // the parent's own direction is what's actually inflated by the link.
+  const childIds = new Set(
+    props.debts.flatMap((d) =>
+      d.linked_debts
+        .filter((ld) => props.debts.find((other) => other.id === ld.id)?.direction === d.direction)
+        .map((ld) => ld.id)
+    )
+  );
+  const relevant = props.debts.filter((d) => !childIds.has(d.id) && d.start_date <= today);
+  const { data: bills } = useBills();
+
+  // Same query keys as useDebtTransactions, so this shares the cache with the
+  // per-debt detail view instead of refetching when a tile is opened.
+  const txQueries = useQueries({
+    queries: relevant.map((d) => ({
+      queryKey: ["debts", d.id, "transactions"],
+      queryFn: () => apiFetch<DebtLinkedTransaction[]>(`/api/debts/${d.id}/transactions`),
+    })),
+  });
+  const loaded = relevant.length > 0 && txQueries.every((q) => q.data !== undefined);
+  // useQueries returns a fresh array every render; this stamp only changes
+  // when a query actually delivers new data, so the memo below holds.
+  const txStamp = txQueries.map((q) => q.dataUpdatedAt).join("|");
+
+  const chart = useMemo(() => {
+    if (!loaded) return null;
+    const seriesByDebt = relevant
+      .map((d, i) => ({
+        debt: d,
+        series: debtBalanceSeries(
+          d,
+          (txQueries[i].data ?? []).filter((t) => t.role === "pay_off"),
+          today,
+          (bills ?? []).filter((b) => b.debt_id === d.id)
+        ),
+      }))
+      .filter((s) => s.series.length > 0);
+    if (seriesByDebt.length === 0) return null;
+
+    const gridStart = seriesByDebt.reduce(
+      (min, s) => (s.series[0].date < min ? s.series[0].date : min),
+      today
+    );
+    const gridEnd = seriesByDebt.reduce((max, s) => {
+      const last = s.series[s.series.length - 1].date;
+      return last > max ? last : max;
+    }, today);
+    let months = 0;
+    while (months < MAX_CHART_MONTHS && addMonthsIso(gridStart, months + 1) <= gridEnd) months++;
+    const gridDates: string[] = [];
+    for (let m = 0; m <= months; m++) gridDates.push(addMonthsIso(gridStart, m));
+    if (gridDates.length < 2) return null;
+
+    let lastActualIdx = 0;
+    gridDates.forEach((g, i) => {
+      if (g <= today) lastActualIdx = i;
+    });
+    const hasProjection = lastActualIdx < gridDates.length - 1;
+
+    // Step-hold sampling: each debt contributes its most recent balance at or
+    // before the grid date — 0 before it starts, and its last known balance
+    // held flat past the end of its series (a paid-off debt holds at 0, an
+    // active one with no basis to project holds where it is).
+    const sumAt = (g: string, dir: Debt["direction"]): number => {
+      let sum = 0;
+      for (const { debt, series } of seriesByDebt) {
+        if (debt.direction !== dir || g < series[0].date) continue;
+        let balance = series[0].balance;
+        for (const p of series) {
+          if (p.date <= g) balance = p.balance;
+          else break;
+        }
+        sum += balance;
+      }
+      return sum;
+    };
+
+    const hasOwed = seriesByDebt.some((s) => s.debt.direction === "owed_by_me");
+    const hasLent = seriesByDebt.some((s) => s.debt.direction === "owed_to_me");
+
+    const points: OverviewPoint[] = gridDates.map((g, i) => {
+      const owed = hasOwed ? sumAt(g, "owed_by_me") : null;
+      const lent = hasLent ? sumAt(g, "owed_to_me") : null;
+      const isActual = i <= lastActualIdx;
+      const isProjected = hasProjection && i >= lastActualIdx;
+      return {
+        label: chartMonthLabel.format(new Date(g)),
+        owedActual: isActual ? owed : null,
+        owedProjected: isProjected ? owed : null,
+        lentActual: isActual ? lent : null,
+        lentProjected: isProjected ? lent : null,
+      };
+    });
+
+    return {
+      points,
+      hasOwed,
+      hasLent,
+      hasProjection,
+      todayLabel: hasProjection ? points[lastActualIdx].label : null,
+    };
+  }, [loaded, txStamp, props.debts, bills]);
+
+  if (!chart) return null;
+
+  return (
+    <div className="card">
+      <div className="label muted">All debts — balance over time</div>
+      <div className="chart-container" style={{ height: 240, marginTop: 8 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chart.points}>
+            <XAxis dataKey="label" stroke="var(--text-muted)" minTickGap={24} />
+            <YAxis stroke="var(--text-muted)" tickFormatter={compactMoney} />
+            <Tooltip formatter={moneyTooltip} />
+            {((chart.hasOwed && chart.hasLent) || chart.hasProjection) && <Legend />}
+            {chart.todayLabel && <ReferenceLine x={chart.todayLabel} stroke="var(--rule)" />}
+            {chart.hasOwed && (
+              <Line
+                type="monotone"
+                dataKey="owedActual"
+                name="I owe (real)"
+                stroke="var(--danger)"
+                strokeWidth={2}
+                dot={false}
+              />
+            )}
+            {chart.hasOwed && chart.hasProjection && (
+              <Line
+                type="monotone"
+                dataKey="owedProjected"
+                name="I owe (projected)"
+                stroke="var(--danger)"
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                strokeOpacity={0.7}
+                dot={false}
+              />
+            )}
+            {chart.hasLent && (
+              <Line
+                type="monotone"
+                dataKey="lentActual"
+                name="Owed to me (real)"
+                stroke="var(--accent)"
+                strokeWidth={2}
+                dot={false}
+              />
+            )}
+            {chart.hasLent && chart.hasProjection && (
+              <Line
+                type="monotone"
+                dataKey="lentProjected"
+                name="Owed to me (projected)"
+                stroke="var(--accent)"
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                strokeOpacity={0.7}
+                dot={false}
+              />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="muted" style={{ fontSize: "0.85em", marginTop: 6, marginBottom: 0 }}>
+        Every debt summed by direction — rust is what you owe, green is owed to you (kept separate,
+        not netted). Solid is real history; dashed carries each debt forward on its own schedule or
+        recent payments, holding flat where there's nothing to project from.
       </p>
     </div>
   );
@@ -697,6 +1557,7 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
   const { data: linkedTx } = useDebtTransactions(props.debt.id);
   const payOffTx = useMemo(() => (linkedTx ?? []).filter((t) => t.role === "pay_off"), [linkedTx]);
   const showInterestColumn = payOffTx.some((t) => t.interest != null && t.interest > 0.005);
+  const finishDate = props.debt.projected_finish_date;
   const {
     sorted: sortedLinkedTx,
     sortKey: linkedSortKey,
@@ -745,30 +1606,23 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
         className="grid"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 16, marginTop: 12 }}
       >
-        <div>
-          <div className="label muted">Start date</div>
-          <div className="money">
-            {formatDate(d.start_date)}
-            {isFutureDebt(d) && <span className="muted"> (future)</span>}
-          </div>
-        </div>
-        <div>
-          <div className="label muted">Principal</div>
-          <div className="money">{formatMoney(d.principal)}</div>
-        </div>
+        <StartDateEditor debt={d} />
+        <PrincipalEditor debt={d} />
         <div>
           <div className="label muted">Paid so far</div>
           <div className="money">{formatMoney(d.total_paid)}</div>
         </div>
-        <div>
-          <div className="label muted">Remaining</div>
-          <div className="money">{formatMoney(d.remaining)}</div>
-          {d.remaining_interest != null && (
-            <div className="muted" style={{ fontSize: "0.85em" }}>
-              of which {formatMoney(d.remaining_interest)} interest
-            </div>
-          )}
-        </div>
+        {!isFutureDebt(d) && (
+          <div>
+            <div className="label muted">Remaining</div>
+            <div className="money">{formatMoney(d.remaining)}</div>
+            {d.remaining_interest != null && (
+              <div className="muted" style={{ fontSize: "0.85em" }}>
+                of which {formatMoney(d.remaining_interest)} interest
+              </div>
+            )}
+          </div>
+        )}
         {d.interest_paid_so_far != null && (
           <div>
             <div className="label muted">Interest paid</div>
@@ -781,11 +1635,19 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
             <div className="money">{d.split_percentage}%</div>
           </div>
         )}
+        {finishDate && (
+          <div>
+            <div className="label muted">Finish date</div>
+            <div className="money">{formatDate(finishDate)}</div>
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 12 }}>
         <ProgressBar percent={d.percent_complete} tone={tone} />
       </div>
+
+      <PaymentPlanSection debt={d} />
 
       <PayoffProjection debt={d} payOffTx={payOffTx} />
 
@@ -974,6 +1836,8 @@ export function DebtsPage() {
 
   return (
     <div className="grid" style={{ gap: 24 }}>
+      <DebtOverviewChart debts={debts ?? []} />
+
       {active.length > 0 && (
         <div className="grid" style={{ gap: 16 }}>
           <h2>Active</h2>

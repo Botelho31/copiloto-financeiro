@@ -5,7 +5,7 @@ import { logout } from "../lib/api";
 const NAV_LINKS = [
   { to: "/", label: "Dashboard" },
   { to: "/transactions", label: "Transactions" },
-  { to: "/bills", label: "Recurring" },
+  { to: "/bills", label: "Planned Payments" },
   { to: "/debts", label: "Debts" },
   { to: "/projections", label: "Projections" },
 ];

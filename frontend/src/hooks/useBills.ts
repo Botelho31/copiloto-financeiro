@@ -21,12 +21,20 @@ export interface NewBillInput {
   debtId?: number;
 }
 
+// A bill linked to a debt (debtId) reshapes that debt's payment plan, which
+// in turn reshapes the projection's debt lines — invalidate all three
+// unconditionally rather than only when debtId is actually touched, since
+// amount/cadence/confirmed changes on an already-linked bill matter too.
 export function useCreateBill() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: NewBillInput) =>
       apiFetch<Bill[]>("/api/bills", { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["debts"] });
+      queryClient.invalidateQueries({ queryKey: ["projections"] });
+    },
   });
 }
 
@@ -49,7 +57,11 @@ export function useUpdateBill() {
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: BillUpdateInput }) =>
       apiFetch<Bill[]>(`/api/bills/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["debts"] });
+      queryClient.invalidateQueries({ queryKey: ["projections"] });
+    },
   });
 }
 
@@ -57,6 +69,10 @@ export function useDeleteBill() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => apiFetch<Bill[]>(`/api/bills/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["debts"] });
+      queryClient.invalidateQueries({ queryKey: ["projections"] });
+    },
   });
 }

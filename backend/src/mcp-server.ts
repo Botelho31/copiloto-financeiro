@@ -393,7 +393,9 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Exact existing debt name — links this bill as the payment that pays that debt down (e.g. a mortgage's monthly payment bill linked to the mortgage debt), since they're otherwise unrelated records describing the same real-world payment."
+          "Exact existing debt name — links this bill as (one of possibly several) payments that pay " +
+            "that debt down, feeding its amount/cadence into the debt's payment plan (bounded by the " +
+            "debt's remaining balance) instead of this being an unrelated generic expense."
         ),
     },
   },
@@ -466,7 +468,7 @@ server.registerTool(
         .nullable()
         .optional()
         .describe(
-          "Exact existing debt name to link as the debt this bill pays down, or null to unlink."
+          "Exact existing debt name to link as a debt this bill pays down, or null to unlink."
         ),
       confirmed: z.boolean().optional(),
       active: z.boolean().optional(),
@@ -491,18 +493,6 @@ server.registerTool(
 
     const fields: string[] = [];
     const values: unknown[] = [];
-    if (name !== undefined) {
-      fields.push("name = ?");
-      values.push(name);
-    }
-    if (categoryName !== undefined) {
-      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
-        | { id: number }
-        | null;
-      if (!row) return errorResult(`Unknown category "${categoryName}"`);
-      fields.push("category_id = ?");
-      values.push(row.id);
-    }
     if (debtName !== undefined) {
       if (debtName === null) {
         fields.push("debt_id = ?");
@@ -515,6 +505,18 @@ server.registerTool(
         fields.push("debt_id = ?");
         values.push(row.id);
       }
+    }
+    if (name !== undefined) {
+      fields.push("name = ?");
+      values.push(name);
+    }
+    if (categoryName !== undefined) {
+      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
+        | { id: number }
+        | null;
+      if (!row) return errorResult(`Unknown category "${categoryName}"`);
+      fields.push("category_id = ?");
+      values.push(row.id);
     }
     if (expectedAmount !== undefined) {
       fields.push("expected_amount = ?");
@@ -596,7 +598,7 @@ server.registerTool(
   "list_debts",
   {
     description:
-      "List debts (money borrowed or lent) with computed totals: principal, total_paid, remaining, percent_complete, interest_paid_so_far.",
+      "List debts (money borrowed or lent) with computed totals: principal, total_paid, remaining, percent_complete, interest_paid_so_far, plus payment_plan (how each debt's expected payment is calculated: loan formula, linked payment bill, history-inferred, or none).",
   },
   async () => json(listDebts())
 );
@@ -716,6 +718,15 @@ server.registerTool(
             "(counterparty pattern, amount threshold, role). Always read and follow this before " +
             "linking/unlinking transactions on a debt-state update request."
         ),
+      overrideAutomaticSchedule: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, skips the payment-history heuristic in this debt's payment plan even if the " +
+            "history would otherwise pass the regularity check — for a debt with one or more linked " +
+            "payment bills (see create_bill/update_bill's debtName) already accounting for it, where " +
+            "the raw history would double up against them rather than add real information."
+        ),
     },
   },
   async ({
@@ -729,11 +740,16 @@ server.registerTool(
     loanType,
     notes,
     matchingRule,
+    overrideAutomaticSchedule,
   }) => {
     const existing = db.query("SELECT id FROM debts WHERE id = ?").get(id);
     if (!existing) return errorResult(`Debt ${id} not found`);
     const fields: string[] = [];
     const values: unknown[] = [];
+    if (overrideAutomaticSchedule !== undefined) {
+      fields.push("override_automatic_schedule = ?");
+      values.push(overrideAutomaticSchedule ? 1 : 0);
+    }
     if (status !== undefined) {
       fields.push("status = ?");
       values.push(status);

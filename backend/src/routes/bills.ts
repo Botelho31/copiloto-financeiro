@@ -46,6 +46,10 @@ export function listBills(): Bill[] {
   }));
 }
 
+function debtExists(id: number): boolean {
+  return db.query("SELECT id FROM debts WHERE id = ?").get(id) != null;
+}
+
 export const billsRoutes = new Elysia({ prefix: "/api/bills" })
   .get("/", () => listBills())
   .post("/", ({ body, set }) => {
@@ -67,6 +71,10 @@ export const billsRoutes = new Elysia({ prefix: "/api/bills" })
     if (!CADENCES.has(input.cadence)) {
       set.status = 400;
       return { error: "cadence must be weekly, monthly, quarterly, yearly or once" };
+    }
+    if (input.debtId != null && !debtExists(input.debtId)) {
+      set.status = 400;
+      return { error: "debtId does not match an existing debt" };
     }
 
     db.query(
@@ -110,6 +118,10 @@ export const billsRoutes = new Elysia({ prefix: "/api/bills" })
     if (input.cadence !== undefined && !CADENCES.has(input.cadence)) {
       set.status = 400;
       return { error: "cadence must be weekly, monthly, quarterly, yearly or once" };
+    }
+    if (input.debtId != null && !debtExists(input.debtId)) {
+      set.status = 400;
+      return { error: "debtId does not match an existing debt" };
     }
 
     const fields: string[] = [];

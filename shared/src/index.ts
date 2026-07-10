@@ -2,6 +2,7 @@
 // the API JSON responses (snake_case where the backend returns snake_case).
 
 export * from "./amortization";
+export * from "./billCadence";
 
 export interface Account {
   id: string;
@@ -90,9 +91,9 @@ export interface Bill {
   source: string;
   confirmed: boolean;
   active: boolean;
-  // The debt this bill's payment actually pays down (e.g. a mortgage's
-  // monthly payment bill linked to the mortgage), if any — the two are
-  // otherwise unrelated records describing the same real-world payment.
+  // The debt this bill's payment pays down, if any — a debt can have several
+  // bills linked to it at once (see Debt.payment_plan), so this is a plain
+  // many-to-one pointer, not a two-way exclusive relationship.
   debt_id: number | null;
   debt_name: string | null;
 }
@@ -113,6 +114,10 @@ export interface ProjectedMonth {
     name: string;
     amount: number;
     kind: "bill" | "debt" | "interest" | "cardSpend";
+    /** Set on a debt line whose schedule comes from the debt's linked payment
+     * bill — lets category tables attribute the amount to that bill's category
+     * even though the line itself belongs to the debt. */
+    billId?: number;
   }[];
   /** Bills flagged is_card_expense — informational only, not part of net/balance (already folded into the cardSpend line above). */
   cardExpenseBills: { id: number; name: string; amount: number }[];
@@ -156,6 +161,11 @@ export interface Debt {
   // debt's expected monthly payment directly from the loan formula instead
   // of needing real payment history to infer a schedule from.
   loan_type: "price" | "sac" | null;
+  // Skips the payment-history heuristic in payment_plan even when the
+  // history would otherwise pass the regularity check — for a debt with one
+  // or more linked bills already accounting for its payments, where the raw
+  // history would double up against them rather than add real information.
+  override_automatic_schedule: boolean;
   // Computed server-side from linked transactions:
   principal: number;
   total_paid: number;
@@ -169,8 +179,60 @@ export interface Debt {
   transaction_count: number;
   // Other debts whose full computed principal feeds into this debt's origin
   // sum (e.g. the whole Estudio Foz debt counting toward Juliana's 20% share).
-  linked_debts: { id: number; name: string; principal: number }[];
+  // countsTowardOrigin is false for a linked child that hasn't started yet
+  // (its principal shows here for reference, but isn't folded in until it has).
+  linked_debts: { id: number; name: string; principal: number; countsTowardOrigin: boolean }[];
+  // How this debt's expected payment is calculated — the single resolution
+  // the projection engine also follows, so what the Debts page states and
+  // what the cash-flow projection does can never drift apart.
+  payment_plan: DebtPaymentPlan;
+  // Same idea, extended through time: the calendar date this debt's own
+  // schedule (payment_plan, including any extra-amortization bills on a
+  // loan) is projected to hit zero — computed with the exact same
+  // remaining-balance cap the projection engine uses, so a chart or card
+  // stating "pays off in X" can never show a different date than the
+  // projection actually converges on. Null if there's no basis to project
+  // (payment_plan.source === "none") or the debt isn't active.
+  projected_finish_date: string | null;
+  // Total interest still to accrue from today through projected_finish_date
+  // (on top of interest_paid_so_far) — null whenever there's no rate to
+  // accrue interest at all.
+  projected_remaining_interest: number | null;
 }
+
+export type DebtPaymentPlan =
+  | {
+      source: "loan";
+      loan_type: "price" | "sac";
+      // Next applicable month's payment (constant for PRICE; for SAC the
+      // schedule declines, so this is just the upcoming one).
+      monthly_amount: number;
+      rate_monthly_percent: number;
+      term_months: number;
+      // Bills linked to a loan-type debt don't replace the formula — the
+      // computed installment above stays authoritative — but they're real
+      // extra amortization payments (e.g. a lump-sum or yearly paydown) that
+      // shrink the balance faster than the plain schedule alone, so they're
+      // carried here for projections/charts to add on top.
+      extra_bills: { bill_id: number; bill_name: string; amount: number; cadence: Bill["cadence"] }[];
+    }
+  | {
+      // Zero or more explicitly linked bills (each keeping its own real
+      // cadence — not flattened into one blended monthly figure), plus
+      // optionally the payment-history heuristic layered on top, unless
+      // overrideAutomaticSchedule turned it off. At least one of bills/
+      // automatic is non-empty/non-null whenever this variant is used.
+      source: "combined";
+      bills: { bill_id: number; bill_name: string; amount: number; cadence: Bill["cadence"] }[];
+      automatic: { monthly_amount: number; payment_count: number } | null;
+      overrides_automatic_schedule: boolean;
+    }
+  | {
+      // No basis for a schedule: no linked bills, and either fewer than two
+      // linked repayments or amounts that vary too much to extrapolate honestly.
+      source: "none";
+      payment_count: number;
+    };
 
 export interface DebtTransaction {
   transaction_id: string;

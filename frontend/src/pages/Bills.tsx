@@ -6,10 +6,9 @@ import { SortableTh } from "../components/SortableTh";
 import { useCategories } from "../hooks/useCategories";
 import { useSortableTable } from "../hooks/useSortableTable";
 import { useBills, useCreateBill, useDeleteBill, useUpdateBill } from "../hooks/useBills";
-import { useDebts } from "../hooks/useDebts";
 import { useProjections } from "../hooks/useProjections";
 import { formatMoney, formatMonthLabel } from "../lib/format";
-import type { Bill, Category, Debt } from "shared";
+import type { Bill, Category } from "shared";
 
 const CADENCES = ["weekly", "monthly", "quarterly", "yearly", "once"] as const;
 type Cadence = (typeof CADENCES)[number];
@@ -22,6 +21,23 @@ const PROJECTION_HORIZON = 4;
 const COLUMN_COUNT = 6;
 
 const isIncomeBill = (b: Bill) => b.category_kind === "income";
+
+// "Past / settled" mirrors the projection engine's own dead-weight rule
+// (billAppliesToMonth in shared/src/billCadence.ts): a `once` bill whose due
+// date has passed never projects forward again, and a recurring bill is
+// settled once its recurrence-end date is behind us. A recurring bill with no
+// end date is perpetually upcoming.
+function isPastBill(b: Bill): boolean {
+  const now = new Date();
+  if (b.cadence === "once") {
+    return b.next_due_date != null && new Date(b.next_due_date) < now;
+  }
+  return b.recurrence_end_date != null && new Date(b.recurrence_end_date) < now;
+}
+
+type CadenceFilter = "all" | "recurring" | "once";
+type TimeFilter = "all" | "upcoming" | "past";
+type DebtFilter = "all" | "linked" | "standalone";
 
 function Swatch(props: { color: string }) {
   return (
@@ -47,12 +63,10 @@ interface BillFormValues {
   recurrenceStartDate: string | null;
   recurrenceEndDate: string | null;
   isCardExpense: boolean;
-  debtId: number | null;
 }
 
 function BillForm(props: {
   categories: Category[];
-  debts: Debt[];
   initial?: Bill;
   submitLabel: ReactNode;
   busy?: boolean;
@@ -68,11 +82,10 @@ function BillForm(props: {
   const [recurrenceStartDate, setRecurrenceStartDate] = useState(b?.recurrence_start_date ?? "");
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(b?.recurrence_end_date ?? "");
   const [isCardExpense, setIsCardExpense] = useState(b?.is_card_expense ?? false);
-  const [debtId, setDebtId] = useState<number | null>(b?.debt_id ?? null);
   // Open by default when the bill already uses one of the tucked-away fields,
   // so editing never hides a value that's actually set.
   const [moreOpen, setMoreOpen] = useState(
-    Boolean(b && (b.recurrence_start_date || b.recurrence_end_date || b.is_card_expense || b.debt_id))
+    Boolean(b && (b.recurrence_start_date || b.recurrence_end_date || b.is_card_expense))
   );
 
   function submit(e: FormEvent) {
@@ -87,7 +100,6 @@ function BillForm(props: {
       recurrenceStartDate: cadence === "once" ? null : recurrenceStartDate || null,
       recurrenceEndDate: cadence === "once" ? null : recurrenceEndDate || null,
       isCardExpense,
-      debtId,
     });
   }
 
@@ -182,22 +194,6 @@ function BillForm(props: {
             />
             Charged to card
           </label>
-          {props.debts.length > 0 && (
-            <label title="This bill's payment is what actually pays this debt down — otherwise they're unrelated records describing the same real-world payment.">
-              Pays down debt
-              <select
-                value={debtId ?? ""}
-                onChange={(e) => setDebtId(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">None</option>
-                {props.debts.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         </div>
       )}
 
@@ -218,7 +214,6 @@ function BillForm(props: {
 function EditBillRow(props: {
   bill: Bill;
   categories: Category[];
-  debts: Debt[];
   onDone: () => void;
   onSaved: () => void;
 }) {
@@ -229,7 +224,6 @@ function EditBillRow(props: {
         <BillForm
           initial={props.bill}
           categories={props.categories}
-          debts={props.debts}
           submitLabel={
             <>
               <FiCheck /> Save
@@ -250,7 +244,6 @@ function EditBillRow(props: {
                   recurrenceStartDate: v.recurrenceStartDate,
                   recurrenceEndDate: v.recurrenceEndDate,
                   isCardExpense: v.isCardExpense,
-                  debtId: v.debtId,
                 },
               },
               {
@@ -271,7 +264,6 @@ function BillTable(props: {
   bills: Bill[];
   pending: boolean;
   categories: Category[];
-  debts: Debt[];
   onConfirm?: (id: number) => void;
   onDismiss?: (id: number) => void;
   onRemove?: (id: number) => void;
@@ -318,7 +310,6 @@ function BillTable(props: {
                 key={b.id}
                 bill={b}
                 categories={props.categories}
-                debts={props.debts}
                 onDone={() => setEditingId(null)}
                 onSaved={() => props.onSaved?.()}
               />
@@ -338,7 +329,7 @@ function BillTable(props: {
                 {b.debt_name && (
                   <span
                     className="badge"
-                    title={`Pays down the "${b.debt_name}" debt`}
+                    title={`Pays down the "${b.debt_name}" debt — configured on the Debts page`}
                     style={{ marginLeft: 8 }}
                   >
                     → {b.debt_name}
@@ -412,8 +403,15 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
     // cardExpenseBills are kept out of a month's own bill lines so the
     // Projections page doesn't double-count them against the card-spend
     // goal, but per category they're still real upcoming charges — same
-    // merge the Dashboard's expectedBreakdown makes.
-    const lines = [...month.bills.filter((l) => l.kind === "bill"), ...month.cardExpenseBills];
+    // merge the Dashboard's expectedBreakdown makes. A debt line driven by
+    // its payment bill carries that bill's id, so it stays attributable to
+    // the bill's category here even though the line belongs to the debt.
+    const lines = [
+      ...month.bills
+        .filter((l) => l.kind === "bill" || (l.kind === "debt" && l.billId != null))
+        .map((l) => ({ id: l.kind === "debt" ? l.billId! : l.id, amount: l.amount })),
+      ...month.cardExpenseBills,
+    ];
     for (const line of lines) {
       const bill = billById.get(line.id);
       const key = bill?.category_name ?? "Uncategorized";
@@ -485,7 +483,6 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
 export function BillsPage() {
   const { data: bills } = useBills();
   const { data: categories } = useCategories();
-  const { data: debts } = useDebts();
   const createBill = useCreateBill();
   const updateBill = useUpdateBill();
   const deleteBill = useDeleteBill();
@@ -496,6 +493,13 @@ export function BillsPage() {
     queryClient.invalidateQueries({ queryKey: ["projections"] });
 
   const [view, setView] = useState<"all" | "income" | "bills">("all");
+  const [search, setSearch] = useState("");
+  const [cadenceFilter, setCadenceFilter] = useState<CadenceFilter>("all");
+  // Default to "upcoming": past/settled entries are dead weight in the list
+  // (same items the projection engine already stops projecting) — the point of
+  // the filter row is to shed them. "Past" and "All" are one select away.
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("upcoming");
+  const [debtFilter, setDebtFilter] = useState<DebtFilter>("all");
   // Remounting the form is how "clear on successful add" works, since
   // BillForm owns its own field state.
   const [formKey, setFormKey] = useState(0);
@@ -504,9 +508,30 @@ export function BillsPage() {
   const all = bills ?? [];
   const pending = all.filter((b) => !b.confirmed);
   const active = all.filter((b) => b.confirmed && b.active);
-  const activeIncome = active.filter(isIncomeBill);
-  const activeBills = active.filter((b) => !isIncomeBill(b));
-  const shown = view === "income" ? activeIncome : view === "bills" ? activeBills : active;
+
+  const query = search.trim().toLowerCase();
+  const filtered = active.filter((b) => {
+    if (query) {
+      const haystack = `${b.name} ${b.category_name ?? ""}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    if (cadenceFilter === "recurring" && b.cadence === "once") return false;
+    if (cadenceFilter === "once" && b.cadence !== "once") return false;
+    if (timeFilter !== "all") {
+      const past = isPastBill(b);
+      if (timeFilter === "upcoming" && past) return false;
+      if (timeFilter === "past" && !past) return false;
+    }
+    if (debtFilter === "linked" && b.debt_id == null) return false;
+    if (debtFilter === "standalone" && b.debt_id != null) return false;
+    return true;
+  });
+
+  const filteredIncome = filtered.filter(isIncomeBill);
+  const filteredBills = filtered.filter((b) => !isIncomeBill(b));
+  const shown = view === "income" ? filteredIncome : view === "bills" ? filteredBills : filtered;
+  const hasActiveFilters =
+    query !== "" || cadenceFilter !== "all" || timeFilter !== "all" || debtFilter !== "all";
 
   return (
     <div className="grid" style={{ gap: 24 }}>
@@ -521,31 +546,78 @@ export function BillsPage() {
             marginBottom: 14,
           }}
         >
-          <h2 style={{ margin: 0 }}>Recurring</h2>
+          <h2 style={{ margin: 0 }}>Planned Payments</h2>
           <div className="toggle-group">
             <button className={view === "all" ? "active" : ""} onClick={() => setView("all")}>
-              All ({active.length})
+              All ({filtered.length})
             </button>
             <button className={view === "income" ? "active" : ""} onClick={() => setView("income")}>
-              Income ({activeIncome.length})
+              Income ({filteredIncome.length})
             </button>
             <button className={view === "bills" ? "active" : ""} onClick={() => setView("bills")}>
-              Bills ({activeBills.length})
+              Bills ({filteredBills.length})
             </button>
           </div>
         </div>
         <p className="muted">
           Confirmed recurring income and bills — income feeds the Projections page's baseline.
         </p>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            alignItems: "end",
+            marginBottom: 16,
+          }}
+        >
+          <label style={{ flex: "1 1 220px", minWidth: 180 }}>
+            Search
+            <input
+              type="text"
+              placeholder="Search by name or category…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <label>
+            Cadence
+            <select
+              value={cadenceFilter}
+              onChange={(e) => setCadenceFilter(e.target.value as CadenceFilter)}
+            >
+              <option value="all">All cadences</option>
+              <option value="recurring">Recurring</option>
+              <option value="once">One-off</option>
+            </select>
+          </label>
+          <label>
+            Time
+            <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}>
+              <option value="upcoming">Upcoming</option>
+              <option value="past">Past / settled</option>
+              <option value="all">All</option>
+            </select>
+          </label>
+          <label>
+            Debt link
+            <select value={debtFilter} onChange={(e) => setDebtFilter(e.target.value as DebtFilter)}>
+              <option value="all">All</option>
+              <option value="linked">Debt-linked</option>
+              <option value="standalone">Standalone</option>
+            </select>
+          </label>
+        </div>
         {shown.length > 0 ? (
           <BillTable
             bills={shown}
             pending={false}
             categories={categories ?? []}
-            debts={debts ?? []}
             onRemove={(id) => deleteBill.mutate(id, { onSuccess: refreshProjections })}
             onSaved={refreshProjections}
           />
+        ) : hasActiveFilters || active.length > 0 ? (
+          <p className="muted">No planned payments match your filters.</p>
         ) : (
           <p className="muted">Nothing here yet — add one below.</p>
         )}
@@ -568,7 +640,6 @@ export function BillsPage() {
         <BillForm
           key={formKey}
           categories={categories ?? []}
-          debts={debts ?? []}
           submitLabel={
             <>
               <FiPlus /> Add
@@ -586,7 +657,6 @@ export function BillsPage() {
                 recurrenceStartDate: v.recurrenceStartDate ?? undefined,
                 recurrenceEndDate: v.recurrenceEndDate ?? undefined,
                 isCardExpense: v.isCardExpense,
-                debtId: v.debtId ?? undefined,
               },
               {
                 onSuccess: () => {
@@ -611,7 +681,6 @@ export function BillsPage() {
                 bills={pending}
                 pending
                 categories={categories ?? []}
-                debts={debts ?? []}
                 onConfirm={(id) =>
                   updateBill.mutate({ id, input: { confirmed: true } }, { onSuccess: refreshProjections })
                 }

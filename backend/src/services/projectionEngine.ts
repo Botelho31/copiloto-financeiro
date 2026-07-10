@@ -1,5 +1,5 @@
 import type { BillOverride, ProjectedMonth, ProjectionResult } from "shared";
-import { pricePayment, sacPaymentForMonth } from "shared";
+import { billAppliesToMonth, monthlyEquivalentAmount, pricePayment, sacPaymentForMonth } from "shared";
 import { config } from "../config";
 import { db } from "../db";
 import { getDebtTransactions, listDebts } from "../routes/debts";
@@ -211,163 +211,207 @@ interface DebtProjectionLine {
   direction: "owed_by_me" | "owed_to_me";
   schedule:
     | {
-        // History-based: a flat amount inferred from real past payments,
-        // valid for a fixed number of months from now.
+        // History-based: a flat amount inferred from real past payments.
+        // Shares the debt's remainingBalance cap with any other line on the
+        // same debt (a linked bill can co-exist with this), tracked via the
+        // caller's cumulative paidSoFar rather than an independent month count.
         kind: "flat";
         monthlyAmount: number;
-        remainingMonths: number;
+        remainingBalance: number;
       }
     | {
         // Formula-based: computed fresh for any calendar month from the
         // loan's own terms — doesn't need payment history, so it works for
         // a future loan (e.g. a mortgage that hasn't closed yet) just as
-        // well as one already underway.
+        // well as one already underway. Shares the debt's remainingBalance
+        // cap too — a linked extra-amortization bill can pay the balance off
+        // faster than the plain schedule alone, ending this line early.
         kind: "loan";
         loanType: "price" | "sac";
         principal: number;
         monthlyRatePercent: number;
         startDate: string;
         termMonths: number;
+        remainingBalance: number;
+      }
+    | {
+        // Bill-driven: one of possibly several bills explicitly linked to
+        // this debt, each keeping its own amount/cadence (full recurrence-
+        // bounds support, not a flat guess). Every line on the same debt
+        // shares one remainingBalance cap, so multiple bills (or a bill plus
+        // the automatic heuristic) can't collectively overpay it.
+        kind: "bill";
+        bill: BillForProjection;
+        remainingBalance: number;
       };
 }
 
 // Signed amount for a debt line in a given calendar month, or null if the
 // debt doesn't apply that month (not started yet, already paid off, or the
-// flat schedule's remaining-months window has passed).
-function debtLineAmountForMonth(line: DebtProjectionLine, targetMonth: Date, monthIndex: number): number | null {
+// debt's shared remaining balance is exhausted). paidSoFar is the sum
+// *every* line on this same debt has already contributed in earlier
+// projected months (and earlier lines this same month) — flat and bill
+// schedules both stop once it reaches the debt's real remaining balance,
+// since several lines can be paying down the same debt at once.
+function debtLineAmountForMonth(
+  line: DebtProjectionLine,
+  targetMonth: Date,
+  paidSoFar: number
+): number | null {
   const magnitude = (() => {
     if (line.schedule.kind === "flat") {
-      if (monthIndex > line.schedule.remainingMonths) return null;
-      return line.schedule.monthlyAmount;
+      const capped = Math.min(line.schedule.monthlyAmount, line.schedule.remainingBalance - paidSoFar);
+      return capped > 0.005 ? capped : null;
     }
-    const { principal, monthlyRatePercent, startDate, termMonths, loanType } = line.schedule;
-    const start = new Date(startDate);
+    if (line.schedule.kind === "bill") {
+      const { bill, remainingBalance } = line.schedule;
+      if (!billAppliesToMonth(bill, targetMonth)) return null;
+      // The debt's real balance is what ends this schedule, even if the bill
+      // itself declares no recurrence end — the final payment is trimmed to
+      // what's actually left, then the line stops.
+      const capped = Math.min(monthlyEquivalentAmount(bill), remainingBalance - paidSoFar);
+      return capped > 0.005 ? capped : null;
+    }
+    const { principal, monthlyRatePercent, startDate, termMonths, loanType, remainingBalance } =
+      line.schedule;
+    // Read the start date's year/month straight off the "YYYY-MM-DD" string
+    // rather than through `new Date(startDate)` — that parses as UTC
+    // midnight, and diffing it against targetMonth's LOCAL year/month would
+    // silently shift a 1st-of-month start into the previous month in any
+    // negative-UTC-offset timezone (see shared/src/billCadence.ts, which hit
+    // the exact same class of bug for bill due dates).
+    const [startYear, startMonth] = startDate.split("-").map(Number);
     const monthOfLoan =
-      (targetMonth.getFullYear() - start.getFullYear()) * 12 +
-      (targetMonth.getMonth() - start.getMonth()) +
-      1;
+      (targetMonth.getFullYear() - startYear) * 12 + (targetMonth.getMonth() - (startMonth - 1)) + 1;
     if (monthOfLoan < 1 || monthOfLoan > termMonths) return null;
-    return loanType === "price"
-      ? pricePayment(principal, monthlyRatePercent, termMonths)
-      : sacPaymentForMonth(principal, monthlyRatePercent, termMonths, monthOfLoan);
+    const raw =
+      loanType === "price"
+        ? pricePayment(principal, monthlyRatePercent, termMonths)
+        : sacPaymentForMonth(principal, monthlyRatePercent, termMonths, monthOfLoan);
+    const capped = Math.min(raw, remainingBalance - paidSoFar);
+    return capped > 0.005 ? capped : null;
   })();
   if (magnitude == null) return null;
   return line.direction === "owed_by_me" ? -magnitude : magnitude;
 }
 
-// A debt only counts as "solid" here if its own payment history is a real
-// fixed installment (e.g. Estudio Foz: exactly R$4,389 every time) — not
-// just any historical average. A debt paid off in irregular, wildly
-// different amounts (e.g. Juliana's house-share repayments ranging from
-// R$1,478 to R$7,000) has no real cadence to extrapolate; averaging it
-// anyway would smuggle a guess back in as if it were certain.
-const MAX_INSTALLMENT_COEFFICIENT_OF_VARIATION = 0.15;
-
-// Estimates each active debt's ongoing monthly installment from the average
-// of its own actual pay_off transactions (not a fixed schedule field — the
-// app doesn't store one), and how many more months that implies given what's
-// still remaining. Debts with no payment history, or with irregular payment
-// amounts, are skipped rather than guessed at.
-function monthsBetweenDates(fromDate: string, toDate: string): number {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
-  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+function billForProjection(id: number): BillForProjection | null {
+  const r = db
+    .query(
+      `SELECT id, name, expected_amount, cadence, next_due_date,
+              recurrence_start_date, recurrence_end_date
+       FROM recurring_bills WHERE id = ?`
+    )
+    .get(id) as {
+    id: number;
+    name: string;
+    expected_amount: number;
+    cadence: string;
+    next_due_date: string | null;
+    recurrence_start_date: string | null;
+    recurrence_end_date: string | null;
+  } | null;
+  if (!r) return null;
+  return {
+    id: r.id,
+    name: r.name,
+    expectedAmount: r.expected_amount,
+    cadence: r.cadence as Cadence,
+    nextDueDate: r.next_due_date,
+    recurrenceStartDate: r.recurrence_start_date,
+    recurrenceEndDate: r.recurrence_end_date,
+    isIncome: false,
+  };
 }
 
-function activeDebtSchedules(): DebtProjectionLine[] {
+interface DebtSchedules {
+  lines: DebtProjectionLine[];
+  // Bills claimed by a debt's projection line. They describe the same
+  // real-world payment as that line, so they must be dropped from the
+  // generic bill lines or the payment would be counted twice — this holds
+  // even for a formal loan, where the formula (not the bill) sets the amount
+  // and the linked bill only marks which bill is that payment.
+  consumedBillIds: Set<number>;
+}
+
+// Turns each active debt's server-computed payment_plan (see computePaymentPlan
+// in routes/debts.ts — the single resolution the Debts page also displays)
+// into a projection line. Debts whose plan is "none" stay out of the
+// projection rather than being guessed at.
+function activeDebtSchedules(): DebtSchedules {
   const debts = listDebts().filter((d) => d.status === "active" && d.remaining > 1);
   const lines: DebtProjectionLine[] = [];
+  const consumedBillIds = new Set<number>();
 
   for (const debt of debts) {
-    // A formula-based loan (Price/SAC) takes priority over the payment-
-    // history heuristic below — it's deterministic from the loan's own
-    // terms, so it works for a loan that hasn't started yet (no history to
-    // infer from) just as well as one already underway, and doesn't drift
-    // based on incidental payment-timing noise once it has.
-    if (debt.loan_type && debt.interest_rate_monthly_percent != null && debt.target_payoff_date) {
-      const termMonths = monthsBetweenDates(debt.start_date, debt.target_payoff_date);
-      if (termMonths > 0) {
+    const plan = debt.payment_plan;
+
+    if (plan.source === "loan") {
+      lines.push({
+        debtId: debt.id,
+        name: debt.name,
+        direction: debt.direction,
+        schedule: {
+          kind: "loan",
+          loanType: plan.loan_type,
+          principal: debt.principal,
+          monthlyRatePercent: plan.rate_monthly_percent,
+          startDate: debt.start_date,
+          termMonths: plan.term_months,
+          remainingBalance: debt.remaining,
+        },
+      });
+      // Extra bills linked to a loan don't change the computed installment
+      // above, but they're real extra amortization payments — they share the
+      // same remainingBalance cap, so together with the loan line they can
+      // pay the debt off faster than the plain schedule alone.
+      for (const bill of plan.extra_bills) {
+        if (consumedBillIds.has(bill.bill_id)) continue;
+        const billForProj = billForProjection(bill.bill_id);
+        if (!billForProj) continue;
+        consumedBillIds.add(bill.bill_id);
+        lines.push({
+          debtId: debt.id,
+          name: `${debt.name} — ${bill.bill_name}`,
+          direction: debt.direction,
+          schedule: { kind: "bill", bill: billForProj, remainingBalance: debt.remaining },
+        });
+      }
+    } else if (plan.source === "combined") {
+      // Every source here shares one remainingBalance cap (see
+      // debtLineAmountForMonth) — several bills, or a bill plus the
+      // automatic heuristic, can be paying down the same debt at once
+      // without collectively overpaying it.
+      for (const bill of plan.bills) {
+        // First-wins if two debts ever point at the same bill — the second
+        // would otherwise project the same payment twice.
+        if (consumedBillIds.has(bill.bill_id)) continue;
+        const billForProj = billForProjection(bill.bill_id);
+        if (!billForProj) continue;
+        consumedBillIds.add(bill.bill_id);
+        lines.push({
+          debtId: debt.id,
+          name: `${debt.name} — ${bill.bill_name}`,
+          direction: debt.direction,
+          schedule: { kind: "bill", bill: billForProj, remainingBalance: debt.remaining },
+        });
+      }
+      if (plan.automatic) {
         lines.push({
           debtId: debt.id,
           name: debt.name,
           direction: debt.direction,
           schedule: {
-            kind: "loan",
-            loanType: debt.loan_type,
-            principal: debt.principal,
-            monthlyRatePercent: debt.interest_rate_monthly_percent,
-            startDate: debt.start_date,
-            termMonths,
+            kind: "flat",
+            monthlyAmount: plan.automatic.monthly_amount,
+            remainingBalance: debt.remaining,
           },
         });
-        continue;
       }
     }
-
-    const payOffs = getDebtTransactions(debt.id).filter((t) => t.role === "pay_off");
-    if (payOffs.length < 2) continue; // one data point isn't a cadence
-
-    const amounts = payOffs.map((t) => Math.abs(t.amount));
-    const avgInstallment = amounts.reduce((sum, a) => sum + a, 0) / amounts.length;
-    if (avgInstallment <= 0) continue;
-
-    const variance =
-      amounts.reduce((sum, a) => sum + (a - avgInstallment) ** 2, 0) / amounts.length;
-    const coefficientOfVariation = Math.sqrt(variance) / avgInstallment;
-    if (coefficientOfVariation > MAX_INSTALLMENT_COEFFICIENT_OF_VARIATION) continue;
-
-    const remainingMonths = Math.max(1, Math.round(debt.remaining / avgInstallment));
-    lines.push({
-      debtId: debt.id,
-      name: debt.name,
-      direction: debt.direction,
-      schedule: { kind: "flat", monthlyAmount: avgInstallment, remainingMonths },
-    });
   }
 
-  return lines;
-}
-
-function withinRecurrenceBounds(bill: BillForProjection, targetMonth: Date): boolean {
-  // A month is "in bounds" if any part of it falls on/after the start date
-  // and on/before the end date — so a bill starting mid-March still applies
-  // to the March bucket, and one ending mid-October still applies to October.
-  const monthEnd = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0);
-  if (bill.recurrenceStartDate && monthEnd < new Date(bill.recurrenceStartDate)) return false;
-  if (bill.recurrenceEndDate && targetMonth > new Date(bill.recurrenceEndDate)) return false;
-  return true;
-}
-
-function billAppliesToMonth(bill: BillForProjection, targetMonth: Date): boolean {
-  if (!withinRecurrenceBounds(bill, targetMonth)) return false;
-
-  // A "once" bill whose date has already passed is done — it must never
-  // project forward again, explicitly, regardless of month/year matching.
-  if (bill.cadence === "once" && bill.nextDueDate && new Date(bill.nextDueDate) < new Date()) {
-    return false;
-  }
-
-  if (bill.cadence === "monthly" || bill.cadence === "weekly") return true;
-  if (!bill.nextDueDate) return false;
-  const due = new Date(bill.nextDueDate);
-
-  if (bill.cadence === "yearly") return due.getMonth() === targetMonth.getMonth();
-
-  if (bill.cadence === "quarterly") {
-    const monthDiff =
-      (targetMonth.getFullYear() - due.getFullYear()) * 12 +
-      (targetMonth.getMonth() - due.getMonth());
-    return monthDiff >= 0 && monthDiff % 3 === 0;
-  }
-
-  // "once": a single future occurrence, never repeats — must match the
-  // exact year and month, not just the calendar month like "yearly" does.
-  return due.getFullYear() === targetMonth.getFullYear() && due.getMonth() === targetMonth.getMonth();
-}
-
-function monthlyEquivalentAmount(bill: BillForProjection, overrideAmount?: number): number {
-  const base = overrideAmount ?? bill.expectedAmount;
-  return bill.cadence === "weekly" ? base * (52 / 12) : base;
+  return { lines, consumedBillIds };
 }
 
 export function computeProjection(options: ProjectionOptions = {}): ProjectionResult {
@@ -383,9 +427,9 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
   // stated annual rate over 12 months.
   const monthlyInterestRate = (1 + interestRateAnnualPercent / 100) ** (1 / 12) - 1;
 
-  const bills = activeConfirmedBills();
+  const { lines: debtLines, consumedBillIds } = activeDebtSchedules();
+  const bills = activeConfirmedBills().filter((b) => !consumedBillIds.has(b.id));
   const cardBills = cardExpenseBills();
-  const debtLines = activeDebtSchedules();
   // Income now comes entirely from confirmed income-kind bills — no generic
   // bank-transaction averaging left to contribute a "baseline" figure.
   const baselineIncome = 0;
@@ -410,15 +454,13 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
   let balance = startingBalance;
   const months: ProjectedMonth[] = [];
   const now = new Date();
+  // Cumulative bill-driven payments per debt across the horizon, so a debt's
+  // linked bill stops paying once the debt's remaining balance is exhausted.
+  const paidByDebt = new Map<number, number>();
 
   for (let i = 1; i <= horizonMonths; i++) {
     const targetMonth = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const billLines: {
-      id: number;
-      name: string;
-      amount: number;
-      kind: "bill" | "debt" | "interest" | "cardSpend";
-    }[] = [];
+    const billLines: ProjectedMonth["bills"] = [];
     let net = baselineIncome;
 
     const cardExpenseThisMonth = i === 1 ? currentCardOwed : baselineExpense;
@@ -459,8 +501,10 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
       }));
 
     for (const debtLine of debtLines) {
-      const amount = debtLineAmountForMonth(debtLine, targetMonth, i);
+      const paidSoFar = paidByDebt.get(debtLine.debtId) ?? 0;
+      const amount = debtLineAmountForMonth(debtLine, targetMonth, paidSoFar);
       if (amount == null) continue;
+      paidByDebt.set(debtLine.debtId, paidSoFar + Math.abs(amount));
       net += amount;
       // Negative ids keep debt lines from colliding with real bill ids in
       // the same array — bill overrides only ever target positive bill ids.
@@ -469,6 +513,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
         name: `${debtLine.name} (debt)`,
         amount,
         kind: "debt",
+        ...(debtLine.schedule.kind === "bill" ? { billId: debtLine.schedule.bill.id } : {}),
       });
     }
 

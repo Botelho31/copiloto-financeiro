@@ -742,7 +742,7 @@ export function DashboardPage() {
     // without this, every future month in the period would flatline to
     // zero for every category. Confirmed bills already carry a category, so
     // a future month's expected spend can be attributed the same way, via
-    // the same id-cross-reference the Recurring page uses (not duplicating
+    // the same id-cross-reference the Planned Payments page uses (not duplicating
     // the projection engine's own cadence/recurrence-bounds logic here).
     const billCategoryById = new Map((bills ?? []).map((b) => [b.id, b.category_name ?? "Uncategorized"]));
     const now = new Date();
@@ -750,8 +750,13 @@ export function DashboardPage() {
       if (month.start <= now) continue;
       const projectedMonth = findProjectedMonth(projections, month.start);
       if (!projectedMonth) continue;
+      // A debt line driven by its payment bill carries that bill's id, so the
+      // spend still lands in the bill's category rather than vanishing when
+      // the line moves from "bill" to "debt".
       const expenseLines = [
-        ...projectedMonth.bills.filter((l) => l.kind === "bill" && l.amount < 0),
+        ...projectedMonth.bills
+          .filter((l) => (l.kind === "bill" || (l.kind === "debt" && l.billId != null)) && l.amount < 0)
+          .map((l) => ({ id: l.kind === "debt" ? l.billId! : l.id, amount: l.amount })),
         ...projectedMonth.cardExpenseBills,
       ];
       for (const line of expenseLines) {
@@ -818,7 +823,7 @@ export function DashboardPage() {
   }, [planningData]);
 
   // Bill lines don't carry category info directly — cross-reference each
-  // line's id against the bill list (same technique the Recurring page's
+  // line's id against the bill list (same technique the Planned Payments page's
   // own category projection uses) rather than duplicating cadence logic.
   // Two kinds of expense line here were never going to resolve to a real
   // bill category, since they aren't bills at all: the cardSpend goal/
@@ -1452,7 +1457,7 @@ export function DashboardPage() {
               )}
             </div>
             <div>
-              <h3 title="Recurring bills and debts' own known repayment schedule — essentially certain">
+              <h3 title="Planned payments and debts' own known repayment schedule — essentially certain">
                 Committed expenses
               </h3>
               {planningData.committedExpenseLines.length === 0 ? (

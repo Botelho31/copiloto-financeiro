@@ -13,11 +13,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Goal, ProjectedMonth } from "shared";
+import type { Debt, Goal, ProjectedMonth } from "shared";
 import { PeriodPicker } from "../components/PeriodPicker";
 import { SortableTh } from "../components/SortableTh";
 import { SummaryCard } from "../components/SummaryCard";
 import { useBills } from "../hooks/useBills";
+import { useDebts } from "../hooks/useDebts";
 import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/useGoals";
 import { useProjections, useWhatIfProjection } from "../hooks/useProjections";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
@@ -56,6 +57,41 @@ const LINE_KIND_LABEL: Record<"bill" | "debt" | "interest" | "cardSpend", string
 
 function moneyTooltip(value: any): string {
   return formatMoney(Number(value));
+}
+
+// A native SVG <title> on the balance dot itself doesn't reliably show —
+// recharts tracks hover via its own invisible overlay + activeDot, which sits
+// on top of a custom dot shape and intercepts the pointer before a nested
+// <title> ever gets it. Piggybacking on recharts' own (already-working)
+// tooltip content instead guarantees this fires on the same hover recharts
+// already detects, no pixel-perfect aim at a 4px circle required. Reuses the
+// stock recharts-* class names so the existing dark-tooltip CSS fix applies
+// without duplicating it.
+function BalanceTooltip(props: {
+  active?: boolean;
+  label?: string;
+  payload?: { name?: string; value?: number; color?: string; dataKey?: string }[];
+  debtEndMarkers: { id: number; name: string; projected_finish_date: string }[];
+}) {
+  if (!props.active || !props.payload || props.payload.length === 0) return null;
+  const finishing = props.debtEndMarkers.filter((d) => d.projected_finish_date.slice(0, 7) === props.label);
+  return (
+    <div className="recharts-default-tooltip" style={{ padding: "8px 12px", borderRadius: 4 }}>
+      <p className="recharts-tooltip-label" style={{ margin: "0 0 4px" }}>
+        {props.label}
+      </p>
+      {props.payload.map((p) => (
+        <p key={p.dataKey} className="recharts-tooltip-item" style={{ margin: 0, color: p.color }}>
+          {p.name}: {formatMoney(Number(p.value))}
+        </p>
+      ))}
+      {finishing.length > 0 && (
+        <p className="recharts-tooltip-item" style={{ margin: "4px 0 0", color: "var(--gold)", fontWeight: 600 }}>
+          {finishing.map((d) => `${d.name} pays off`).join(", ")}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function ScenarioBadge() {
@@ -214,13 +250,12 @@ export function ProjectionsPage() {
   // A goal's own date can fall well outside any fixed granularity step —
   // this overrides the granularity-derived horizon entirely rather than
   // trying to fit it into month/quarter/semester/year buckets.
-  const [horizonOverride, setHorizonOverride] = useState<{ months: number; goalName: string } | null>(
-    null
-  );
+  const [horizonOverride, setHorizonOverride] = useState<{ months: number; name: string } | null>(null);
   const horizonMonths = horizonOverride?.months ?? GRANULARITY_TO_HORIZON_MONTHS[period.granularity];
 
   const { data: baseline } = useProjections(horizonMonths);
   const { data: bills } = useBills();
+  const { data: debts } = useDebts();
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
   const whatIf = useWhatIfProjection();
@@ -294,6 +329,19 @@ export function ProjectionsPage() {
   const { data: goals } = useGoals();
   const goalCount = (goals ?? []).length;
   const goalsOnTrack = (goals ?? []).filter((g) => g.on_track).length;
+  // A debt's own projected finish date — the same server-computed date the
+  // Debts page's own "Finish date" stat shows (see projected_finish_date,
+  // computeProjectedFinishDate in backend/src/routes/debts.ts). Marked on the
+  // balance chart below as a gold dot on the month it pays off (hover for
+  // which debt), not a vertical line — several debts finishing close together
+  // would otherwise stack their labels on top of each other. This is NOT
+  // target_payoff_date (a loan's plain contractual end, ignoring any
+  // extra-amortization bills linked to it) — using that instead would show a
+  // date years later than the debt will actually pay off.
+  const debtEndMarkers = (debts ?? []).filter(
+    (d): d is Debt & { projected_finish_date: string } =>
+      d.status === "active" && d.projected_finish_date != null
+  );
   const {
     sorted: sortedGoals,
     sortKey: goalSortKey,
@@ -381,10 +429,17 @@ export function ProjectionsPage() {
     resetWhatIf();
   }
 
-  function spanUntilLatestGoal() {
-    if (!goals || goals.length === 0) return;
-    const latest = [...goals].sort((a, b) => b.target_date.localeCompare(a.target_date))[0]!;
-    setHorizonOverride({ months: monthsUntil(latest.target_date), goalName: latest.name });
+  function spanUntilFurthestMarker() {
+    const candidates = [
+      ...(goals ?? []).map((g) => ({ targetDate: g.target_date, name: g.name })),
+      ...debtEndMarkers.map((d) => ({ targetDate: d.projected_finish_date, name: d.name })),
+    ];
+    if (candidates.length === 0) return;
+    const latest = [...candidates].sort((a, b) => b.targetDate.localeCompare(a.targetDate))[0]!;
+    // +1 month of buffer beyond the exact target — otherwise its marker lands
+    // right on the last plotted point, where recharts can clip the dotted
+    // line/label against the chart's edge instead of actually showing it.
+    setHorizonOverride({ months: monthsUntil(latest.targetDate) + 1, name: latest.name });
     resetWhatIf();
   }
 
@@ -423,19 +478,19 @@ export function ProjectionsPage() {
               showNavigation={false}
               granularities={PROJECTION_GRANULARITIES}
             />
-            {goals && goals.length > 0 && (
+            {(goalCount > 0 || debtEndMarkers.length > 0) && (
               <button
                 className={horizonOverride ? undefined : "secondary"}
-                onClick={spanUntilLatestGoal}
-                title="Set the horizon to span until your furthest-out goal's target date"
+                onClick={spanUntilFurthestMarker}
+                title="Set the horizon to span until your furthest-out goal or debt end date"
               >
-                Span until latest goal
+                Span until latest goal/debt
               </button>
             )}
           </div>
           {horizonOverride && (
             <span className="muted" style={{ fontSize: 13 }}>
-              Spanning {horizonMonths} months, until "{horizonOverride.goalName}"
+              Spanning {horizonMonths} months, until "{horizonOverride.name}"
             </span>
           )}
           {scenarioActive && (
@@ -500,7 +555,7 @@ export function ProjectionsPage() {
             <LineChart data={balanceChartData}>
               <XAxis dataKey="label" stroke="var(--text-muted)" />
               <YAxis stroke="var(--text-muted)" />
-              <Tooltip formatter={moneyTooltip} />
+              <Tooltip content={<BalanceTooltip debtEndMarkers={debtEndMarkers} />} />
               {showBaselineOverlay && <Legend />}
               {showBaselineOverlay && (
                 <Line
@@ -518,15 +573,28 @@ export function ProjectionsPage() {
                 name={showBaselineOverlay ? "What-if scenario" : "Balance"}
                 stroke="var(--accent)"
                 strokeWidth={2}
-                dot={(props: any) => (
-                  <circle
-                    key={props.payload.monthIndex}
-                    cx={props.cx}
-                    cy={props.cy}
-                    r={4}
-                    fill={props.payload.shortfall ? "var(--danger)" : "var(--accent)"}
-                  />
-                )}
+                dot={(props: any) => {
+                  // A debt paying off this month gets its own gold dot instead
+                  // of a dotted vertical line — several debts finishing close
+                  // together used to stack their labels on top of each other.
+                  // Which debt(s) shows in BalanceTooltip above on hover, not
+                  // a native SVG title on the dot itself — recharts' own
+                  // hover-tracking overlay sits on top of a custom dot shape
+                  // and would swallow the pointer before a nested title ever
+                  // saw it.
+                  const finishing = debtEndMarkers.some(
+                    (d) => d.projected_finish_date.slice(0, 7) === props.payload.label
+                  );
+                  return (
+                    <circle
+                      key={props.payload.monthIndex}
+                      cx={props.cx}
+                      cy={props.cy}
+                      r={finishing ? 5 : 4}
+                      fill={finishing ? "var(--gold)" : props.payload.shortfall ? "var(--danger)" : "var(--accent)"}
+                    />
+                  );
+                }}
               />
               {hasShortfall && <ReferenceLine y={0} stroke="var(--danger)" strokeOpacity={0.5} />}
               {(goals ?? []).map((g, i) => {
