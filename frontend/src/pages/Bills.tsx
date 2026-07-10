@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiPlus, FiTrash2, FiX } from "react-icons/fi";
 import { CategorySelect } from "../components/CategorySelect";
 import { SortableTh } from "../components/SortableTh";
@@ -12,9 +13,6 @@ import type { Bill, Category } from "shared";
 
 const CADENCES = ["weekly", "monthly", "quarterly", "yearly", "once"] as const;
 type Cadence = (typeof CADENCES)[number];
-
-const CARD_EXPENSE_HINT =
-  "Charged to a credit card — excluded from the projection since it's already covered by the card spending goal/average";
 
 const PROJECTION_HORIZON = 4;
 
@@ -73,6 +71,7 @@ function BillForm(props: {
   onSubmit: (values: BillFormValues) => void;
   onCancel?: () => void;
 }) {
+  const { t } = useTranslation("bills");
   const b = props.initial;
   const [name, setName] = useState(b?.name ?? "");
   const [categoryId, setCategoryId] = useState<number | null>(b?.category_id ?? null);
@@ -110,20 +109,20 @@ function BillForm(props: {
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}
       >
         <label>
-          Name
+          {t("form.name")}
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
         </label>
         <label>
-          Category
+          {t("form.category")}
           <CategorySelect
             categories={props.categories}
             value={categoryId}
-            placeholder="None"
+            placeholder={t("form.categoryPlaceholder")}
             onChange={setCategoryId}
           />
         </label>
         <label>
-          Amount
+          {t("form.amount")}
           <input
             type="number"
             step="0.01"
@@ -133,24 +132,24 @@ function BillForm(props: {
           />
         </label>
         <label>
-          Cadence
+          {t("form.cadence")}
           <select value={cadence} onChange={(e) => setCadence(e.target.value as Cadence)}>
             {CADENCES.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {t(`cadences.${c}`)}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Next due date
+          {t("form.nextDueDate")}
           <input type="date" value={nextDueDate} onChange={(e) => setNextDueDate(e.target.value)} />
         </label>
       </div>
 
       <div>
         <button type="button" className="link-button" onClick={() => setMoreOpen((o) => !o)}>
-          {moreOpen ? <FiChevronDown /> : <FiChevronRight />} More options
+          {moreOpen ? <FiChevronDown /> : <FiChevronRight />} {t("form.moreOptions")}
         </button>
       </div>
 
@@ -166,7 +165,7 @@ function BillForm(props: {
           {cadence !== "once" && (
             <>
               <label>
-                Recurrence starts (optional)
+                {t("form.recurrenceStart")}
                 <input
                   type="date"
                   value={recurrenceStartDate}
@@ -174,7 +173,7 @@ function BillForm(props: {
                 />
               </label>
               <label>
-                Recurrence ends (optional)
+                {t("form.recurrenceEnd")}
                 <input
                   type="date"
                   value={recurrenceEndDate}
@@ -185,14 +184,14 @@ function BillForm(props: {
           )}
           <label
             style={{ flexDirection: "row", gap: 6, alignItems: "center" }}
-            title={CARD_EXPENSE_HINT}
+            title={t("form.cardExpenseHint")}
           >
             <input
               type="checkbox"
               checked={isCardExpense}
               onChange={(e) => setIsCardExpense(e.target.checked)}
             />
-            Charged to card
+            {t("form.cardExpense")}
           </label>
         </div>
       )}
@@ -203,7 +202,7 @@ function BillForm(props: {
         </button>
         {props.onCancel && (
           <button type="button" className="secondary" onClick={props.onCancel}>
-            <FiX /> Cancel
+            <FiX /> {t("form.cancel")}
           </button>
         )}
       </div>
@@ -217,6 +216,7 @@ function EditBillRow(props: {
   onDone: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation("bills");
   const updateBill = useUpdateBill();
   return (
     <tr>
@@ -226,7 +226,7 @@ function EditBillRow(props: {
           categories={props.categories}
           submitLabel={
             <>
-              <FiCheck /> Save
+              <FiCheck /> {t("editForm.submit")}
             </>
           }
           busy={updateBill.isPending}
@@ -269,6 +269,7 @@ function BillTable(props: {
   onRemove?: (id: number) => void;
   onSaved?: () => void;
 }) {
+  const { t } = useTranslation("bills");
   const [editingId, setEditingId] = useState<number | null>(null);
   const { sorted, sortKey, direction, toggleSort } = useSortableTable<Bill>(
     props.bills,
@@ -294,11 +295,11 @@ function BillTable(props: {
     <table>
       <thead>
         <tr>
-          <SortableTh label="Name" sortKey="name" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Category" sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Amount" sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Cadence" sortKey="cadence" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Next due" sortKey="nextDue" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.name")} sortKey="name" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.amount")} sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.cadence")} sortKey="cadence" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.nextDue")} sortKey="nextDue" activeKey={sortKey} direction={direction} onSort={toggleSort} />
           <th />
         </tr>
       </thead>
@@ -322,14 +323,14 @@ function BillTable(props: {
               <td>
                 {b.name}
                 {b.is_card_expense && (
-                  <span className="badge" title={CARD_EXPENSE_HINT} style={{ marginLeft: 8 }}>
-                    card
+                  <span className="badge" title={t("form.cardExpenseHint")} style={{ marginLeft: 8 }}>
+                    {t("table.cardBadge")}
                   </span>
                 )}
                 {b.debt_name && (
                   <span
                     className="badge"
-                    title={`Pays down the "${b.debt_name}" debt — configured on the Debts page`}
+                    title={t("table.debtBadgeTitle", { debtName: b.debt_name })}
                     style={{ marginLeft: 8 }}
                   >
                     → {b.debt_name}
@@ -351,7 +352,7 @@ function BillTable(props: {
                 {formatMoney(b.expected_amount)}
               </td>
               <td>
-                {b.cadence}
+                {t(`cadences.${b.cadence}`)}
                 {b.cadence !== "once" && (b.recurrence_start_date || b.recurrence_end_date) && (
                   <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                     {b.recurrence_start_date ?? "…"} → {b.recurrence_end_date ?? "…"}
@@ -362,19 +363,19 @@ function BillTable(props: {
               <td style={{ whiteSpace: "nowrap" }}>
                 {props.pending ? (
                   <>
-                    <button className="icon" onClick={() => props.onConfirm?.(b.id)} title="Confirm">
+                    <button className="icon" onClick={() => props.onConfirm?.(b.id)} title={t("table.confirm")}>
                       <FiCheck />
                     </button>{" "}
-                    <button className="secondary icon" onClick={() => props.onDismiss?.(b.id)} title="Dismiss">
+                    <button className="secondary icon" onClick={() => props.onDismiss?.(b.id)} title={t("table.dismiss")}>
                       <FiX />
                     </button>
                   </>
                 ) : (
                   <>
-                    <button className="secondary icon" onClick={() => setEditingId(b.id)} title="Edit">
+                    <button className="secondary icon" onClick={() => setEditingId(b.id)} title={t("table.edit")}>
                       <FiEdit2 />
                     </button>{" "}
-                    <button className="danger icon" onClick={() => props.onRemove?.(b.id)} title="Remove">
+                    <button className="danger icon" onClick={() => props.onRemove?.(b.id)} title={t("table.remove")}>
                       <FiTrash2 />
                     </button>
                   </>
@@ -389,6 +390,7 @@ function BillTable(props: {
 }
 
 function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
+  const { t } = useTranslation("bills");
   const { data: projections } = useProjections(PROJECTION_HORIZON);
   const months = (projections?.months ?? []).slice(0, PROJECTION_HORIZON);
   const billById = new Map(props.bills.map((b) => [b.id, b]));
@@ -414,7 +416,7 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
     ];
     for (const line of lines) {
       const bill = billById.get(line.id);
-      const key = bill?.category_name ?? "Uncategorized";
+      const key = bill?.category_name ?? t("projected.uncategorized");
       let row = rows.get(key);
       if (!row) {
         row = {
@@ -436,9 +438,9 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
   });
   const netTotals = months.map((_, mi) => sortedRows.reduce((sum, row) => sum + row.totals[mi], 0));
 
-  if (!projections) return <p className="muted">Loading projection…</p>;
+  if (!projections) return <p className="muted">{t("projected.loading")}</p>;
   if (sortedRows.length === 0) {
-    return <p className="muted">Nothing to project yet — confirm or add a recurring item above.</p>;
+    return <p className="muted">{t("projected.empty")}</p>;
   }
 
   const cell = (value: number, key: string | number) => (
@@ -452,7 +454,7 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
       <table>
         <thead>
           <tr>
-            <th>Category</th>
+            <th>{t("projected.category")}</th>
             {months.map((m) => (
               <th key={m.label}>{formatMonthLabel(m.label)}</th>
             ))}
@@ -471,7 +473,7 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
             </tr>
           ))}
           <tr>
-            <td style={{ fontWeight: 600 }}>Net recurring</td>
+            <td style={{ fontWeight: 600 }}>{t("projected.netRecurring")}</td>
             {netTotals.map((v, i) => cell(v, i))}
           </tr>
         </tbody>
@@ -481,6 +483,7 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
 }
 
 export function BillsPage() {
+  const { t } = useTranslation("bills");
   const { data: bills } = useBills();
   const { data: categories } = useCategories();
   const createBill = useCreateBill();
@@ -546,22 +549,20 @@ export function BillsPage() {
             marginBottom: 14,
           }}
         >
-          <h2 style={{ margin: 0 }}>Planned Payments</h2>
+          <h2 style={{ margin: 0 }}>{t("title")}</h2>
           <div className="toggle-group">
             <button className={view === "all" ? "active" : ""} onClick={() => setView("all")}>
-              All ({filtered.length})
+              {t("tabs.all", { count: filtered.length })}
             </button>
             <button className={view === "income" ? "active" : ""} onClick={() => setView("income")}>
-              Income ({filteredIncome.length})
+              {t("tabs.income", { count: filteredIncome.length })}
             </button>
             <button className={view === "bills" ? "active" : ""} onClick={() => setView("bills")}>
-              Bills ({filteredBills.length})
+              {t("tabs.bills", { count: filteredBills.length })}
             </button>
           </div>
         </div>
-        <p className="muted">
-          Confirmed recurring income and bills — income feeds the Projections page's baseline.
-        </p>
+        <p className="muted">{t("subtitle")}</p>
         <div
           style={{
             display: "flex",
@@ -572,39 +573,39 @@ export function BillsPage() {
           }}
         >
           <label style={{ flex: "1 1 220px", minWidth: 180 }}>
-            Search
+            {t("filters.search")}
             <input
               type="text"
-              placeholder="Search by name or category…"
+              placeholder={t("filters.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
           <label>
-            Cadence
+            {t("filters.cadence")}
             <select
               value={cadenceFilter}
               onChange={(e) => setCadenceFilter(e.target.value as CadenceFilter)}
             >
-              <option value="all">All cadences</option>
-              <option value="recurring">Recurring</option>
-              <option value="once">One-off</option>
+              <option value="all">{t("filters.cadenceOptions.all")}</option>
+              <option value="recurring">{t("filters.cadenceOptions.recurring")}</option>
+              <option value="once">{t("filters.cadenceOptions.once")}</option>
             </select>
           </label>
           <label>
-            Time
+            {t("filters.time")}
             <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}>
-              <option value="upcoming">Upcoming</option>
-              <option value="past">Past / settled</option>
-              <option value="all">All</option>
+              <option value="upcoming">{t("filters.timeOptions.upcoming")}</option>
+              <option value="past">{t("filters.timeOptions.past")}</option>
+              <option value="all">{t("filters.timeOptions.all")}</option>
             </select>
           </label>
           <label>
-            Debt link
+            {t("filters.debtLink")}
             <select value={debtFilter} onChange={(e) => setDebtFilter(e.target.value as DebtFilter)}>
-              <option value="all">All</option>
-              <option value="linked">Debt-linked</option>
-              <option value="standalone">Standalone</option>
+              <option value="all">{t("filters.debtLinkOptions.all")}</option>
+              <option value="linked">{t("filters.debtLinkOptions.linked")}</option>
+              <option value="standalone">{t("filters.debtLinkOptions.standalone")}</option>
             </select>
           </label>
         </div>
@@ -617,32 +618,27 @@ export function BillsPage() {
             onSaved={refreshProjections}
           />
         ) : hasActiveFilters || active.length > 0 ? (
-          <p className="muted">No planned payments match your filters.</p>
+          <p className="muted">{t("empty.noMatches")}</p>
         ) : (
-          <p className="muted">Nothing here yet — add one below.</p>
+          <p className="muted">{t("empty.noneYet")}</p>
         )}
       </div>
 
       <div className="card">
-        <h2>Next months by category</h2>
-        <p className="muted">
-          Where the recurring items above land over the coming months, grouped by category — same
-          engine as the Projections page.
-        </p>
+        <h2>{t("projected.title")}</h2>
+        <p className="muted">{t("projected.subtitle")}</p>
         <ProjectedByCategory bills={all} categories={categories ?? []} />
       </div>
 
       <div className="card">
-        <h2>Add a bill or recurring income</h2>
-        <p className="muted">
-          Pick an income-kind category (e.g. "Income") to add recurring revenue instead of a bill.
-        </p>
+        <h2>{t("addForm.title")}</h2>
+        <p className="muted">{t("addForm.subtitle")}</p>
         <BillForm
           key={formKey}
           categories={categories ?? []}
           submitLabel={
             <>
-              <FiPlus /> Add
+              <FiPlus /> {t("addForm.submit")}
             </>
           }
           busy={createBill.isPending}
@@ -672,11 +668,11 @@ export function BillsPage() {
       {pending.length > 0 && (
         <div className="card">
           <button className="disclosure" onClick={() => setPendingOpen((o) => !o)}>
-            {pendingOpen ? <FiChevronDown /> : <FiChevronRight />} Pending confirmation ({pending.length})
+            {pendingOpen ? <FiChevronDown /> : <FiChevronRight />} {t("pending.toggle", { count: pending.length })}
           </button>
           {pendingOpen && (
             <div style={{ marginTop: 12 }}>
-              <p className="muted">Auto-detected recurring patterns — confirm or dismiss each one.</p>
+              <p className="muted">{t("pending.hint")}</p>
               <BillTable
                 bills={pending}
                 pending

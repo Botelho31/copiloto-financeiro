@@ -1,0 +1,90 @@
+{
+  "title": "Planned Payments",
+  "subtitle": "Confirmed recurring income and bills — income feeds the Projections page's baseline.",
+  "tabs": {
+    "all": "All ({{count}})",
+    "income": "Income ({{count}})",
+    "bills": "Bills ({{count}})"
+  },
+  "filters": {
+    "search": "Search",
+    "searchPlaceholder": "Search by name or category…",
+    "cadence": "Cadence",
+    "cadenceOptions": {
+      "all": "All cadences",
+      "recurring": "Recurring",
+      "once": "One-off"
+    },
+    "time": "Time",
+    "timeOptions": {
+      "upcoming": "Upcoming",
+      "past": "Past / settled",
+      "all": "All"
+    },
+    "debtLink": "Debt link",
+    "debtLinkOptions": {
+      "all": "All",
+      "linked": "Debt-linked",
+      "standalone": "Standalone"
+    }
+  },
+  "empty": {
+    "noMatches": "No planned payments match your filters.",
+    "noneYet": "Nothing here yet — add one below."
+  },
+  "table": {
+    "name": "Name",
+    "category": "Category",
+    "amount": "Amount",
+    "cadence": "Cadence",
+    "nextDue": "Next due",
+    "cardBadge": "card",
+    "debtBadgeTitle": "Pays down the \"{{debtName}}\" debt — configured on the Debts page",
+    "confirm": "Confirm",
+    "dismiss": "Dismiss",
+    "edit": "Edit",
+    "remove": "Remove"
+  },
+  "cadences": {
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+    "yearly": "Yearly",
+    "once": "One-off"
+  },
+  "projected": {
+    "title": "Next months by category",
+    "subtitle": "Where the recurring items above land over the coming months, grouped by category — same engine as the Projections page.",
+    "loading": "Loading projection…",
+    "empty": "Nothing to project yet — confirm or add a recurring item above.",
+    "category": "Category",
+    "netRecurring": "Net recurring",
+    "uncategorized": "Uncategorized"
+  },
+  "form": {
+    "name": "Name",
+    "category": "Category",
+    "categoryPlaceholder": "None",
+    "amount": "Amount",
+    "cadence": "Cadence",
+    "nextDueDate": "Next due date",
+    "moreOptions": "More options",
+    "recurrenceStart": "Recurrence starts (optional)",
+    "recurrenceEnd": "Recurrence ends (optional)",
+    "cardExpense": "Charged to card",
+    "cardExpenseHint": "Charged to a credit card — excluded from the projection since it's already covered by the card spending goal/average",
+    "cancel": "Cancel"
+  },
+  "addForm": {
+    "title": "Add a bill or recurring income",
+    "subtitle": "Pick an income-kind category (e.g. \"Income\") to add recurring revenue instead of a bill.",
+    "submit": "Add"
+  },
+  "editForm": {
+    "submit": "Save"
+  },
+  "pending": {
+    "toggle": "Pending confirmation ({{count}})",
+    "hint": "Auto-detected recurring patterns — confirm or dismiss each one."
+  }
+}

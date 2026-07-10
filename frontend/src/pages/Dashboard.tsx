@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiX } from "react-icons/fi";
+import { useTranslation } from "react-i18next";
 import {
   Bar,
   BarChart,
@@ -138,11 +139,11 @@ function expectedCardCharges(month: ProjectedMonth | undefined): { committed: nu
 
 const ACCOUNT_GROUP_META: Record<
   string,
-  { label: string; icon: string; tone?: "positive" | "negative" }
+  { labelKey: string; icon: string; tone?: "positive" | "negative" }
 > = {
-  BANK: { label: "Cash on hand", icon: "🏦" },
-  CREDIT: { label: "Cards", icon: "💳", tone: "negative" },
-  INVESTMENT: { label: "Investments", icon: "📈", tone: "positive" },
+  BANK: { labelKey: "accountGroups.cashOnHand", icon: "🏦" },
+  CREDIT: { labelKey: "accountGroups.cards", icon: "💳", tone: "negative" },
+  INVESTMENT: { labelKey: "accountGroups.investments", icon: "📈", tone: "positive" },
 };
 
 function titleCase(value: string): string {
@@ -218,6 +219,8 @@ function CategoryPie(props: {
   onHoverChange: (v: { type: "CREDIT" | "DEBIT"; category: string | null } | null) => void;
   categoryColorByName: Map<string, string>;
 }) {
+  const { t } = useTranslation("dashboard");
+
   function toggle(name: string) {
     props.onSelect(
       props.type,
@@ -244,7 +247,7 @@ function CategoryPie(props: {
           justifyContent: "center",
         }}
       >
-        <p className="muted">No transactions in this period.</p>
+        <p className="muted">{t("chart.pieEmpty")}</p>
       </div>
     );
   }
@@ -332,6 +335,7 @@ function moneyTooltip(value: any): string {
 }
 
 export function DashboardPage() {
+  const { t, i18n } = useTranslation(["dashboard", "common"]);
   const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const [drilldown, setDrilldown] = useState<{ type: "CREDIT" | "DEBIT"; category: string } | null>(
     null
@@ -813,14 +817,14 @@ export function DashboardPage() {
   const planningFlowData = useMemo(() => {
     if (!planningData) return [];
     return [
-      { name: "Expected in", income: planningData.income },
+      { name: t("planning.flowLabels.expectedIn"), income: planningData.income },
       {
-        name: "Expected out",
+        name: t("planning.flowLabels.expectedOut"),
         committed: sumIncomeExpense(planningData.committedExpenseLines).expense,
         assumed: sumIncomeExpense(planningData.assumedExpenseLines).expense,
       },
     ];
-  }, [planningData]);
+  }, [planningData, t, i18n.language]);
 
   // Bill lines don't carry category info directly — cross-reference each
   // line's id against the bill list (same technique the Planned Payments page's
@@ -1072,13 +1076,13 @@ export function DashboardPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div className="toggle-group">
             <button type="button" className={dashboardMode === "review" ? "active" : undefined} onClick={switchToReview}>
-              Review
+              {t("modes.review")}
             </button>
             <button type="button" className={dashboardMode === "trends" ? "active" : undefined} onClick={switchToTrends}>
-              Trends
+              {t("modes.trends")}
             </button>
             <button type="button" className={dashboardMode === "planning" ? "active" : undefined} onClick={switchToPlanning}>
-              Plan
+              {t("modes.plan")}
             </button>
           </div>
           {dashboardMode === "trends" ? (
@@ -1094,9 +1098,9 @@ export function DashboardPage() {
         </div>
         {tags && tags.length > 0 && (
           <label style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            Filter by tag
+            {t("filterByTag")}
             <select value={tagId ?? ""} onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : undefined)}>
-              <option value="">All transactions</option>
+              <option value="">{t("allTransactions")}</option>
               {tags.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -1109,7 +1113,9 @@ export function DashboardPage() {
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         {accountGroups.map(([type, group]) => {
-          const meta = ACCOUNT_GROUP_META[type] ?? { label: titleCase(type), icon: "💰" };
+          const meta = ACCOUNT_GROUP_META[type];
+          const label = meta ? t(meta.labelKey) : titleCase(type);
+          const icon = meta?.icon ?? "💰";
           // The full card balance includes every already-committed future
           // installment (e.g. an Airbnb stay split 6x), not just what's
           // actually due next — break that out so "total owed" and "due next
@@ -1127,16 +1133,19 @@ export function DashboardPage() {
               const futureInstallments = group.balance - dueNext;
               caption =
                 futureInstallments > 0.01
-                  ? `${formatMoney(dueNext)} due next month · ${formatMoney(futureInstallments)} in future installments`
-                  : `${formatMoney(dueNext)} due next month`;
+                  ? t("accountGroups.dueNextMonthWithFuture", {
+                      dueNext: formatMoney(dueNext),
+                      future: formatMoney(futureInstallments),
+                    })
+                  : t("accountGroups.dueNextMonth", { dueNext: formatMoney(dueNext) });
             }
           }
           return (
             <SummaryCard
               key={type}
-              label={`${meta.icon} ${meta.label}`}
+              label={`${icon} ${label}`}
               value={formatMoney(group.balance, group.currency)}
-              tone={meta.tone}
+              tone={meta?.tone}
               caption={caption}
             />
           );
@@ -1144,35 +1153,31 @@ export function DashboardPage() {
         {dashboardMode === "planning" && planningData ? (
           <>
             <SummaryCard
-              label="Expected in"
+              label={t("summary.expectedIn")}
               value={formatMoney(planningData.income)}
               tone="positive"
-              caption="Confirmed income bills — not real transactions yet"
+              caption={t("summary.expectedInCaption")}
             />
             <SummaryCard
-              label="Expected out"
+              label={t("summary.expectedOut")}
               value={formatMoney(planningData.expense)}
               tone="negative"
-              caption="Committed + assumed expenses — not real transactions yet"
+              caption={t("summary.expectedOutCaption")}
             />
           </>
         ) : (
           <>
-            <SummaryCard label="Money in" value={formatMoney(totalIn)} tone="positive" />
-            <SummaryCard label="Money out" value={formatMoney(totalOut)} tone="negative" />
+            <SummaryCard label={t("summary.moneyIn")} value={formatMoney(totalIn)} tone="positive" />
+            <SummaryCard label={t("summary.moneyOut")} value={formatMoney(totalOut)} tone="negative" />
           </>
         )}
       </div>
 
       {reviewVerdict && (
         <div className="card">
-          <h2>How {period.label} went</h2>
+          <h2>{t("review.heading", { period: period.label })}</h2>
           {reviewDaysLeft != null && (
-            <p className="muted">
-              {reviewDaysLeft} day{reviewDaysLeft === 1 ? "" : "s"} still to go — the verdicts below
-              hold this month-in-progress against full past months, so "behind" can just mean "not
-              finished yet."
-            </p>
+            <p className="muted">{t("review.daysLeft", { count: reviewDaysLeft })}</p>
           )}
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 24 }}>
             <div
@@ -1180,17 +1185,21 @@ export function DashboardPage() {
                 reviewVerdict.netThisMonth >= reviewVerdict.netTrailingAvg ? "good" : "bad"
               }`}
             >
-              <div className="label">Net this month vs your usual</div>
+              <div className="label">{t("review.netVsUsual")}</div>
               <div className="value">
                 {reviewVerdict.netThisMonth >= reviewVerdict.netTrailingAvg ? "▲" : "▼"}{" "}
                 {formatMoney(Math.abs(reviewVerdict.netThisMonth - reviewVerdict.netTrailingAvg))}
               </div>
               <div className="caption">
-                {formatMoney(reviewVerdict.netThisMonth)} net vs your {formatMoney(reviewVerdict.netTrailingAvg)}{" "}
-                {REVIEW_LOOKBACK_MONTHS}-month average —{" "}
-                {reviewVerdict.netThisMonth >= reviewVerdict.netTrailingAvg
-                  ? "ahead of your usual pace."
-                  : "behind your usual pace."}
+                {t("review.netVsUsualCaption", {
+                  net: formatMoney(reviewVerdict.netThisMonth),
+                  avg: formatMoney(reviewVerdict.netTrailingAvg),
+                  months: REVIEW_LOOKBACK_MONTHS,
+                  verdict:
+                    reviewVerdict.netThisMonth >= reviewVerdict.netTrailingAvg
+                      ? t("review.aheadOfUsualPace")
+                      : t("review.behindUsualPace"),
+                })}
               </div>
             </div>
             {reviewVerdict.cardGoal != null && (
@@ -1200,17 +1209,24 @@ export function DashboardPage() {
                 }`}
               >
                 <div className="label">
-                  Card spend vs your {reviewVerdict.cardGoalIsExplicit ? "goal" : "usual"}
+                  {reviewVerdict.cardGoalIsExplicit ? t("review.cardSpendVsGoal") : t("review.cardSpendVsUsual")}
                 </div>
                 <div className="value">
-                  {reviewVerdict.cardSpendThisMonth <= reviewVerdict.cardGoal ? "Under by " : "Over by "}
-                  {formatMoney(Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth))}
+                  {reviewVerdict.cardSpendThisMonth <= reviewVerdict.cardGoal
+                    ? t("review.underByAmount", {
+                        amount: formatMoney(Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth)),
+                      })
+                    : t("review.overByAmount", {
+                        amount: formatMoney(Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth)),
+                      })}
                 </div>
                 <div className="caption">
-                  {formatMoney(reviewVerdict.cardSpendThisMonth)} charged vs{" "}
-                  {reviewVerdict.cardGoalIsExplicit
-                    ? `your ${formatMoney(reviewVerdict.cardGoal)} goal`
-                    : `your ${formatMoney(reviewVerdict.cardGoal)} recent average (no goal set)`}
+                  {t("review.cardSpendCaption", {
+                    spent: formatMoney(reviewVerdict.cardSpendThisMonth),
+                    goalPhrase: reviewVerdict.cardGoalIsExplicit
+                      ? t("review.yourGoal", { amount: formatMoney(reviewVerdict.cardGoal) })
+                      : t("review.yourUsualNoGoal", { amount: formatMoney(reviewVerdict.cardGoal) }),
+                  })}
                 </div>
               </div>
             )}
@@ -1220,14 +1236,14 @@ export function DashboardPage() {
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 24, marginTop: 20 }}
           >
             <div>
-              <h3>Where it leaked</h3>
+              <h3>{t("review.whereItLeaked")}</h3>
               {categoryAnomalies.length > 0 ? (
                 <>
                   <p className="muted">
-                    Categories running well above their own {REVIEW_LOOKBACK_MONTHS}-month normal — not
-                    the biggest slice, the one that spiked. Combined, about{" "}
-                    {formatMoney(anomalyOverspend)} more than your usual pace. Click one to see the
-                    transactions behind it.
+                    {t("review.anomaliesIntro", {
+                      months: REVIEW_LOOKBACK_MONTHS,
+                      amount: formatMoney(anomalyOverspend),
+                    })}
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {categoryAnomalies.map((cat) => {
@@ -1261,12 +1277,17 @@ export function DashboardPage() {
                             />
                             <span style={{ color: "var(--paper)", fontWeight: 600 }}>{cat.name}</span>
                             <span className="muted" style={{ fontWeight: 400 }}>
-                              {formatMoney(cat.value)} vs {formatMoney(cat.trailingAvg)}/mo usual
+                              {t("review.vsUsualPerMonth", {
+                                value: formatMoney(cat.value),
+                                avg: formatMoney(cat.trailingAvg),
+                              })}
                             </span>
                           </span>
                           <span className="money" style={{ color: "var(--danger)", whiteSpace: "nowrap" }}>
-                            +{formatMoney(cat.value - cat.trailingAvg)} ({Math.round(cat.pctAbove * 100)}%
-                            above)
+                            {t("review.aboveUsual", {
+                              diff: formatMoney(cat.value - cat.trailingAvg),
+                              pct: Math.round(cat.pctAbove * 100),
+                            })}
                           </span>
                         </button>
                       );
@@ -1275,25 +1296,26 @@ export function DashboardPage() {
                 </>
               ) : (
                 <p className="muted">
-                  It didn't — no expense category ran meaningfully above its own{" "}
-                  {REVIEW_LOOKBACK_MONTHS}-month normal. Spending kept its usual shape.
+                  {t("review.noAnomalies", { months: REVIEW_LOOKBACK_MONTHS })}
                 </p>
               )}
             </div>
             {largestExpenses && largestExpenses.top.length > 0 && (
               <div>
-                <h3>Biggest single hits</h3>
+                <h3>{t("review.biggestHits")}</h3>
                 <p className="muted">
-                  The {largestExpenses.top.length} largest individual expenses —{" "}
-                  {Math.round(largestExpenses.share * 100)}% of everything that went out this month.
+                  {t("review.biggestHitsIntro", {
+                    count: largestExpenses.top.length,
+                    pct: Math.round(largestExpenses.share * 100),
+                  })}
                 </p>
                 <table>
                   <thead>
                     <tr>
-                      <th>Day</th>
-                      <th>Description</th>
-                      <th>Category</th>
-                      <th>Amount</th>
+                      <th>{t("table.day")}</th>
+                      <th>{t("common:table.description")}</th>
+                      <th>{t("common:table.category")}</th>
+                      <th>{t("common:table.amount")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1332,25 +1354,22 @@ export function DashboardPage() {
 
       {planningData && (
         <div className="card">
-          <h2>Planning: {period.label}</h2>
-          <p className="muted">
-            This month hasn't happened yet — real transactions above are just whatever's already
-            pre-scheduled (e.g. a known future installment). Everything below is expected, not real,
-            split by how sure we can be: committed (recurring bills, debts' own schedule) vs assumed
-            (your card-spend goal/average, and any known future card charge with no history yet).
-          </p>
+          <h2>{t("planning.heading", { period: period.label })}</h2>
+          <p className="muted">{t("planning.intro")}</p>
           <div
             className={`summary-card ${planningData.net < 0 ? "bad" : "good"}`}
             style={{ marginBottom: 16 }}
           >
-            <div className="label">Projected net</div>
+            <div className="label">{t("planning.projectedNet")}</div>
             <div className="value">
               {planningData.net >= 0 ? "+" : ""}
               {formatMoney(planningData.net)}
             </div>
             <div className="caption">
-              {formatMoney(planningData.income)} expected in − {formatMoney(planningData.expense)} expected
-              out
+              {t("planning.projectedNetCaption", {
+                income: formatMoney(planningData.income),
+                expense: formatMoney(planningData.expense),
+              })}
             </div>
           </div>
           {planningData.cardGoal > 0 && (
@@ -1358,20 +1377,19 @@ export function DashboardPage() {
               className={`summary-card${planningData.cardRoomLeft < 0 ? " bad" : ""}`}
               style={{ marginBottom: 16 }}
             >
-              <div className="label">Card room left after known charges</div>
+              <div className="label">{t("planning.cardRoomLeft")}</div>
               <div className="value">{formatMoney(planningData.cardRoomLeft)}</div>
               <div className="caption">
-                {formatMoney(planningData.cardGoal)} goal − {formatMoney(planningData.knownCardCharges)} already
-                committed (e.g. planned trips)
+                {t("planning.cardRoomLeftCaption", {
+                  goal: formatMoney(planningData.cardGoal),
+                  known: formatMoney(planningData.knownCardCharges),
+                })}
               </div>
             </div>
           )}
           <div style={{ marginBottom: 16 }}>
-            <h3>In vs out at a glance</h3>
-            <p className="muted">
-              The three tables below, as two bars — does expected income cover what's going out, and
-              how much of the outgoing is still assumption rather than commitment.
-            </p>
+            <h3>{t("planning.inOutGlance")}</h3>
+            <p className="muted">{t("planning.inOutGlanceIntro")}</p>
             <div className="chart-container" style={{ height: 150 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={planningFlowData} layout="vertical" margin={{ right: 24 }}>
@@ -1381,21 +1399,21 @@ export function DashboardPage() {
                   <Legend />
                   <Bar
                     dataKey="income"
-                    name="Expected in"
+                    name={t("planning.flowLabels.expectedIn")}
                     stackId="flow"
                     fill="var(--accent)"
                     fillOpacity={0.4}
                   />
                   <Bar
                     dataKey="committed"
-                    name="Committed out"
+                    name={t("planning.flowLabels.committedOut")}
                     stackId="flow"
                     fill="var(--danger)"
                     fillOpacity={0.6}
                   />
                   <Bar
                     dataKey="assumed"
-                    name="Assumed out"
+                    name={t("planning.flowLabels.assumedOut")}
                     stackId="flow"
                     fill="var(--danger)"
                     fillOpacity={0.25}
@@ -1406,18 +1424,15 @@ export function DashboardPage() {
           </div>
           {planningCategoryBreakdown.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <h3>Expected spending by category</h3>
-              <p className="muted">
-                Committed and assumed expenses rolled up by category, using each bill's own category
-                assignment.
-              </p>
+              <h3>{t("planning.expectedByCategory")}</h3>
+              <p className="muted">{t("planning.expectedByCategoryIntro")}</p>
               <div className="chart-container" style={{ height: Math.max(120, planningCategoryBreakdown.length * 32) }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={planningCategoryBreakdown} layout="vertical" margin={{ right: 24 }}>
                     <XAxis type="number" stroke="var(--text-muted)" />
                     <YAxis type="category" dataKey="name" stroke="var(--text-muted)" width={130} />
                     <Tooltip formatter={moneyTooltip} />
-                    <Bar dataKey="value" name="Expected">
+                    <Bar dataKey="value" name={t("planning.expectedBarName")}>
                       {planningCategoryBreakdown.map((entry) => (
                         <Cell
                           key={entry.name}
@@ -1432,15 +1447,15 @@ export function DashboardPage() {
           )}
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: 24 }}>
             <div>
-              <h3>Expected income</h3>
+              <h3>{t("planning.expectedIncome")}</h3>
               {planningData.incomeLines.length === 0 ? (
-                <p className="muted">None.</p>
+                <p className="muted">{t("planning.none")}</p>
               ) : (
                 <table>
                   <thead>
                     <tr>
-                      <th>Source</th>
-                      <th>Amount</th>
+                      <th>{t("table.source")}</th>
+                      <th>{t("common:table.amount")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1457,17 +1472,17 @@ export function DashboardPage() {
               )}
             </div>
             <div>
-              <h3 title="Planned payments and debts' own known repayment schedule — essentially certain">
-                Committed expenses
+              <h3 title={t("planning.committedExpensesTooltip")}>
+                {t("planning.committedExpenses")}
               </h3>
               {planningData.committedExpenseLines.length === 0 ? (
-                <p className="muted">None.</p>
+                <p className="muted">{t("planning.none")}</p>
               ) : (
                 <table>
                   <thead>
                     <tr>
-                      <th>Bill</th>
-                      <th>Amount</th>
+                      <th>{t("table.bill")}</th>
+                      <th>{t("common:table.amount")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1482,17 +1497,17 @@ export function DashboardPage() {
               )}
             </div>
             <div>
-              <h3 title="Your card-spend goal/average, plus any known future card charge with no transaction history yet — an estimate, not a fact">
-                Assumed expenses
+              <h3 title={t("planning.assumedExpensesTooltip")}>
+                {t("planning.assumedExpenses")}
               </h3>
               {planningData.assumedExpenseLines.length === 0 ? (
-                <p className="muted">None.</p>
+                <p className="muted">{t("planning.none")}</p>
               ) : (
                 <table>
                   <thead>
                     <tr>
-                      <th>Bill</th>
-                      <th>Amount</th>
+                      <th>{t("table.bill")}</th>
+                      <th>{t("common:table.amount")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1514,13 +1529,8 @@ export function DashboardPage() {
 
       {dashboardMode === "planning" && planningOutlookData.length > 1 && (
         <div className="card">
-          <h2>Projected net, months ahead</h2>
-          <p className="muted">
-            The same expected in − expected out, for every projected month — so {period.label} reads
-            in context ("is this month unusually tight, or is that just what's coming") instead of
-            floating alone. The outlined bar is the month you're planning; click any other to jump to
-            it.
-          </p>
+          <h2>{t("planning.outlookTitle")}</h2>
+          <p className="muted">{t("planning.outlookIntro", { period: period.label })}</p>
           <div className="chart-container" style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={planningOutlookData}>
@@ -1528,7 +1538,7 @@ export function DashboardPage() {
                 <YAxis stroke="var(--text-muted)" />
                 <Tooltip formatter={moneyTooltip} />
                 <ReferenceLine y={0} stroke="var(--rule)" />
-                <Bar dataKey="net" name="Projected net" cursor="pointer" onClick={handleBarClick}>
+                <Bar dataKey="net" name={t("planning.projectedNet")} cursor="pointer" onClick={handleBarClick}>
                   {planningOutlookData.map((row) => (
                     <Cell
                       key={row.label}
@@ -1547,16 +1557,8 @@ export function DashboardPage() {
 
       {chartData.length > 1 && (
         <div className="card ledger-feature">
-          <h2>Money in vs out per month</h2>
-          <p className="muted">
-            Excludes transfers between your own accounts and money moved to/from investments — that's
-            still your money, not spend or income. For future months there's no real cash flow yet, so
-            the faded segments show what's expected instead, in two confidence tiers — the darker
-            "committed" tier is real recurring bills and debts' own schedule; the lighter "assumed"
-            tier is your card-spend goal/average standing in for spend that hasn't happened. The gold
-            line is your 3-month rolling net average — the actual direction, without one unusually
-            expensive or light month reading as a trend. Click a bar to jump to that month.
-          </p>
+          <h2>{t("chart.moneyInOutTitle")}</h2>
+          <p className="muted">{t("chart.moneyInOutIntro")}</p>
           <div className="chart-container" style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
@@ -1566,7 +1568,7 @@ export function DashboardPage() {
                 <Legend />
                 <Bar
                   dataKey="in"
-                  name="In"
+                  name={t("chart.legend.in")}
                   stackId="in"
                   fill="var(--accent)"
                   cursor="pointer"
@@ -1574,7 +1576,7 @@ export function DashboardPage() {
                 />
                 <Bar
                   dataKey="expectedIn"
-                  name="Expected in"
+                  name={t("chart.legend.expectedIn")}
                   stackId="in"
                   fill="var(--accent)"
                   fillOpacity={0.4}
@@ -1583,7 +1585,7 @@ export function DashboardPage() {
                 />
                 <Bar
                   dataKey="out"
-                  name="Out"
+                  name={t("chart.legend.out")}
                   stackId="out"
                   fill="var(--danger)"
                   cursor="pointer"
@@ -1591,7 +1593,7 @@ export function DashboardPage() {
                 />
                 <Bar
                   dataKey="expectedOutCommitted"
-                  name="Expected out (committed)"
+                  name={t("chart.legend.expectedOutCommitted")}
                   stackId="out"
                   fill="var(--danger)"
                   fillOpacity={0.6}
@@ -1600,7 +1602,7 @@ export function DashboardPage() {
                 />
                 <Bar
                   dataKey="expectedOutAssumed"
-                  name="Expected out (assumed)"
+                  name={t("chart.legend.expectedOutAssumed")}
                   stackId="out"
                   fill="var(--danger)"
                   fillOpacity={0.25}
@@ -1610,7 +1612,7 @@ export function DashboardPage() {
                 <Line
                   type="monotone"
                   dataKey="netRollingAvg"
-                  name="Net (3mo avg)"
+                  name={t("chart.legend.netRollingAvg")}
                   stroke="var(--gold)"
                   strokeWidth={2}
                   dot={false}
@@ -1624,15 +1626,11 @@ export function DashboardPage() {
       {chartData.length > 1 && (
         <div className="card">
           <button className="disclosure" onClick={() => setBalanceOverTimeOpen((o) => !o)}>
-            {balanceOverTimeOpen ? <FiChevronDown /> : <FiChevronRight />} Balance over time
+            {balanceOverTimeOpen ? <FiChevronDown /> : <FiChevronRight />} {t("chart.balanceOverTime")}
           </button>
           {balanceOverTimeOpen && (
             <div style={{ marginTop: 12 }}>
-              <p className="muted">
-                Cash on hand plus current investment holdings (past months are a slight underestimate
-                for investments — we only get today's value from Pluggy, not a historical one, so
-                accrued yield isn't reflected). Click a point to jump to that month.
-              </p>
+              <p className="muted">{t("chart.balanceOverTimeIntro")}</p>
               <div className="chart-container" style={{ height: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
@@ -1642,7 +1640,7 @@ export function DashboardPage() {
                     <Line
                       type="monotone"
                       dataKey="balance"
-                      name="Balance"
+                      name={t("chart.balanceLineLabel")}
                       stroke="var(--gold)"
                       dot={(props: any) => (
                         <circle
@@ -1666,12 +1664,9 @@ export function DashboardPage() {
 
       {dashboardMode === "trends" && topCategoriesOverTime.topNames.length > 0 && (
         <div className="card">
-          <h2>Top categories over time</h2>
+          <h2>{t("chart.topCategoriesTitle")}</h2>
           <p className="muted">
-            A pie can't show whether a category is creeping up — this can. Your {topCategoriesOverTime.topNames.length}{" "}
-            biggest expense categories this period, each as its own line. Future months use categorized
-            recurring bills (real transactions don't exist yet), so a line doesn't just flatline to zero
-            once it crosses into the future. Click a point to jump to that month.
+            {t("chart.topCategoriesIntro", { count: topCategoriesOverTime.topNames.length })}
           </p>
           <div className="chart-container" style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -1732,7 +1727,9 @@ export function DashboardPage() {
             }}
           >
             <h2 style={{ margin: 0 }}>
-              {cardSpendChartData.length > 1 ? "Credit card spending per month" : "Credit card spending this month"}
+              {cardSpendChartData.length > 1
+                ? t("chart.cardSpendTitlePerMonth")
+                : t("chart.cardSpendTitleThisMonth")}
             </h2>
             <div className="toggle-group">
               <button
@@ -1740,32 +1737,22 @@ export function DashboardPage() {
                 className={cardChartGrouping === "card" ? "active" : undefined}
                 onClick={() => setCardChartGrouping("card")}
               >
-                By card
+                {t("chart.byCard")}
               </button>
               <button
                 type="button"
                 className={cardChartGrouping === "category" ? "active" : undefined}
                 onClick={() => setCardChartGrouping("category")}
               >
-                By category
+                {t("chart.byCategory")}
               </button>
             </div>
           </div>
           <p className="muted">
             {cardSpendChartData.length > 1
-              ? "What you charged on each card each month — separate from bank cash flow above, so a card purchase and the bill payment that later settles it aren't counted twice. Click a bar to jump to that month."
-              : "What you charged on each card this month — separate from bank cash flow above, so a card purchase and the bill payment that later settles it aren't counted twice."}
-            {cardChartGrouping === "card" ? (
-              <>
-                {" "}Real pre-scheduled amounts (e.g. an installment already dated) are solid. On top,
-                two fainter tiers: "committed" is a recurring bill with real history behind it,
-                "assumed" is a known future charge with none yet (e.g. a planned trip) — or, for the
-                current month, however much of your card-spend goal hasn't posted yet, so a month
-                still in progress doesn't read as a cliff-drop next to a finished one.
-              </>
-            ) : (
-              " Stacked by category instead of by card — where the money actually went, month by month."
-            )}
+              ? t("chart.cardSpendIntroPerMonth")
+              : t("chart.cardSpendIntroThisMonth")}
+            {cardChartGrouping === "card" ? t("chart.cardSpendByCardExtra") : t("chart.cardSpendByCategoryExtra")}
           </p>
           <div className="chart-container" style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -1788,7 +1775,7 @@ export function DashboardPage() {
                   ))}
                   <Bar
                     dataKey="expectedBillsCommitted"
-                    name="Expected (committed)"
+                    name={t("chart.expectedCommitted")}
                     stackId="cards"
                     fill="var(--text-muted)"
                     fillOpacity={0.6}
@@ -1797,7 +1784,7 @@ export function DashboardPage() {
                   />
                   <Bar
                     dataKey="expectedBillsAssumed"
-                    name="Expected (assumed)"
+                    name={t("chart.expectedAssumed")}
                     stackId="cards"
                     fill="var(--text-muted)"
                     fillOpacity={0.25}
@@ -1810,7 +1797,7 @@ export function DashboardPage() {
                       stroke="var(--text-muted)"
                       strokeDasharray="4 4"
                       label={{
-                        value: `Goal (${formatMoney(settings.cardSpendGoal)})`,
+                        value: t("chart.goalLabel", { amount: formatMoney(settings.cardSpendGoal) }),
                         position: "insideTopLeft",
                         fill: "var(--text-muted)",
                         fontSize: 11,
@@ -1853,25 +1840,23 @@ export function DashboardPage() {
               gap: 12,
             }}
           >
-            <h2 style={{ margin: 0 }}>Money in / out by category</h2>
+            <h2 style={{ margin: 0 }}>{t("chart.inOutByCategoryTitle")}</h2>
             <label style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
               <input
                 type="checkbox"
                 checked={includeCardSpend}
                 onChange={(e) => setIncludeCardSpend(e.target.checked)}
               />
-              Include credit card activity
+              {t("chart.includeCardActivity")}
             </label>
           </div>
           <p className="muted">
-            {includeCardSpend
-              ? "Card purchases count individually and the bill payment that settles them is left out, so nothing is double-counted — which is also why totals here can run higher than the bank-only Money in / out figures above."
-              : "Bank transactions only — credit card activity is excluded."}{" "}
-            Click a slice or legend entry to see the transactions behind it.
+            {includeCardSpend ? t("chart.inOutIncludedNote") : t("chart.inOutExcludedNote")}{" "}
+            {t("chart.clickSliceHint")}
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
             <div style={{ paddingRight: 24 }}>
-              <h3 style={{ textAlign: "center", margin: 0 }}>Money in</h3>
+              <h3 style={{ textAlign: "center", margin: 0 }}>{t("summary.moneyIn")}</h3>
               <p
                 className="money"
                 style={{
@@ -1895,7 +1880,7 @@ export function DashboardPage() {
               />
             </div>
             <div style={{ paddingLeft: 24, borderLeft: "1px solid var(--rule)" }}>
-              <h3 style={{ textAlign: "center", margin: 0 }}>Money out</h3>
+              <h3 style={{ textAlign: "center", margin: 0 }}>{t("summary.moneyOut")}</h3>
               <p
                 className="money"
                 style={{
@@ -1933,7 +1918,8 @@ export function DashboardPage() {
             }}
           >
             <h2>
-              {drilldown.type === "CREDIT" ? "Money in" : "Money out"} — {drilldown.category}
+              {drilldown.type === "CREDIT" ? t("summary.moneyIn") : t("summary.moneyOut")} —{" "}
+              {drilldown.category}
             </h2>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               <label style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
@@ -1942,15 +1928,15 @@ export function DashboardPage() {
                   checked={groupDrilldown}
                   onChange={(e) => setGroupDrilldown(e.target.checked)}
                 />
-                Group by description
+                {t("drilldown.groupByDescription")}
               </label>
-              <button className="secondary icon" onClick={() => setDrilldown(null)} title="Close">
+              <button className="secondary icon" onClick={() => setDrilldown(null)} title={t("drilldown.close")}>
                 <FiX />
               </button>
             </div>
           </div>
           {drilldownTx.length === 0 ? (
-            <p className="muted">No transactions in this category for the selected period.</p>
+            <p className="muted">{t("drilldown.empty")}</p>
           ) : groupDrilldown ? (
             <GroupedTransactionList transactions={drilldownTx} categories={categories ?? []} />
           ) : (

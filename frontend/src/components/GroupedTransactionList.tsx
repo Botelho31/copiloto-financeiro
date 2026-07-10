@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { Category, Transaction } from "shared";
 import { useSortableTable } from "../hooks/useSortableTable";
 import { useBulkCategorizeTransactions } from "../hooks/useTransactions";
@@ -20,6 +21,7 @@ interface Group {
 }
 
 export function GroupedTransactionList(props: { transactions: Transaction[]; categories: Category[] }) {
+  const { t } = useTranslation();
   const bulkCategorize = useBulkCategorizeTransactions();
   const bulkTag = useBulkTagTransactions();
 
@@ -63,18 +65,18 @@ export function GroupedTransactionList(props: { transactions: Transaction[]; cat
   );
 
   if (groups.length === 0) {
-    return <p className="muted">No transactions to group for the selected filters.</p>;
+    return <p className="muted">{t("noTransactionsForFilters")}</p>;
   }
 
   return (
     <table>
       <thead>
         <tr>
-          <SortableTh label="Description" sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Count" sortKey="count" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Total" sortKey="total" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Category" sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <th>Tag</th>
+          <SortableTh label={t("table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.count")} sortKey="count" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.total")} sortKey="total" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <th>{t("table.tag")}</th>
         </tr>
       </thead>
       <tbody>

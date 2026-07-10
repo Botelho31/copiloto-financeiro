@@ -1,0 +1,90 @@
+{
+  "title": "Pagamentos Planejados",
+  "subtitle": "Receitas e contas recorrentes confirmadas — a receita alimenta a base da página de Projeções.",
+  "tabs": {
+    "all": "Todos ({{count}})",
+    "income": "Receitas ({{count}})",
+    "bills": "Contas ({{count}})"
+  },
+  "filters": {
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar por nome ou categoria…",
+    "cadence": "Frequência",
+    "cadenceOptions": {
+      "all": "Todas as frequências",
+      "recurring": "Recorrente",
+      "once": "Única"
+    },
+    "time": "Período",
+    "timeOptions": {
+      "upcoming": "Futuras",
+      "past": "Passadas / quitadas",
+      "all": "Todas"
+    },
+    "debtLink": "Vínculo com dívida",
+    "debtLinkOptions": {
+      "all": "Todas",
+      "linked": "Vinculada a dívida",
+      "standalone": "Independente"
+    }
+  },
+  "empty": {
+    "noMatches": "Nenhum pagamento planejado corresponde aos filtros selecionados.",
+    "noneYet": "Nada por aqui ainda — adicione um abaixo."
+  },
+  "table": {
+    "name": "Nome",
+    "category": "Categoria",
+    "amount": "Valor",
+    "cadence": "Frequência",
+    "nextDue": "Próximo vencimento",
+    "cardBadge": "cartão",
+    "debtBadgeTitle": "Abate a dívida \"{{debtName}}\" — configurada na página de Dívidas",
+    "confirm": "Confirmar",
+    "dismiss": "Descartar",
+    "edit": "Editar",
+    "remove": "Remover"
+  },
+  "cadences": {
+    "weekly": "Semanal",
+    "monthly": "Mensal",
+    "quarterly": "Trimestral",
+    "yearly": "Anual",
+    "once": "Única"
+  },
+  "projected": {
+    "title": "Próximos meses por categoria",
+    "subtitle": "Para onde vão os itens recorrentes acima nos próximos meses, agrupados por categoria — mesmo mecanismo da página de Projeções.",
+    "loading": "Carregando projeção…",
+    "empty": "Nada para projetar ainda — confirme ou adicione um item recorrente acima.",
+    "category": "Categoria",
+    "netRecurring": "Recorrente líquido",
+    "uncategorized": "Sem categoria"
+  },
+  "form": {
+    "name": "Nome",
+    "category": "Categoria",
+    "categoryPlaceholder": "Nenhuma",
+    "amount": "Valor",
+    "cadence": "Frequência",
+    "nextDueDate": "Próximo vencimento",
+    "moreOptions": "Mais opções",
+    "recurrenceStart": "Início da recorrência (opcional)",
+    "recurrenceEnd": "Fim da recorrência (opcional)",
+    "cardExpense": "Cobrado no cartão",
+    "cardExpenseHint": "Cobrado em um cartão de crédito — excluído da projeção porque já está coberto pela meta/média de gastos no cartão",
+    "cancel": "Cancelar"
+  },
+  "addForm": {
+    "title": "Adicionar uma conta ou receita recorrente",
+    "subtitle": "Escolha uma categoria do tipo receita (ex.: \"Receita\") para adicionar uma receita recorrente em vez de uma conta.",
+    "submit": "Adicionar"
+  },
+  "editForm": {
+    "submit": "Salvar"
+  },
+  "pending": {
+    "toggle": "Pendentes de confirmação ({{count}})",
+    "hint": "Padrões recorrentes detectados automaticamente — confirme ou descarte cada um."
+  }
+}

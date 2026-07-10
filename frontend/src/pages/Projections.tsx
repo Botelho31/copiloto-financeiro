@@ -1,12 +1,13 @@
 import { Fragment, type FormEvent, useEffect, useState } from "react";
 import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import { useTranslation } from "react-i18next";
 import {
   Bar,
   BarChart,
   Cell,
-  Legend,
   Line,
   LineChart,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -43,21 +44,49 @@ const DEFAULT_INTEREST_RATE_ANNUAL_PERCENT = 14.25;
 
 const PROJECTION_GRANULARITIES: Granularity[] = ["month", "quarter", "semester", "year"];
 
-// Same palette the Dashboard uses for per-card bars — reused here so a
-// goal's amount line and its date marker read as one color, and multiple
-// goals don't all blur into the same gold line.
-const GOAL_COLORS = ["#b5542d", "#5f7fbf", "#8c6a9c", "#4a9c8f", "#c9a227"];
-
-const LINE_KIND_LABEL: Record<"bill" | "debt" | "interest" | "cardSpend", string> = {
-  bill: "Future bill",
-  debt: "Debt",
-  interest: "Interest",
-  cardSpend: "Card spend",
-};
+// One hue per KIND of thing across these charts: balance = --accent green,
+// interest = --gold (yield) — also used for the "debt paid off" star marker
+// on the balance chart, since it's an event on the SAME timeline as interest
+// accrual, not a fill competing with the shortfall reference line/dot (which
+// keeps --danger). DEBT_COLOR (--danger red, "red symbolizing debt" per
+// explicit direction) labels the tooltip's "X pays off" line. Goal targets
+// get a slate blue that isn't in the app's warm ledger palette elsewhere,
+// chosen specifically so it can't be confused with the green/red pair under
+// red-green colorblindness the way an earlier rose did. A goal's own
+// identity still comes from its name label on the marker, not the color
+// slot alone.
+const DEBT_COLOR = "var(--danger)";
+const GOAL_COLOR = "#5f7fbf";
 
 function moneyTooltip(value: any): string {
   return formatMoney(Number(value));
 }
+
+// A 5-point star's SVG path, centered at (cx, cy) — used both for the "debt
+// paid off" chip icon in the key strip and the marker on the balance line
+// itself at that month, so the same glyph means the same thing in both
+// places.
+function starPathD(cx: number, cy: number, outerR: number, innerR: number): string {
+  const points: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (Math.PI / 5) * i - Math.PI / 2;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    points.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+  }
+  return `M ${points.join(" L ")} Z`;
+}
+
+// Each plotted month: the projection's own numbers plus the fields the
+// balance chart derives — the baseline overlay value, and the month's
+// interest line (kind "interest" in the itemized bills) pulled out so the
+// chart can show accrual per month and running total.
+type BalancePoint = ProjectedMonth & {
+  baselineBalance: number | null;
+  interest: number;
+  interestToDate: number;
+};
 
 // A native SVG <title> on the balance dot itself doesn't reliably show —
 // recharts tracks hover via its own invisible overlay + activeDot, which sits
@@ -70,11 +99,15 @@ function moneyTooltip(value: any): string {
 function BalanceTooltip(props: {
   active?: boolean;
   label?: string;
-  payload?: { name?: string; value?: number; color?: string; dataKey?: string }[];
+  payload?: { name?: string; value?: number; color?: string; dataKey?: string; payload?: BalancePoint }[];
   debtEndMarkers: { id: number; name: string; projected_finish_date: string }[];
+  goals: Goal[];
 }) {
+  const { t } = useTranslation("projections");
   if (!props.active || !props.payload || props.payload.length === 0) return null;
   const finishing = props.debtEndMarkers.filter((d) => d.projected_finish_date.slice(0, 7) === props.label);
+  const goalsDue = props.goals.filter((g) => g.target_date.slice(0, 7) === props.label);
+  const point = props.payload[0]?.payload;
   return (
     <div className="recharts-default-tooltip" style={{ padding: "8px 12px", borderRadius: 4 }}>
       <p className="recharts-tooltip-label" style={{ margin: "0 0 4px" }}>
@@ -85,27 +118,74 @@ function BalanceTooltip(props: {
           {p.name}: {formatMoney(Number(p.value))}
         </p>
       ))}
-      {finishing.length > 0 && (
-        <p className="recharts-tooltip-item" style={{ margin: "4px 0 0", color: "var(--gold)", fontWeight: 600 }}>
-          {finishing.map((d) => `${d.name} pays off`).join(", ")}
+      {point != null && point.interest !== 0 && (
+        <p className="recharts-tooltip-item" style={{ margin: 0, color: "var(--gold)" }}>
+          {t("balanceChart.tooltip.interest", {
+            sign: point.interest > 0 ? "+" : "",
+            amount: formatMoney(point.interest),
+            accrued: formatMoney(point.interestToDate),
+          })}
         </p>
       )}
+      {finishing.length > 0 && (
+        <p className="recharts-tooltip-item" style={{ margin: "4px 0 0", color: DEBT_COLOR, fontWeight: 600 }}>
+          {finishing.map((d) => t("balanceChart.tooltip.debtPaysOff", { name: d.name })).join(", ")}
+        </p>
+      )}
+      {goalsDue.map((g) => (
+        <p
+          key={g.id}
+          className="recharts-tooltip-item"
+          style={{ margin: "4px 0 0", color: GOAL_COLOR, fontWeight: 600 }}
+        >
+          {t("balanceChart.tooltip.goal", {
+            name: g.name,
+            amount: formatMoney(g.target_amount),
+            status: g.on_track ? t("status.onTrack") : t("status.behind"),
+          })}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function InterestTooltip(props: {
+  active?: boolean;
+  label?: string;
+  payload?: { payload?: BalancePoint }[];
+}) {
+  const { t } = useTranslation("projections");
+  const point = props.payload?.[0]?.payload;
+  if (!props.active || point == null) return null;
+  return (
+    <div className="recharts-default-tooltip" style={{ padding: "8px 12px", borderRadius: 4 }}>
+      <p className="recharts-tooltip-label" style={{ margin: "0 0 4px" }}>
+        {props.label}
+      </p>
+      <p className="recharts-tooltip-item" style={{ margin: 0, color: "var(--gold)" }}>
+        {t("interestChart.tooltip.thisMonth", { amount: formatMoney(point.interest) })}
+      </p>
+      <p className="recharts-tooltip-item" style={{ margin: 0 }}>
+        {t("interestChart.tooltip.accrued", { amount: formatMoney(point.interestToDate) })}
+      </p>
     </div>
   );
 }
 
 function ScenarioBadge() {
+  const { t } = useTranslation("projections");
   return (
     <span
       className="badge"
       style={{ color: "var(--gold)", borderColor: "var(--gold)", fontFamily: "var(--font-sans)", fontWeight: 500 }}
     >
-      What-if scenario
+      {t("scenario.badge")}
     </span>
   );
 }
 
 function GoalStatusCell(props: { goal: Goal }) {
+  const { t } = useTranslation("projections");
   const g = props.goal;
   const margin = g.projected_monthly_savings - g.required_monthly_savings;
   const ratio =
@@ -114,7 +194,7 @@ function GoalStatusCell(props: { goal: Goal }) {
       : 1;
   return (
     <td>
-      <span className={g.on_track ? "gain" : "shortfall"}>{g.on_track ? "On track" : "Behind"}</span>
+      <span className={g.on_track ? "gain" : "shortfall"}>{g.on_track ? t("status.onTrack") : t("status.behind")}</span>
       <div style={{ width: 90, height: 4, background: "var(--rule)", borderRadius: 2, margin: "6px 0 4px" }}>
         <div
           style={{
@@ -126,13 +206,22 @@ function GoalStatusCell(props: { goal: Goal }) {
         />
       </div>
       <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-        {formatMoney(Math.abs(margin))}/mo {g.on_track ? "to spare" : "short"}
+        {g.on_track
+          ? t("goals.table.marginToSpare", { amount: formatMoney(Math.abs(margin)) })
+          : t("goals.table.marginShort", { amount: formatMoney(Math.abs(margin)) })}
       </span>
     </td>
   );
 }
 
 function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
+  const { t } = useTranslation("projections");
+  const lineKindLabel: Record<"bill" | "debt" | "interest" | "cardSpend", string> = {
+    bill: t("breakdown.kind.bill"),
+    debt: t("breakdown.kind.debt"),
+    interest: t("breakdown.kind.interest"),
+    cardSpend: t("breakdown.kind.cardSpend"),
+  };
   const [expanded, setExpanded] = useState<number | null>(null);
   const {
     sorted: sortedMonths,
@@ -172,9 +261,9 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
     <table>
       <thead>
         <tr>
-          <SortableTh label="Month" sortKey="label" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
-          <SortableTh label="Net" sortKey="net" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
-          <SortableTh label="Balance" sortKey="balance" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
+          <SortableTh label={t("breakdown.table.month")} sortKey="label" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
+          <SortableTh label={t("breakdown.table.net")} sortKey="net" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
+          <SortableTh label={t("breakdown.table.balance")} sortKey="balance" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
           <th />
         </tr>
       </thead>
@@ -190,7 +279,7 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
                   className="link-button"
                   onClick={() => setExpanded((e) => (e === m.monthIndex ? null : m.monthIndex))}
                 >
-                  {expanded === m.monthIndex ? <FiChevronDown /> : <FiChevronRight />} Lines
+                  {expanded === m.monthIndex ? <FiChevronDown /> : <FiChevronRight />} {t("breakdown.table.linesButton")}
                 </button>
               </td>
             </tr>
@@ -200,9 +289,9 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
                   <table>
                     <thead>
                       <tr>
-                        <SortableTh label="Line item" sortKey="name" activeKey={lineSortKey} direction={lineSortDirection} onSort={toggleLineSort} />
-                        <th>Kind</th>
-                        <SortableTh label="Amount" sortKey="amount" activeKey={lineSortKey} direction={lineSortDirection} onSort={toggleLineSort} />
+                        <SortableTh label={t("breakdown.detail.lineItem")} sortKey="name" activeKey={lineSortKey} direction={lineSortDirection} onSort={toggleLineSort} />
+                        <th>{t("breakdown.detail.kind")}</th>
+                        <SortableTh label={t("breakdown.detail.amount")} sortKey="amount" activeKey={lineSortKey} direction={lineSortDirection} onSort={toggleLineSort} />
                       </tr>
                     </thead>
                     <tbody>
@@ -210,14 +299,14 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
                         <tr key={line.id}>
                           <td>{line.name}</td>
                           <td className="muted" style={{ whiteSpace: "nowrap" }}>
-                            {LINE_KIND_LABEL[line.kind]}
+                            {lineKindLabel[line.kind]}
                             {line.kind === "cardSpend" && (
                               <span
                                 className="badge"
                                 style={{ marginLeft: 8 }}
-                                title="Estimated from your 3-month average / spending goal — not a committed charge"
+                                title={t("breakdown.detail.assumedTitle")}
                               >
-                                assumed
+                                {t("breakdown.detail.assumedBadge")}
                               </span>
                             )}
                           </td>
@@ -246,6 +335,7 @@ function monthsUntil(targetDate: string): number {
 }
 
 export function ProjectionsPage() {
+  const { t } = useTranslation("projections");
   const [period, setPeriod] = useState<Period>(() => periodFor("year"));
   // A goal's own date can fall well outside any fixed granularity step —
   // this overrides the granularity-derived horizon entirely rather than
@@ -319,10 +409,27 @@ export function ProjectionsPage() {
   const baselineEndBalance = baselineMonths[baselineMonths.length - 1]?.balance;
   const showBaselineOverlay =
     scenarioActive && whatIf.data != null && baselineMonths.length === months.length;
-  const balanceChartData = months.map((m, i) => ({
-    ...m,
-    baselineBalance: baselineMonths[i]?.balance ?? null,
-  }));
+  // Pull each month's interest line out of the itemized bills (kind
+  // "interest" — the compounding interest the projection already applied to
+  // the balance) so the chart can show accrual alongside the trajectory,
+  // per month and as a running total.
+  let interestRunningTotal = 0;
+  const balanceChartData: BalancePoint[] = months.map((m, i) => {
+    const interest = m.bills.filter((b) => b.kind === "interest").reduce((sum, b) => sum + b.amount, 0);
+    interestRunningTotal += interest;
+    return {
+      ...m,
+      baselineBalance: baselineMonths[i]?.balance ?? null,
+      interest,
+      interestToDate: interestRunningTotal,
+    };
+  });
+  const totalInterest = interestRunningTotal;
+  const balanceGrowth = endBalance - startingBalance;
+  // "How much of this climb is just interest?" — only meaningful when the
+  // balance actually grows and interest contributed something.
+  const interestShareOfGrowth =
+    balanceGrowth > 0 && totalInterest > 0 ? totalInterest / balanceGrowth : null;
 
   const [breakdownOpen, setBreakdownOpen] = useState(true);
 
@@ -331,10 +438,7 @@ export function ProjectionsPage() {
   const goalsOnTrack = (goals ?? []).filter((g) => g.on_track).length;
   // A debt's own projected finish date — the same server-computed date the
   // Debts page's own "Finish date" stat shows (see projected_finish_date,
-  // computeProjectedFinishDate in backend/src/routes/debts.ts). Marked on the
-  // balance chart below as a gold dot on the month it pays off (hover for
-  // which debt), not a vertical line — several debts finishing close together
-  // would otherwise stack their labels on top of each other. This is NOT
+  // computeProjectedFinishDate in backend/src/routes/debts.ts). This is NOT
   // target_payoff_date (a loan's plain contractual end, ignoring any
   // extra-amortization bills linked to it) — using that instead would show a
   // date years later than the debt will actually pay off.
@@ -482,64 +586,66 @@ export function ProjectionsPage() {
               <button
                 className={horizonOverride ? undefined : "secondary"}
                 onClick={spanUntilFurthestMarker}
-                title="Set the horizon to span until your furthest-out goal or debt end date"
+                title={t("horizon.spanButton.title")}
               >
-                Span until latest goal/debt
+                {t("horizon.spanButton.label")}
               </button>
             )}
           </div>
           {horizonOverride && (
             <span className="muted" style={{ fontSize: 13 }}>
-              Spanning {horizonMonths} months, until "{horizonOverride.name}"
+              {t("horizon.override", { months: horizonMonths, name: horizonOverride.name })}
             </span>
           )}
           {scenarioActive && (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <ScenarioBadge />
               <button className="secondary" onClick={resetWhatIf}>
-                Reset to baseline
+                {t("scenario.reset")}
               </button>
             </div>
           )}
         </div>
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
           <SummaryCard
-            label={`Balance in ${lastMonth?.label ?? "—"}`}
+            label={t("summary.balance.label", { month: lastMonth?.label ?? "—" })}
             value={formatMoney(endBalance)}
             tone={!lastMonth ? undefined : endBalance < 0 ? "bad" : endBalance >= startingBalance ? "good" : undefined}
             caption={
-              `${endBalance - startingBalance >= 0 ? "+" : ""}${formatMoney(endBalance - startingBalance)} vs today` +
+              t("summary.balance.caption", {
+                delta: `${endBalance - startingBalance >= 0 ? "+" : ""}${formatMoney(endBalance - startingBalance)}`,
+              }) +
               (scenarioActive && baselineEndBalance != null
-                ? ` · baseline ${formatMoney(baselineEndBalance)}`
+                ? ` · ${t("summary.balance.baselineSuffix", { amount: formatMoney(baselineEndBalance) })}`
                 : "")
             }
           />
           <SummaryCard
-            label="Avg net savings / month"
+            label={t("summary.avgNet.label")}
             value={formatMoney(avgNet)}
             tone={months.length === 0 ? undefined : avgNet >= 0 ? "good" : "bad"}
-            caption={`over the next ${months.length} month${months.length === 1 ? "" : "s"}`}
+            caption={t("summary.avgNet.caption", { count: months.length })}
           />
           <SummaryCard
-            label="First shortfall"
-            value={firstShortfall?.label ?? (months.length > 0 ? "None" : "—")}
+            label={t("summary.firstShortfall.label")}
+            value={firstShortfall?.label ?? (months.length > 0 ? t("summary.firstShortfall.none") : "—")}
             tone={months.length === 0 ? undefined : firstShortfall ? "bad" : "good"}
             caption={
               firstShortfall
-                ? "balance goes negative this month"
-                : "balance stays above zero for the whole horizon"
+                ? t("summary.firstShortfall.captionNegative")
+                : t("summary.firstShortfall.captionPositive")
             }
           />
           <SummaryCard
-            label="Goals on track"
-            value={goalCount === 0 ? "—" : `${goalsOnTrack} of ${goalCount}`}
+            label={t("summary.goalsOnTrack.label")}
+            value={goalCount === 0 ? "—" : t("summary.goalsOnTrack.value", { onTrack: goalsOnTrack, total: goalCount })}
             tone={goalCount === 0 ? undefined : goalsOnTrack === goalCount ? "good" : "bad"}
             caption={
               goalCount === 0
-                ? "no savings goals yet — add one below"
+                ? t("summary.goalsOnTrack.captionEmpty")
                 : goalsOnTrack === goalCount
-                  ? "projected savings cover every goal"
-                  : "details in the Goals card below"
+                  ? t("summary.goalsOnTrack.captionAllOnTrack")
+                  : t("summary.goalsOnTrack.captionSomeBehind")
             }
           />
         </div>
@@ -547,21 +653,89 @@ export function ProjectionsPage() {
 
       <div className="card">
         <h2 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          Projected balance
+          {t("balanceChart.title")}
           {scenarioActive && <ScenarioBadge />}
         </h2>
+        {/* Key strip: identity lives here in colored glyphs, text stays in
+            muted ink. Debt payoffs get one chip each (the chip IS the legend
+            entry), so "are we paying off our debts" is readable at rest —
+            including debts whose finish date falls beyond the plotted
+            horizon, which the chart itself can't show at all. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            rowGap: 6,
+            flexWrap: "wrap",
+            marginBottom: 10,
+            fontSize: 12,
+            color: "var(--text-muted)",
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <svg width="14" height="10" aria-hidden="true">
+              <line x1="0" y1="5" x2="14" y2="5" stroke="var(--accent)" strokeWidth="2" />
+            </svg>
+            {showBaselineOverlay ? t("balanceChart.legend.whatIfBalance") : t("balanceChart.legend.balance")}
+          </span>
+          {showBaselineOverlay && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <svg width="14" height="10" aria-hidden="true">
+                <line x1="0" y1="5" x2="14" y2="5" stroke="var(--text-muted)" strokeWidth="2" strokeDasharray="4 3" />
+              </svg>
+              {t("balanceChart.legend.baseline")}
+            </span>
+          )}
+          {(goals ?? []).some((g) => g.on_track) && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <svg width="12" height="12" aria-hidden="true">
+                <circle cx="6" cy="6" r="4.5" fill={GOAL_COLOR} />
+              </svg>
+              {t("balanceChart.legend.goalOnTrack")}
+            </span>
+          )}
+          {(goals ?? []).some((g) => !g.on_track) && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <svg width="12" height="12" aria-hidden="true">
+                <circle cx="6" cy="6" r="4" fill="none" stroke={GOAL_COLOR} strokeWidth="2" />
+              </svg>
+              {t("balanceChart.legend.goalBehind")}
+            </span>
+          )}
+          {hasShortfall && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <svg width="12" height="12" aria-hidden="true">
+                <circle cx="6" cy="6" r="4.5" fill="var(--danger)" />
+              </svg>
+              {t("balanceChart.legend.shortfall")}
+            </span>
+          )}
+          {debtEndMarkers.map((d) => {
+            const finishMonth = d.projected_finish_date.slice(0, 7);
+            const inView = months.some((m) => m.label === finishMonth);
+            return (
+              <span key={d.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <svg width="12" height="12" aria-hidden="true">
+                  <path d={starPathD(6, 6, 5, 2.2)} fill="var(--gold)" />
+                </svg>
+                {t("balanceChart.legend.debtPaidOff", { name: d.name, month: finishMonth })}
+                {inView ? "" : t("balanceChart.legend.beyondView")}
+              </span>
+            );
+          })}
+        </div>
         <div className="chart-container">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={balanceChartData}>
+            <LineChart data={balanceChartData} syncId="balance-projection">
               <XAxis dataKey="label" stroke="var(--text-muted)" />
-              <YAxis stroke="var(--text-muted)" />
-              <Tooltip content={<BalanceTooltip debtEndMarkers={debtEndMarkers} />} />
-              {showBaselineOverlay && <Legend />}
+              <YAxis stroke="var(--text-muted)" width={60} />
+              <Tooltip content={<BalanceTooltip debtEndMarkers={debtEndMarkers} goals={goals ?? []} />} />
               {showBaselineOverlay && (
                 <Line
                   type="monotone"
                   dataKey="baselineBalance"
-                  name="Baseline"
+                  name={t("balanceChart.legend.baseline")}
                   stroke="var(--text-muted)"
                   strokeDasharray="6 4"
                   dot={false}
@@ -570,117 +744,186 @@ export function ProjectionsPage() {
               <Line
                 type="monotone"
                 dataKey="balance"
-                name={showBaselineOverlay ? "What-if scenario" : "Balance"}
+                name={showBaselineOverlay ? t("balanceChart.whatIfLineLabel") : t("balanceChart.legend.balance")}
                 stroke="var(--accent)"
                 strokeWidth={2}
                 dot={(props: any) => {
-                  // A debt paying off this month gets its own gold dot instead
-                  // of a dotted vertical line — several debts finishing close
-                  // together used to stack their labels on top of each other.
-                  // Which debt(s) shows in BalanceTooltip above on hover, not
-                  // a native SVG title on the dot itself — recharts' own
-                  // hover-tracking overlay sits on top of a custom dot shape
-                  // and would swallow the pointer before a nested title ever
-                  // saw it.
-                  const finishing = debtEndMarkers.some(
+                  // A debt paying off this month gets a star on the balance
+                  // line itself, right where the trajectory actually sits —
+                  // not its own fill/curve. Debt principal (can be hundreds
+                  // of thousands) and a checking-account balance live on
+                  // wildly different scales; encoding a debt's own remaining
+                  // amount as height on this shared axis either swamps the
+                  // balance line or is invisible next to it. The marker only
+                  // needs to say *when*; *how much* lives in the tooltip.
+                  const paidOff = debtEndMarkers.some(
                     (d) => d.projected_finish_date.slice(0, 7) === props.payload.label
                   );
+                  if (paidOff) {
+                    return (
+                      <path
+                        key={props.payload.monthIndex}
+                        d={starPathD(props.cx, props.cy, 7, 3)}
+                        fill="var(--gold)"
+                        stroke="var(--ink-raised)"
+                        strokeWidth={1}
+                      />
+                    );
+                  }
                   return (
                     <circle
                       key={props.payload.monthIndex}
                       cx={props.cx}
                       cy={props.cy}
-                      r={finishing ? 5 : 4}
-                      fill={finishing ? "var(--gold)" : props.payload.shortfall ? "var(--danger)" : "var(--accent)"}
+                      r={props.payload.shortfall ? 4 : 3}
+                      fill={props.payload.shortfall ? "var(--danger)" : "var(--accent)"}
                     />
                   );
                 }}
               />
               {hasShortfall && <ReferenceLine y={0} stroke="var(--danger)" strokeOpacity={0.5} />}
-              {(goals ?? []).map((g, i) => {
-                const color = GOAL_COLORS[i % GOAL_COLORS.length];
+              {(goals ?? []).map((g) => {
                 // target_date is "YYYY-MM-DD"; month labels are "YYYY-MM" —
-                // only draw the date marker if this goal's month is actually
-                // in view (it can fall outside the current horizon).
-                const goalLabel = g.target_date.slice(0, 7);
-                const goalInView = months.some((m) => m.label === goalLabel);
-                const labelProps = {
-                  value: `${g.name} (${formatMoney(g.target_amount)})`,
-                  position: "insideTopLeft" as const,
-                  fill: color,
-                  fontSize: 11,
-                };
-                // An L-bracket (left edge → goal, bottom → goal) reads as
-                // "here's the goal" much more clearly than two lines that run
-                // the full width/height of the chart regardless of where the
-                // goal actually falls — once the goal itself is past, there's
-                // nothing left for the line to mark. Only possible when the
-                // goal's month is actually plotted; otherwise fall back to a
-                // full-width line, since there's no in-view x to bracket to.
+                // a goal only gets its target-point marker if its month is
+                // actually plotted (it can fall outside the current horizon).
+                const goalMonth = g.target_date.slice(0, 7);
+                const goalInView = months.some((m) => m.label === goalMonth);
+                const statusGlyph = g.on_track ? "✓" : "!";
+                // extendDomain matters: without it a target amount above the
+                // projected balance is silently clipped off the chart — and a
+                // goal you're NOT reaching is exactly the one you need to see.
                 if (goalInView && months[0]) {
                   return (
                     <Fragment key={g.id}>
+                      {/* Dashed guide from the left edge to the target month
+                          keeps the amount readable against the y-axis; the
+                          marker itself carries the goal: filled = on track,
+                          hollow = behind (status by fill + the label glyph,
+                          never by repainting the goal's identity hue). */}
                       <ReferenceLine
                         segment={[
                           { x: months[0].label, y: g.target_amount },
-                          { x: goalLabel, y: g.target_amount },
+                          { x: goalMonth, y: g.target_amount },
                         ]}
-                        stroke={color}
-                        strokeOpacity={0.65}
+                        stroke={GOAL_COLOR}
+                        strokeOpacity={0.45}
                         strokeDasharray="4 4"
-                        label={labelProps}
+                        ifOverflow="extendDomain"
                       />
-                      <ReferenceLine
-                        segment={[
-                          { x: goalLabel, y: 0 },
-                          { x: goalLabel, y: g.target_amount },
-                        ]}
-                        stroke={color}
-                        strokeOpacity={0.65}
-                        strokeDasharray="4 4"
+                      <ReferenceDot
+                        x={goalMonth}
+                        y={g.target_amount}
+                        ifOverflow="extendDomain"
+                        shape={(p: any) => (
+                          <circle
+                            cx={p.cx}
+                            cy={p.cy}
+                            r={5}
+                            fill={g.on_track ? GOAL_COLOR : "var(--ink-raised)"}
+                            stroke={GOAL_COLOR}
+                            strokeWidth={2}
+                          />
+                        )}
+                        label={{
+                          value: `${statusGlyph} ${g.name} · ${formatMoney(g.target_amount)}`,
+                          position: "top",
+                          fill: GOAL_COLOR,
+                          fontSize: 11,
+                        }}
                       />
                     </Fragment>
                   );
                 }
+                // Goal month beyond the plotted horizon: no in-view x to
+                // anchor a marker to, so a full-width line at the target
+                // amount, labeled with when it's due.
                 return (
                   <ReferenceLine
                     key={g.id}
                     y={g.target_amount}
-                    stroke={color}
-                    strokeOpacity={0.65}
+                    stroke={GOAL_COLOR}
+                    strokeOpacity={0.45}
                     strokeDasharray="4 4"
-                    label={labelProps}
+                    ifOverflow="extendDomain"
+                    label={{
+                      value: t("balanceChart.goalLabel.dueBy", {
+                        glyph: statusGlyph,
+                        name: g.name,
+                        amount: formatMoney(g.target_amount),
+                        month: goalMonth,
+                      }),
+                      position: "insideTopLeft" as const,
+                      fill: GOAL_COLOR,
+                      fontSize: 11,
+                    }}
                   />
                 );
               })}
             </LineChart>
           </ResponsiveContainer>
         </div>
+        {/* Interest gets its own small synchronized panel rather than a line
+            on the balance chart (monthly interest is ~1% of the balance, so
+            it would flatline at the bottom) or a second y-axis (never).
+            syncId ties hover to the chart above; the hidden x-axis borrows
+            the month labels sitting directly between the two panels. */}
+        {totalInterest !== 0 && (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 10,
+                flexWrap: "wrap",
+                margin: "14px 0 6px",
+              }}
+            >
+              <h3
+                style={{ margin: 0, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <svg width="10" height="10" aria-hidden="true">
+                  <rect width="10" height="10" rx="2" fill="var(--gold)" />
+                </svg>
+                {t("interestChart.title")}
+              </h3>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("interestChart.caption", { amount: formatMoney(totalInterest), count: months.length })}
+                {interestShareOfGrowth != null &&
+                  ` · ${t("interestChart.shareSuffix", { percent: Math.round(interestShareOfGrowth * 100) })}`}
+              </span>
+            </div>
+            <div style={{ height: 110 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={balanceChartData} syncId="balance-projection">
+                  <XAxis dataKey="label" hide />
+                  <YAxis stroke="var(--text-muted)" width={60} tick={{ fontSize: 11 }} />
+                  <Tooltip content={<InterestTooltip />} />
+                  <Bar dataKey="interest" name={t("interestChart.barLabel")} fill="var(--gold)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="card">
         <h2 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          Projected savings per month
+          {t("savingsChart.title")}
           {scenarioActive && <ScenarioBadge />}
         </h2>
-        <p className="muted">
-          Built from solid things only: confirmed bills (income + expense), each active debt's own
-          fixed installment schedule (skipped if its payment history is too irregular to call a real
-          cadence), and a 3-month average of actual credit card spend — no generic bank-transaction
-          averaging, so a one-off transfer can't smear itself across every future month.
-        </p>
+        <p className="muted">{t("savingsChart.description")}</p>
         <div
           className="grid"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 16 }}
         >
-          <SummaryCard label="Starting balance" value={formatMoney(result?.startingBalance ?? 0)} />
+          <SummaryCard label={t("savingsChart.summary.startingBalance")} value={formatMoney(result?.startingBalance ?? 0)} />
           <SummaryCard
-            label="Card spend baseline (3mo avg)"
+            label={t("savingsChart.summary.cardSpendBaseline")}
             value={formatMoney(result?.cardSpendActualAverage ?? 0)}
             tone="negative"
           />
           <div className="summary-card">
-            <div className="label">Monthly card spending goal</div>
+            <div className="label">{t("savingsChart.cardSpendGoal.label")}</div>
             <input
               type="number"
               step="0.01"
@@ -700,8 +943,8 @@ export function ProjectionsPage() {
             />
             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
               {cardSpendGoal === ""
-                ? "Using the 3-month average — type a number to set a standing goal (shown on the Dashboard too)"
-                : `Saved as your standing goal: ${formatMoney(Number(cardSpendGoal))}/mo`}
+                ? t("savingsChart.cardSpendGoal.usingAverage")
+                : t("savingsChart.cardSpendGoal.saved", { amount: formatMoney(Number(cardSpendGoal)) })}
             </div>
           </div>
         </div>
@@ -711,7 +954,7 @@ export function ProjectionsPage() {
               <XAxis dataKey="label" stroke="var(--text-muted)" />
               <YAxis stroke="var(--text-muted)" />
               <Tooltip formatter={moneyTooltip} />
-              <Bar dataKey="net" name="Net savings" fill="var(--accent)">
+              <Bar dataKey="net" name={t("savingsChart.netSavingsLabel")} fill="var(--accent)">
                 {months.map((m) => (
                   <Cell key={m.monthIndex} fill={m.net < 0 ? "var(--danger)" : "var(--accent)"} />
                 ))}
@@ -724,7 +967,7 @@ export function ProjectionsPage() {
           onClick={() => setBreakdownOpen((o) => !o)}
           style={{ marginTop: 16, fontSize: 16 }}
         >
-          {breakdownOpen ? <FiChevronDown /> : <FiChevronRight />} Monthly breakdown
+          {breakdownOpen ? <FiChevronDown /> : <FiChevronRight />} {t("savingsChart.breakdownToggle")}
         </button>
         {breakdownOpen && <MonthlyBreakdownTable months={months} />}
       </div>
@@ -740,20 +983,18 @@ export function ProjectionsPage() {
             marginBottom: 14,
           }}
         >
-          <h2 style={{ margin: 0 }}>What-if</h2>
+          <h2 style={{ margin: 0 }}>{t("whatIf.title")}</h2>
           {scenarioActive && (
             <button className="secondary" onClick={resetWhatIf}>
-              Reset to baseline
+              {t("scenario.reset")}
             </button>
           )}
         </div>
         <p className="muted" style={{ marginBottom: 16 }}>
-          Every change here recomputes the charts and headline numbers above, live — the gold badge
-          marks them as a hypothetical, with your real baseline kept as the dashed line for
-          comparison. Nothing here is saved; reset or switch the horizon to go back.
+          {t("whatIf.description")}
         </p>
         <label>
-          Discretionary spending adjustment: {discretionaryDeltaPercent}%
+          {t("whatIf.discretionary.label", { value: discretionaryDeltaPercent })}
           <input
             type="range"
             min={-50}
@@ -768,8 +1009,8 @@ export function ProjectionsPage() {
         </label>
 
         <label style={{ display: "block", marginTop: 12 }}>
-          Annual interest rate on idle cash: {interestRateAnnualPercent}%{" "}
-          <span className="muted">(defaults to Brazil's Selic rate — edit if it's moved)</span>
+          {t("whatIf.interestRate.label", { value: interestRateAnnualPercent })}{" "}
+          <span className="muted">{t("whatIf.interestRate.hint")}</span>
           <input
             type="number"
             step="0.01"
@@ -789,16 +1030,16 @@ export function ProjectionsPage() {
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 24, alignItems: "start", marginTop: 16 }}
         >
           <div>
-            <h3 style={{ marginTop: 0 }}>Income</h3>
+            <h3 style={{ marginTop: 0 }}>{t("whatIf.income.title")}</h3>
             <table>
               <thead>
                 <tr>
-                  <SortableTh label="Bill" sortKey="name" activeKey={incomeSortKey} direction={incomeSortDirection} onSort={toggleIncomeSort} />
-                  <SortableTh label="Expected" sortKey="expected" activeKey={incomeSortKey} direction={incomeSortDirection} onSort={toggleIncomeSort} />
-                  <th title="Charged to a credit card — excluded from the projection since it's already covered by the card spending goal/average">
-                    Card?
+                  <SortableTh label={t("whatIf.table.bill")} sortKey="name" activeKey={incomeSortKey} direction={incomeSortDirection} onSort={toggleIncomeSort} />
+                  <SortableTh label={t("whatIf.table.expected")} sortKey="expected" activeKey={incomeSortKey} direction={incomeSortDirection} onSort={toggleIncomeSort} />
+                  <th title={t("whatIf.table.cardColumnTitle")}>
+                    {t("whatIf.table.card")}
                   </th>
-                  <th>Override</th>
+                  <th>{t("whatIf.table.override")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -817,7 +1058,7 @@ export function ProjectionsPage() {
                         value={billAmounts[b.id] ?? ""}
                         style={{ width: 110 }}
                         disabled={b.is_card_expense}
-                        title={b.is_card_expense ? "Charged to card — not part of the projection, so overriding has no effect" : undefined}
+                        title={b.is_card_expense ? t("whatIf.table.cardDisabledTitle") : undefined}
                         onChange={(e) => {
                           const value = e.target.value ? Number(e.target.value) : undefined;
                           const next = { ...billAmounts };
@@ -835,16 +1076,16 @@ export function ProjectionsPage() {
 
           </div>
           <div>
-            <h3 style={{ marginTop: 0 }}>Expenses</h3>
+            <h3 style={{ marginTop: 0 }}>{t("whatIf.expenses.title")}</h3>
             <table>
               <thead>
                 <tr>
-                  <SortableTh label="Bill" sortKey="name" activeKey={expenseSortKey} direction={expenseSortDirection} onSort={toggleExpenseSort} />
-                  <SortableTh label="Expected" sortKey="expected" activeKey={expenseSortKey} direction={expenseSortDirection} onSort={toggleExpenseSort} />
-                  <th title="Charged to a credit card — excluded from the projection since it's already covered by the card spending goal/average">
-                    Card?
+                  <SortableTh label={t("whatIf.table.bill")} sortKey="name" activeKey={expenseSortKey} direction={expenseSortDirection} onSort={toggleExpenseSort} />
+                  <SortableTh label={t("whatIf.table.expected")} sortKey="expected" activeKey={expenseSortKey} direction={expenseSortDirection} onSort={toggleExpenseSort} />
+                  <th title={t("whatIf.table.cardColumnTitle")}>
+                    {t("whatIf.table.card")}
                   </th>
-                  <th>Override</th>
+                  <th>{t("whatIf.table.override")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -861,7 +1102,7 @@ export function ProjectionsPage() {
                         value={billAmounts[b.id] ?? ""}
                         style={{ width: 110 }}
                         disabled={b.is_card_expense}
-                        title={b.is_card_expense ? "Charged to card — not part of the projection, so overriding has no effect" : undefined}
+                        title={b.is_card_expense ? t("whatIf.table.cardDisabledTitle") : undefined}
                         onChange={(e) => {
                           const value = e.target.value ? Number(e.target.value) : undefined;
                           const next = { ...billAmounts };
@@ -881,19 +1122,17 @@ export function ProjectionsPage() {
       </div>
 
       <div className="card">
-        <h2>Goals</h2>
-        <p className="muted">
-          A target amount by a date, checked against your projected monthly savings rate.
-        </p>
+        <h2>{t("goals.title")}</h2>
+        <p className="muted">{t("goals.description")}</p>
         <table>
           <thead>
             <tr>
-              <SortableTh label="Goal" sortKey="name" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label="Target" sortKey="target" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label="By" sortKey="by" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label="Need/mo" sortKey="needPerMonth" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label="Projected/mo" sortKey="projectedPerMonth" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label="On track?" sortKey="onTrack" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh label={t("goals.table.name")} sortKey="name" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh label={t("goals.table.target")} sortKey="target" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh label={t("goals.table.by")} sortKey="by" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh label={t("goals.table.needPerMonth")} sortKey="needPerMonth" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh label={t("goals.table.projectedPerMonth")} sortKey="projectedPerMonth" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh label={t("goals.table.onTrack")} sortKey="onTrack" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
               <th />
             </tr>
           </thead>
@@ -901,7 +1140,7 @@ export function ProjectionsPage() {
             {sortedGoals.length === 0 && (
               <tr>
                 <td colSpan={7} className="muted">
-                  No goals yet — add one below to see whether your projected savings can reach it.
+                  {t("goals.table.empty")}
                 </td>
               </tr>
             )}
@@ -927,10 +1166,10 @@ export function ProjectionsPage() {
                   <td className="money">{formatMoney(g.projected_monthly_savings)}</td>
                   <GoalStatusCell goal={g} />
                   <td>
-                    <button className="icon" onClick={saveEditGoal} title="Save">
+                    <button className="icon" onClick={saveEditGoal} title={t("goals.actions.save")}>
                       <FiCheck />
                     </button>{" "}
-                    <button className="secondary icon" onClick={() => setEditingGoalId(null)} title="Cancel">
+                    <button className="secondary icon" onClick={() => setEditingGoalId(null)} title={t("goals.actions.cancel")}>
                       <FiX />
                     </button>
                   </td>
@@ -944,10 +1183,10 @@ export function ProjectionsPage() {
                   <td className="money">{formatMoney(g.projected_monthly_savings)}</td>
                   <GoalStatusCell goal={g} />
                   <td>
-                    <button className="secondary icon" onClick={() => startEditGoal(g)} title="Edit">
+                    <button className="secondary icon" onClick={() => startEditGoal(g)} title={t("goals.actions.edit")}>
                       <FiEdit2 />
                     </button>{" "}
-                    <button className="danger icon" onClick={() => deleteGoal.mutate(g.id)} title="Remove">
+                    <button className="danger icon" onClick={() => deleteGoal.mutate(g.id)} title={t("goals.actions.remove")}>
                       <FiTrash2 />
                     </button>
                   </td>
@@ -963,11 +1202,11 @@ export function ProjectionsPage() {
           style={{ gridTemplateColumns: "repeat(4, auto)", alignItems: "end", marginTop: 16 }}
         >
           <label>
-            Name
+            {t("goals.form.name")}
             <input type="text" value={goalName} onChange={(e) => setGoalName(e.target.value)} required />
           </label>
           <label>
-            Target amount
+            {t("goals.form.targetAmount")}
             <input
               type="number"
               step="0.01"
@@ -977,11 +1216,11 @@ export function ProjectionsPage() {
             />
           </label>
           <label>
-            Target date
+            {t("goals.form.targetDate")}
             <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} required />
           </label>
           <button type="submit">
-            <FiPlus /> Add goal
+            <FiPlus /> {t("goals.form.submit")}
           </button>
         </form>
       </div>

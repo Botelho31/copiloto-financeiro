@@ -1,0 +1,35 @@
+{
+  "brand": "Budget Tracker",
+  "nav": {
+    "dashboard": "Dashboard",
+    "transactions": "Transactions",
+    "bills": "Planned Payments",
+    "debts": "Debts",
+    "projections": "Projections"
+  },
+  "logout": "Log out",
+  "language": {
+    "en": "English",
+    "pt": "Portuguese"
+  },
+  "period": {
+    "month": "Month",
+    "quarter": "Quarter",
+    "semester": "Semester",
+    "year": "Year",
+    "custom": "Custom",
+    "allTime": "All time",
+    "previousPeriod": "Previous period",
+    "nextPeriod": "Next period"
+  },
+  "table": {
+    "date": "Date",
+    "description": "Description",
+    "amount": "Amount",
+    "count": "Count",
+    "total": "Total",
+    "category": "Category",
+    "tag": "Tag"
+  },
+  "noTransactionsForFilters": "No transactions to group for the selected filters."
+}

@@ -61,6 +61,19 @@ server.registerTool(
 );
 
 server.registerTool(
+  "delete_category_rule",
+  {
+    description:
+      "Delete a category_rule by id (see list_category_rules) — stops it from auto-categorizing future transactions. Doesn't change any transaction's existing category.",
+    inputSchema: { id: z.number().int() },
+  },
+  async ({ id }) => {
+    db.query("DELETE FROM category_rules WHERE id = ?").run(id);
+    return json(listRules());
+  }
+);
+
+server.registerTool(
   "get_uncategorized_groups",
   {
     description:
@@ -559,6 +572,19 @@ server.registerTool(
 );
 
 server.registerTool(
+  "delete_bill",
+  {
+    description: "Delete a bill and its recurring-match history.",
+    inputSchema: { id: z.number().int() },
+  },
+  async ({ id }) => {
+    db.query("DELETE FROM recurring_bill_matches WHERE recurring_bill_id = ?").run(id);
+    db.query("DELETE FROM recurring_bills WHERE id = ?").run(id);
+    return json(listBills());
+  }
+);
+
+server.registerTool(
   "get_sync_status",
   { description: "Get the most recent Pluggy sync log entry." },
   async () => json(getLastSync())
@@ -683,13 +709,24 @@ server.registerTool(
 server.registerTool(
   "update_debt",
   {
-    description: "Update a debt's status, notes, matching rule, target date, principal, or expected total.",
+    description:
+      "Update a debt's status, notes, matching rule, target date, principal, split percentage, or expected total.",
     inputSchema: {
       id: z.number().int(),
       status: z.enum(["active", "paid_off"]).optional(),
       startDate: z.string().optional().describe("ISO date"),
       targetPayoffDate: z.string().nullable().optional(),
       principalAmount: z.number().nullable().optional(),
+      splitPercentage: z
+        .number()
+        .min(0)
+        .max(100)
+        .nullable()
+        .optional()
+        .describe(
+          "For a shared-expense debt (principal computed as this % of whatever borrow/lend " +
+            "transactions get linked) — set null to switch the debt to a fixed principalAmount instead."
+        ),
       expectedTotalAmount: z.number().nullable().optional(),
       interestRateMonthlyPercent: z
         .number()
@@ -735,6 +772,7 @@ server.registerTool(
     startDate,
     targetPayoffDate,
     principalAmount,
+    splitPercentage,
     expectedTotalAmount,
     interestRateMonthlyPercent,
     loanType,
@@ -753,6 +791,10 @@ server.registerTool(
     if (status !== undefined) {
       fields.push("status = ?");
       values.push(status);
+    }
+    if (splitPercentage !== undefined) {
+      fields.push("split_percentage = ?");
+      values.push(splitPercentage);
     }
     if (startDate !== undefined) {
       fields.push("start_date = ?");

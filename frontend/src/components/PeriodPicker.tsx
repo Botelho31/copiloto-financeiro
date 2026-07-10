@@ -1,13 +1,6 @@
+import { useTranslation } from "react-i18next";
 import type { Granularity, Period } from "../lib/period";
 import { customPeriod, parseIsoDate, periodFor, shiftPeriod, toIsoDate } from "../lib/period";
-
-const GRANULARITY_LABELS: Record<Granularity, string> = {
-  month: "Month",
-  quarter: "Quarter",
-  semester: "Semester",
-  year: "Year",
-  custom: "Custom",
-};
 
 const ALL_GRANULARITIES: Granularity[] = ["month", "quarter", "semester", "year", "custom"];
 
@@ -25,6 +18,14 @@ export function PeriodPicker(props: {
   // date) since PeriodPicker itself doesn't know about the data.
   allTimeStart?: Date;
 }) {
+  const { t } = useTranslation();
+  const granularityLabels: Record<Granularity, string> = {
+    month: t("period.month"),
+    quarter: t("period.quarter"),
+    semester: t("period.semester"),
+    year: t("period.year"),
+    custom: t("period.custom"),
+  };
   const granularities = props.granularities ?? ALL_GRANULARITIES;
   const showNavigation = props.showNavigation ?? true;
   const showGranularityPicker = props.showGranularityPicker ?? true;
@@ -64,12 +65,12 @@ export function PeriodPicker(props: {
               className={g === props.value.granularity && !isAllTime ? "active" : undefined}
               onClick={() => selectGranularity(g)}
             >
-              {GRANULARITY_LABELS[g]}
+              {granularityLabels[g]}
             </button>
           ))}
           {props.allTimeStart && (
             <button type="button" className={isAllTime ? "active" : undefined} onClick={selectAllTime}>
-              All time
+              {t("period.allTime")}
             </button>
           )}
         </div>
@@ -103,7 +104,7 @@ export function PeriodPicker(props: {
             <button
               type="button"
               className="secondary icon"
-              aria-label="Previous period"
+              aria-label={t("period.previousPeriod")}
               onClick={() => props.onChange(shiftPeriod(props.value, -1))}
             >
               ‹
@@ -112,7 +113,7 @@ export function PeriodPicker(props: {
             <button
               type="button"
               className="secondary icon"
-              aria-label="Next period"
+              aria-label={t("period.nextPeriod")}
               onClick={() => props.onChange(shiftPeriod(props.value, 1))}
             >
               ›

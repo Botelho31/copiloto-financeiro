@@ -1,0 +1,34 @@
+{
+  "title": "Transações",
+  "loading": "Carregando…",
+  "filters": {
+    "account": "Conta",
+    "allAccounts": "Todas as contas",
+    "category": "Categoria",
+    "allCategories": "Todas as categorias",
+    "groupByDescription": "Agrupar por descrição"
+  },
+  "categorize": {
+    "title": "Categorizar",
+    "assignTo": "Atribuir a",
+    "choosePlaceholder": "Escolher categoria…"
+  },
+  "rules": {
+    "title": "Regras de categorização",
+    "description": "Aplicada automaticamente a cada nova transação na sincronização, comparando em ordem de inserção com a descrição normalizada. Criada sempre que você (ou o assistente, via MCP) categoriza um grupo ou reclassifica um padrão — ou adiciona uma regra manualmente abaixo. Adicionar uma regra aqui afeta só as transações futuras; não reclassifica retroativamente as que já existem.",
+    "matchText": "Texto de correspondência",
+    "matchTextPlaceholder": "ex.: netflix",
+    "categoryPlaceholder": "Escolher categoria…",
+    "addRule": "Adicionar regra",
+    "searchPlaceholder": "Buscar regras por texto ou categoria…",
+    "noResultsForSearch": "Nenhuma regra corresponde à sua busca.",
+    "noRules": "Nenhuma regra ainda.",
+    "deleteTitle": "Excluir"
+  },
+  "search": {
+    "title": "Buscar e categorizar",
+    "description": "Busca em todas as transações, de qualquer período — uma forma rápida de rotular um estabelecimento em todos os lugares de uma vez.",
+    "placeholder": "Buscar descrições… ex.: uber, airbnb, netflix",
+    "searching": "Buscando…"
+  }
+}

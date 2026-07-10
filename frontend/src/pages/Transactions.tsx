@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiPlus, FiTrash2 } from "react-icons/fi";
+import { useTranslation } from "react-i18next";
 import type { Category, CategoryRule, Transaction } from "shared";
 import { CategorySelect } from "../components/CategorySelect";
 import { GroupedTransactionList } from "../components/GroupedTransactionList";
@@ -25,6 +26,7 @@ import { formatDate, formatMoney } from "../lib/format";
 import { parseIsoDate, periodFor, periodToRange, type Period } from "../lib/period";
 
 export function TransactionsPage() {
+  const { t } = useTranslation(["transactions", "common"]);
   const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const [categoryId, setCategoryId] = useState<number | undefined>();
   const [accountId, setAccountId] = useState<string | undefined>();
@@ -54,7 +56,7 @@ export function TransactionsPage() {
   return (
     <div className="grid" style={{ gap: 24 }}>
       <div className="card">
-        <h2>Transactions</h2>
+        <h2>{t("title")}</h2>
         <div style={{ marginBottom: 16 }}>
           <PeriodPicker value={period} onChange={setPeriod} allTimeStart={allTimeStart} />
         </div>
@@ -67,12 +69,12 @@ export function TransactionsPage() {
           }}
         >
           <label>
-            Account
+            {t("filters.account")}
             <select
               value={accountId ?? ""}
               onChange={(e) => setAccountId(e.target.value || undefined)}
             >
-              <option value="">All accounts</option>
+              <option value="">{t("filters.allAccounts")}</option>
               {(accounts ?? []).map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -81,12 +83,12 @@ export function TransactionsPage() {
             </select>
           </label>
           <label>
-            Category
+            {t("filters.category")}
             <select
               value={categoryId ?? ""}
               onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : undefined)}
             >
-              <option value="">All categories</option>
+              <option value="">{t("filters.allCategories")}</option>
               {(categories ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -98,11 +100,11 @@ export function TransactionsPage() {
 
         <label style={{ flexDirection: "row", gap: 6, alignItems: "center", marginBottom: 16 }}>
           <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
-          Group by description
+          {t("filters.groupByDescription")}
         </label>
 
         {isLoading ? (
-          <p className="muted">Loading…</p>
+          <p className="muted">{t("loading")}</p>
         ) : grouped ? (
           <GroupedTransactionList transactions={transactions ?? []} categories={categories ?? []} />
         ) : (
@@ -116,7 +118,7 @@ export function TransactionsPage() {
 
       {uncategorizedGroups && uncategorizedGroups.length > 0 && (
         <div className="card">
-          <h2>Categorize</h2>
+          <h2>{t("categorize.title")}</h2>
           <UncategorizedGroupsTable
             groups={uncategorizedGroups}
             categories={categories ?? []}
@@ -128,21 +130,18 @@ export function TransactionsPage() {
       <CategoryRulesPanel categories={categories ?? []} />
 
       <div className="card">
-        <h2>Search &amp; categorize</h2>
-        <p className="muted">
-          Search across all transactions, any period — a fast way to label a vendor everywhere at
-          once.
-        </p>
+        <h2>{t("search.title")}</h2>
+        <p className="muted">{t("search.description")}</p>
         <input
           type="text"
-          placeholder="Search descriptions… e.g. uber, airbnb, netflix"
+          placeholder={t("search.placeholder")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           style={{ width: "100%", maxWidth: 420, marginBottom: 16 }}
         />
         {searchQuery.trim() &&
           (isSearching ? (
-            <p className="muted">Searching…</p>
+            <p className="muted">{t("search.searching")}</p>
           ) : (
             <GroupedTransactionList transactions={searchResults ?? []} categories={categories ?? []} />
           ))}
@@ -152,6 +151,7 @@ export function TransactionsPage() {
 }
 
 function CategoryRulesPanel(props: { categories: Category[] }) {
+  const { t } = useTranslation(["transactions", "common"]);
   const { data: rules } = useCategoryRules();
   const deleteRule = useDeleteCategoryRule();
   const createRule = useCreateCategoryRule();
@@ -184,7 +184,7 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Category rules</h2>
+        <h2 style={{ margin: 0 }}>{t("rules.title")}</h2>
         <button className="link-button" onClick={() => setOpen((o) => !o)}>
           {open ? <FiChevronDown /> : <FiChevronRight />} ({rules?.length ?? 0})
         </button>
@@ -192,10 +192,7 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
       {open && (
         <>
           <p className="muted" style={{ marginTop: 12 }}>
-            Auto-applied to every new transaction at sync time, matched in insertion order against
-            the normalized description. Created whenever you (or the assistant, via MCP) categorize
-            a group or reclassify a pattern — or add one yourself below. Adding a rule here only
-            affects future transactions; it doesn't retroactively reclassify existing ones.
+            {t("rules.description")}
           </p>
 
           <form
@@ -203,31 +200,31 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
             style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap", marginBottom: 16 }}
           >
             <label>
-              Match text
+              {t("rules.matchText")}
               <input
                 type="text"
-                placeholder="e.g. netflix"
+                placeholder={t("rules.matchTextPlaceholder")}
                 value={newMatchText}
                 onChange={(e) => setNewMatchText(e.target.value)}
               />
             </label>
             <label>
-              Category
+              {t("common:table.category")}
               <CategorySelect
                 categories={props.categories}
                 value={newCategoryId}
-                placeholder="Choose category…"
+                placeholder={t("rules.categoryPlaceholder")}
                 onChange={setNewCategoryId}
               />
             </label>
             <button type="submit">
-              <FiPlus /> Add rule
+              <FiPlus /> {t("rules.addRule")}
             </button>
           </form>
 
           <input
             type="text"
-            placeholder="Search rules by match text or category…"
+            placeholder={t("rules.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ width: "100%", maxWidth: 420, marginBottom: 12 }}
@@ -235,14 +232,14 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
 
           {sorted.length === 0 ? (
             <p className="muted">
-              {search.trim() ? "No rules match your search." : "No rules yet."}
+              {search.trim() ? t("rules.noResultsForSearch") : t("rules.noRules")}
             </p>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <SortableTh label="Match text" sortKey="matchText" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-                  <SortableTh label="Category" sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+                  <SortableTh label={t("rules.matchText")} sortKey="matchText" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+                  <SortableTh label={t("common:table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
                   <th />
                 </tr>
               </thead>
@@ -252,7 +249,7 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
                     <td>{r.match_text}</td>
                     <td>{r.category_name}</td>
                     <td>
-                      <button className="danger icon" onClick={() => deleteRule.mutate(r.id)} title="Delete">
+                      <button className="danger icon" onClick={() => deleteRule.mutate(r.id)} title={t("rules.deleteTitle")}>
                         <FiTrash2 />
                       </button>
                     </td>
@@ -272,6 +269,7 @@ function UncategorizedGroupsTable(props: {
   categories: Category[];
   onAssign: (key: string, categoryId: number) => void;
 }) {
+  const { t } = useTranslation(["transactions", "common"]);
   const { sorted, sortKey, direction, toggleSort } = useSortableTable(
     props.groups,
     (g, key) => {
@@ -292,10 +290,10 @@ function UncategorizedGroupsTable(props: {
     <table>
       <thead>
         <tr>
-          <SortableTh label="Description" sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Count" sortKey="count" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Total" sortKey="total" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <th>Assign to</th>
+          <SortableTh label={t("common:table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("common:table.count")} sortKey="count" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("common:table.total")} sortKey="total" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <th>{t("categorize.assignTo")}</th>
         </tr>
       </thead>
       <tbody>
@@ -308,7 +306,7 @@ function UncategorizedGroupsTable(props: {
               <CategorySelect
                 categories={props.categories}
                 value={null}
-                placeholder="Choose category…"
+                placeholder={t("categorize.choosePlaceholder")}
                 onChange={(catId) => props.onAssign(group.key, catId)}
               />
             </td>
@@ -324,6 +322,7 @@ function TransactionsTable(props: {
   categories: Category[];
   onCategorize: (id: string, categoryId: number) => void;
 }) {
+  const { t } = useTranslation("common");
   const { sorted, sortKey, direction, toggleSort } = useSortableTable<Transaction>(
     props.transactions,
     (t, key) => {
@@ -346,10 +345,10 @@ function TransactionsTable(props: {
     <table>
       <thead>
         <tr>
-          <SortableTh label="Date" sortKey="date" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Description" sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Amount" sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label="Category" sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.date")} sortKey="date" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.amount")} sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh label={t("table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
         </tr>
       </thead>
       <tbody>

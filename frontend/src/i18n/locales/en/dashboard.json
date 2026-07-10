@@ -1,0 +1,118 @@
+{
+  "modes": {
+    "review": "Review",
+    "trends": "Trends",
+    "plan": "Plan"
+  },
+  "filterByTag": "Filter by tag",
+  "allTransactions": "All transactions",
+  "accountGroups": {
+    "cashOnHand": "Cash on hand",
+    "cards": "Cards",
+    "investments": "Investments",
+    "dueNextMonth": "{{dueNext}} due next month",
+    "dueNextMonthWithFuture": "{{dueNext}} due next month · {{future}} in future installments"
+  },
+  "summary": {
+    "expectedIn": "Expected in",
+    "expectedInCaption": "Confirmed income bills — not real transactions yet",
+    "expectedOut": "Expected out",
+    "expectedOutCaption": "Committed + assumed expenses — not real transactions yet",
+    "moneyIn": "Money in",
+    "moneyOut": "Money out"
+  },
+  "review": {
+    "heading": "How {{period}} went",
+    "daysLeft_one": "{{count}} day still to go — the verdicts below hold this month-in-progress against full past months, so \"behind\" can just mean \"not finished yet.\"",
+    "daysLeft_other": "{{count}} days still to go — the verdicts below hold this month-in-progress against full past months, so \"behind\" can just mean \"not finished yet.\"",
+    "netVsUsual": "Net this month vs your usual",
+    "netVsUsualCaption": "{{net}} net vs your {{avg}} {{months}}-month average — {{verdict}}",
+    "aheadOfUsualPace": "ahead of your usual pace.",
+    "behindUsualPace": "behind your usual pace.",
+    "cardSpendVsGoal": "Card spend vs your goal",
+    "cardSpendVsUsual": "Card spend vs your usual",
+    "underByAmount": "Under by {{amount}}",
+    "overByAmount": "Over by {{amount}}",
+    "cardSpendCaption": "{{spent}} charged vs {{goalPhrase}}",
+    "yourGoal": "your {{amount}} goal",
+    "yourUsualNoGoal": "your {{amount}} recent average (no goal set)",
+    "whereItLeaked": "Where it leaked",
+    "anomaliesIntro": "Categories running well above their own {{months}}-month normal — not the biggest slice, the one that spiked. Combined, about {{amount}} more than your usual pace. Click one to see the transactions behind it.",
+    "vsUsualPerMonth": "{{value}} vs {{avg}}/mo usual",
+    "aboveUsual": "+{{diff}} ({{pct}}% above)",
+    "noAnomalies": "It didn't — no expense category ran meaningfully above its own {{months}}-month normal. Spending kept its usual shape.",
+    "biggestHits": "Biggest single hits",
+    "biggestHitsIntro": "The {{count}} largest individual expenses — {{pct}}% of everything that went out this month."
+  },
+  "table": {
+    "day": "Day",
+    "source": "Source",
+    "bill": "Bill"
+  },
+  "planning": {
+    "heading": "Planning: {{period}}",
+    "intro": "This month hasn't happened yet — real transactions above are just whatever's already pre-scheduled (e.g. a known future installment). Everything below is expected, not real, split by how sure we can be: committed (recurring bills, debts' own schedule) vs assumed (your card-spend goal/average, and any known future card charge with no history yet).",
+    "projectedNet": "Projected net",
+    "projectedNetCaption": "{{income}} expected in − {{expense}} expected out",
+    "cardRoomLeft": "Card room left after known charges",
+    "cardRoomLeftCaption": "{{goal}} goal − {{known}} already committed (e.g. planned trips)",
+    "inOutGlance": "In vs out at a glance",
+    "inOutGlanceIntro": "The three tables below, as two bars — does expected income cover what's going out, and how much of the outgoing is still assumption rather than commitment.",
+    "flowLabels": {
+      "expectedIn": "Expected in",
+      "expectedOut": "Expected out",
+      "committedOut": "Committed out",
+      "assumedOut": "Assumed out"
+    },
+    "expectedByCategory": "Expected spending by category",
+    "expectedByCategoryIntro": "Committed and assumed expenses rolled up by category, using each bill's own category assignment.",
+    "expectedBarName": "Expected",
+    "expectedIncome": "Expected income",
+    "none": "None.",
+    "committedExpenses": "Committed expenses",
+    "committedExpensesTooltip": "Planned payments and debts' own known repayment schedule — essentially certain",
+    "assumedExpenses": "Assumed expenses",
+    "assumedExpensesTooltip": "Your card-spend goal/average, plus any known future card charge with no transaction history yet — an estimate, not a fact",
+    "outlookTitle": "Projected net, months ahead",
+    "outlookIntro": "The same expected in − expected out, for every projected month — so {{period}} reads in context (\"is this month unusually tight, or is that just what's coming\") instead of floating alone. The outlined bar is the month you're planning; click any other to jump to it."
+  },
+  "chart": {
+    "moneyInOutTitle": "Money in vs out per month",
+    "moneyInOutIntro": "Excludes transfers between your own accounts and money moved to/from investments — that's still your money, not spend or income. For future months there's no real cash flow yet, so the faded segments show what's expected instead, in two confidence tiers — the darker \"committed\" tier is real recurring bills and debts' own schedule; the lighter \"assumed\" tier is your card-spend goal/average standing in for spend that hasn't happened. The gold line is your 3-month rolling net average — the actual direction, without one unusually expensive or light month reading as a trend. Click a bar to jump to that month.",
+    "legend": {
+      "in": "In",
+      "expectedIn": "Expected in",
+      "out": "Out",
+      "expectedOutCommitted": "Expected out (committed)",
+      "expectedOutAssumed": "Expected out (assumed)",
+      "netRollingAvg": "Net (3mo avg)"
+    },
+    "balanceOverTime": "Balance over time",
+    "balanceOverTimeIntro": "Cash on hand plus current investment holdings (past months are a slight underestimate for investments — we only get today's value from Pluggy, not a historical one, so accrued yield isn't reflected). Click a point to jump to that month.",
+    "balanceLineLabel": "Balance",
+    "topCategoriesTitle": "Top categories over time",
+    "topCategoriesIntro": "A pie can't show whether a category is creeping up — this can. Your {{count}} biggest expense categories this period, each as its own line. Future months use categorized recurring bills (real transactions don't exist yet), so a line doesn't just flatline to zero once it crosses into the future. Click a point to jump to that month.",
+    "cardSpendTitlePerMonth": "Credit card spending per month",
+    "cardSpendTitleThisMonth": "Credit card spending this month",
+    "byCard": "By card",
+    "byCategory": "By category",
+    "cardSpendIntroPerMonth": "What you charged on each card each month — separate from bank cash flow above, so a card purchase and the bill payment that later settles it aren't counted twice. Click a bar to jump to that month.",
+    "cardSpendIntroThisMonth": "What you charged on each card this month — separate from bank cash flow above, so a card purchase and the bill payment that later settles it aren't counted twice.",
+    "cardSpendByCardExtra": " Real pre-scheduled amounts (e.g. an installment already dated) are solid. On top, two fainter tiers: \"committed\" is a recurring bill with real history behind it, \"assumed\" is a known future charge with none yet (e.g. a planned trip) — or, for the current month, however much of your card-spend goal hasn't posted yet, so a month still in progress doesn't read as a cliff-drop next to a finished one.",
+    "cardSpendByCategoryExtra": " Stacked by category instead of by card — where the money actually went, month by month.",
+    "expectedCommitted": "Expected (committed)",
+    "expectedAssumed": "Expected (assumed)",
+    "goalLabel": "Goal ({{amount}})",
+    "inOutByCategoryTitle": "Money in / out by category",
+    "includeCardActivity": "Include credit card activity",
+    "inOutIncludedNote": "Card purchases count individually and the bill payment that settles them is left out, so nothing is double-counted — which is also why totals here can run higher than the bank-only Money in / out figures above.",
+    "inOutExcludedNote": "Bank transactions only — credit card activity is excluded.",
+    "clickSliceHint": "Click a slice or legend entry to see the transactions behind it.",
+    "pieEmpty": "No transactions in this period."
+  },
+  "drilldown": {
+    "groupByDescription": "Group by description",
+    "close": "Close",
+    "empty": "No transactions in this category for the selected period."
+  }
+}

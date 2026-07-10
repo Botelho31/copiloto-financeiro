@@ -51,6 +51,7 @@ export function useUpdateDebt() {
         startDate: string;
         targetPayoffDate: string | null;
         principalAmount: number | null;
+        splitPercentage: number | null;
         expectedTotalAmount: number | null;
         interestRateMonthlyPercent: number | null;
         loanType: "price" | "sac" | null;

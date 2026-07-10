@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import type { Bill, Debt, DebtLinkedTransaction, DebtPaymentPlan } from "shared";
+import type { Bill, Debt, DebtBalanceScheduleEntry, DebtLinkedTransaction, DebtPaymentPlan } from "shared";
 import {
   addMonthsIso,
   billAppliesToMonth,
@@ -153,25 +153,39 @@ function computePaymentPlan(
 
 const MAX_FINISH_MONTHS = 600; // 50 years is plenty of a ceiling to simulate toward
 
-// The same date a chart or "finish date" card stat should ever show — walked
-// forward from payment_plan (never re-derived independently), so this can
-// never disagree with what the projection engine's own month-by-month debt
-// lines converge on. A loan's extra-amortization bills are folded in with the
+// The full month-by-month "what's still owed" walk for a debt — same date/
+// totals a chart or "finish date" card stat should ever show, walked forward
+// from payment_plan (never re-derived independently), so this can never
+// disagree with what the projection engine's own month-by-month debt lines
+// converge on. A loan's extra-amortization bills are folded in with the
 // exact same shared remaining-balance cap projectionEngine.ts uses (the fixed
 // installment's own interest/amortization split never changes because of an
 // extra payment — the contract doesn't recompute itself — but cumulative
 // cash toward the debt, installment plus every extra bill, is capped against
 // `remaining` and trims/stops the schedule the moment it's exhausted).
-function computeProjectedFinishDate(
+//
+// Each entry's principal_owed is the outstanding balance right after that
+// month's payment; interest_owed is a *suffix sum* — all the interest still
+// left to accrue from that month through payoff, not just that one month's
+// slice — so both figures shrink to exactly 0 together at the final month,
+// matching "what do I still owe, all-in, including interest yet to come."
+function computeProjectedBalanceSchedule(
   row: DebtRow,
   plan: DebtPaymentPlan,
+  principal: number,
   remaining: number,
   linkedBills: LinkedBillRow[]
-): { finishDate: string | null; remainingInterest: number | null } {
-  if (row.status !== "active") return { finishDate: null, remainingInterest: null };
+): { schedule: DebtBalanceScheduleEntry[]; finishDate: string | null; remainingInterest: number | null } {
+  const empty = { schedule: [], finishDate: null, remainingInterest: null };
+  if (row.status !== "active") return empty;
   const today = new Date().toISOString().slice(0, 10);
   const fromDate = row.start_date > today ? row.start_date : today;
-  if (remaining <= 0.005) return { finishDate: fromDate, remainingInterest: 0 };
+  if (remaining <= 0.005) return { schedule: [], finishDate: fromDate, remainingInterest: 0 };
+
+  const months: string[] = [];
+  const principalOwed: number[] = [];
+  const interestThisMonth: number[] = [];
+  let reachedPayoff = false;
 
   if (plan.source === "loan") {
     const rate = plan.rate_monthly_percent;
@@ -185,23 +199,29 @@ function computeProjectedFinishDate(
       termCeiling++;
     termCeiling = Math.max(1, termCeiling);
 
-    const fixedPayment = plan.loan_type === "price" ? pricePayment(remaining, rate, termCeiling) : null;
-    const fixedAmortization = plan.loan_type === "sac" ? remaining / termCeiling : null;
-    let scheduleBalance = remaining;
+    // Fixed payment/amortization come off the ORIGINAL principal and term —
+    // same basis as plan.monthly_amount and the projection engine's own loan
+    // line — a real loan's contractual installment doesn't recompute itself
+    // just because extra payments were made or time has passed; only the
+    // interest split (below) responds to the real, extras-reduced balance.
+    const fixedPayment = plan.loan_type === "price" ? plan.monthly_amount : null;
+    const fixedAmortization = plan.loan_type === "sac" ? principal / plan.term_months : null;
     let paidSoFar = 0;
-    let totalInterest = 0;
-    let finishDate: string | null = null;
     for (let month = 1; month <= termCeiling && paidSoFar < remaining - 0.005; month++) {
       const targetMonth = localMonthDate(fromDate, month - 1);
-      const interest = scheduleBalance * r;
-      const amort = fixedPayment != null ? fixedPayment - interest : fixedAmortization!;
-      const rawPayment = interest + amort;
-      scheduleBalance = Math.max(0, scheduleBalance - amort);
+      // Interest comes off the REAL outstanding balance (remaining minus
+      // everything paid so far, including extras) — not a closed-form
+      // nominal schedule that ignores extras. An extra payment lowers the
+      // real balance below what the plain schedule assumes, so it genuinely
+      // lowers next month's interest too; using the nominal balance would
+      // overstate interest for every month after an extra payment.
+      const realBalanceBefore = remaining - paidSoFar;
+      const interest = realBalanceBefore * r;
+      const rawPayment = fixedPayment != null ? fixedPayment : fixedAmortization! + interest;
       const cappedPayment = Math.min(rawPayment, remaining - paidSoFar);
       if (cappedPayment <= 0.005) break;
-      const interestThisMonth = cappedPayment < rawPayment ? interest * (cappedPayment / rawPayment) : interest;
+      const interestPortion = Math.min(interest, cappedPayment);
       paidSoFar += cappedPayment;
-      totalInterest += interestThisMonth;
       if (paidSoFar < remaining - 0.005) {
         const extra = linkedBills.reduce((sum, b) => {
           const info = {
@@ -215,33 +235,74 @@ function computeProjectedFinishDate(
         }, 0);
         paidSoFar += Math.min(extra, remaining - paidSoFar);
       }
-      if (paidSoFar >= remaining - 0.005) finishDate = addMonthsIso(fromDate, month - 1);
+      months.push(addMonthsIso(fromDate, month - 1));
+      principalOwed.push(Math.max(0, remaining - paidSoFar));
+      interestThisMonth.push(interestPortion);
     }
-    return { finishDate, remainingInterest: finishDate != null ? totalInterest : null };
-  }
-
-  if (plan.source === "combined") {
-    const monthly =
-      plan.bills.reduce(
-        (sum, b) => sum + monthlyEquivalentAmount({ cadence: b.cadence, expectedAmount: b.amount }),
-        0
-      ) + (plan.automatic?.monthly_amount ?? 0);
-    if (monthly <= 0) return { finishDate: null, remainingInterest: null };
+    reachedPayoff = paidSoFar >= remaining - 0.005;
+  } else if (plan.source === "combined") {
+    // Each bill keeps its own real cadence here too — summing every linked
+    // bill's monthly-equivalent into one blanket "monthly" figure (as if a
+    // once-off bill recurred every month forever) would wildly overstate the
+    // payment and pay the debt off in a couple of months instead of however
+    // long the bills actually take, exactly the way activeDebtSchedules /
+    // debtLineAmountForMonth in projectionEngine.ts already handle it.
     const rate = row.interest_rate_monthly_percent;
     const r = rate != null && rate > 0 ? rate / 100 : 0;
-    if (r > 0 && monthly <= remaining * r) return { finishDate: null, remainingInterest: null };
     let balance = remaining;
-    let totalInterest = 0;
-    let months = 0;
-    for (; months < MAX_FINISH_MONTHS && balance > 0.005; months++) {
-      totalInterest += balance * r;
-      balance = Math.max(0, balance * (1 + r) - monthly);
+    let month = 0;
+    for (; month < MAX_FINISH_MONTHS && balance > 0.005; month++) {
+      const targetMonth = localMonthDate(fromDate, month);
+      const interest = balance * r;
+      const billsDue = linkedBills.reduce((sum, b) => {
+        const info = {
+          cadence: b.cadence as Bill["cadence"],
+          nextDueDate: b.next_due_date,
+          recurrenceStartDate: b.recurrence_start_date,
+          recurrenceEndDate: b.recurrence_end_date,
+        };
+        if (!billAppliesToMonth(info, targetMonth)) return sum;
+        return sum + monthlyEquivalentAmount({ cadence: b.cadence as Bill["cadence"], expectedAmount: b.expected_amount });
+      }, 0);
+      const monthlyPayment = billsDue + (plan.automatic?.monthly_amount ?? 0);
+      // A month with nothing due (waiting on a yearly/quarterly bill's next
+      // occurrence) is expected, not a stall — only the MAX_FINISH_MONTHS
+      // ceiling below decides when to give up on ever converging.
+      balance = Math.max(0, balance * (1 + r) - monthlyPayment);
+      months.push(addMonthsIso(fromDate, month));
+      principalOwed.push(balance);
+      interestThisMonth.push(r > 0 ? interest : 0);
     }
-    if (balance > 0.005) return { finishDate: null, remainingInterest: null };
-    return { finishDate: addMonthsIso(fromDate, months), remainingInterest: r > 0 ? totalInterest : null };
+    reachedPayoff = balance <= 0.005;
   }
 
-  return { finishDate: null, remainingInterest: null };
+  if (!reachedPayoff) return empty;
+
+  // Suffix sum EXCLUDING each month's own interest — principal_owed above is
+  // already post-payment (this month's payment already subtracted), so
+  // interest_owed has to be post-payment too: interest still left across every
+  // month AFTER this one, not including the slice that just got paid off this
+  // month. Without the exclusion, the final month would show principal_owed
+  // 0 (debt done) next to a non-zero interest_owed (as if that same month's
+  // interest hadn't been paid), which contradicts itself.
+  const interestOwed: number[] = new Array(interestThisMonth.length).fill(0);
+  let runningInterest = 0;
+  for (let i = interestThisMonth.length - 1; i >= 0; i--) {
+    interestOwed[i] = runningInterest;
+    runningInterest += interestThisMonth[i]!;
+  }
+
+  const schedule: DebtBalanceScheduleEntry[] = months.map((month, i) => ({
+    month: month.slice(0, 7),
+    principal_owed: principalOwed[i]!,
+    interest_owed: interestOwed[i]!,
+  }));
+
+  return {
+    schedule,
+    finishDate: months.length > 0 ? months[months.length - 1]! : null,
+    remainingInterest: interestThisMonth.reduce((sum, v) => sum + v, 0),
+  };
 }
 
 function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
@@ -337,12 +398,11 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
 
     const linkedBills = fetchLinkedBills(row.id);
     const plan = computePaymentPlan(row, principal, sim.currentPayoffBalance, linkedBills);
-    const { finishDate, remainingInterest } = computeProjectedFinishDate(
-      row,
-      plan,
-      sim.currentPayoffBalance,
-      linkedBills
-    );
+    const {
+      schedule,
+      finishDate,
+      remainingInterest,
+    } = computeProjectedBalanceSchedule(row, plan, principal, sim.currentPayoffBalance, linkedBills);
 
     return {
       ...row,
@@ -359,6 +419,7 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
       payment_plan: plan,
       projected_finish_date: finishDate,
       projected_remaining_interest: remainingInterest,
+      projected_balance_schedule: schedule,
     };
   }
 
@@ -372,7 +433,13 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
 
   const linkedBills = fetchLinkedBills(row.id);
   const plan = computePaymentPlan(row, principal, remaining, linkedBills);
-  const { finishDate, remainingInterest } = computeProjectedFinishDate(row, plan, remaining, linkedBills);
+  const { schedule, finishDate, remainingInterest } = computeProjectedBalanceSchedule(
+    row,
+    plan,
+    principal,
+    remaining,
+    linkedBills
+  );
 
   return {
     ...row,
@@ -389,6 +456,7 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
     payment_plan: plan,
     projected_finish_date: finishDate,
     projected_remaining_interest: remainingInterest,
+    projected_balance_schedule: schedule,
   };
 }
 
@@ -544,6 +612,7 @@ export const debtsRoutes = new Elysia({ prefix: "/api/debts" })
       startDate: string;
       targetPayoffDate: string | null;
       principalAmount: number | null;
+      splitPercentage: number | null;
       expectedTotalAmount: number | null;
       interestRateMonthlyPercent: number | null;
       notes: string | null;
@@ -560,6 +629,10 @@ export const debtsRoutes = new Elysia({ prefix: "/api/debts" })
     if (input.status !== undefined) {
       fields.push("status = ?");
       values.push(input.status);
+    }
+    if (input.splitPercentage !== undefined) {
+      fields.push("split_percentage = ?");
+      values.push(input.splitPercentage);
     }
     if (input.targetPayoffDate !== undefined) {
       fields.push("target_payoff_date = ?");

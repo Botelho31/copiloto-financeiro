@@ -1,24 +1,52 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import { logout } from "../lib/api";
 
-const NAV_LINKS = [
-  { to: "/", label: "Dashboard" },
-  { to: "/transactions", label: "Transactions" },
-  { to: "/bills", label: "Planned Payments" },
-  { to: "/debts", label: "Debts" },
-  { to: "/projections", label: "Projections" },
-];
+function useNavLinks() {
+  const { t } = useTranslation();
+  return [
+    { to: "/", label: t("nav.dashboard") },
+    { to: "/transactions", label: t("nav.transactions") },
+    { to: "/bills", label: t("nav.bills") },
+    { to: "/debts", label: t("nav.debts") },
+    { to: "/projections", label: t("nav.projections") },
+  ];
+}
+
+function LanguageSwitcher() {
+  const { i18n, t } = useTranslation();
+  return (
+    <div className="toggle-group" aria-label={t("language.en") + " / " + t("language.pt")}>
+      <button
+        type="button"
+        className={i18n.resolvedLanguage === "pt" ? "active" : undefined}
+        onClick={() => void i18n.changeLanguage("pt")}
+      >
+        PT
+      </button>
+      <button
+        type="button"
+        className={i18n.resolvedLanguage === "en" ? "active" : undefined}
+        onClick={() => void i18n.changeLanguage("en")}
+      >
+        EN
+      </button>
+    </div>
+  );
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const { t } = useTranslation();
+  const navLinks = useNavLinks();
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <span className="brand">Budget Tracker</span>
+        <span className="brand">{t("brand")}</span>
         <nav>
-          {NAV_LINKS.map((link) => (
+          {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
@@ -28,6 +56,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+        <LanguageSwitcher />
         <form
           className="logout-form"
           onSubmit={(e) => {
@@ -36,7 +65,7 @@ export function Layout({ children }: { children: ReactNode }) {
           }}
         >
           <button type="submit" className="link-button">
-            Log out
+            {t("logout")}
           </button>
         </form>
       </header>

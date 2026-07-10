@@ -1,5 +1,5 @@
 import type { BillOverride, ProjectedMonth, ProjectionResult } from "shared";
-import { billAppliesToMonth, monthlyEquivalentAmount, pricePayment, sacPaymentForMonth } from "shared";
+import { billAppliesToMonth, monthlyEquivalentAmount, pricePayment } from "shared";
 import { config } from "../config";
 import { db } from "../db";
 import { getDebtTransactions, listDebts } from "../routes/debts";
@@ -246,22 +246,23 @@ interface DebtProjectionLine {
       };
 }
 
-// Signed amount for a debt line in a given calendar month, or null if the
-// debt doesn't apply that month (not started yet, already paid off, or the
-// debt's shared remaining balance is exhausted). paidSoFar is the sum
-// *every* line on this same debt has already contributed in earlier
-// projected months (and earlier lines this same month) — flat and bill
-// schedules both stop once it reaches the debt's real remaining balance,
-// since several lines can be paying down the same debt at once.
+// Signed amount for a debt line in a given calendar month (plus, for a
+// formal loan, how much of that amount is interest rather than principal),
+// or null if the debt doesn't apply that month (not started yet, already
+// paid off, or the debt's shared remaining balance is exhausted). paidSoFar
+// is the sum *every* line on this same debt has already contributed in
+// earlier projected months (and earlier lines this same month) — flat and
+// bill schedules both stop once it reaches the debt's real remaining
+// balance, since several lines can be paying down the same debt at once.
 function debtLineAmountForMonth(
   line: DebtProjectionLine,
   targetMonth: Date,
   paidSoFar: number
-): number | null {
-  const magnitude = (() => {
+): { amount: number; interestPortion?: number } | null {
+  const result = (() => {
     if (line.schedule.kind === "flat") {
       const capped = Math.min(line.schedule.monthlyAmount, line.schedule.remainingBalance - paidSoFar);
-      return capped > 0.005 ? capped : null;
+      return capped > 0.005 ? { magnitude: capped } : null;
     }
     if (line.schedule.kind === "bill") {
       const { bill, remainingBalance } = line.schedule;
@@ -270,7 +271,7 @@ function debtLineAmountForMonth(
       // itself declares no recurrence end — the final payment is trimmed to
       // what's actually left, then the line stops.
       const capped = Math.min(monthlyEquivalentAmount(bill), remainingBalance - paidSoFar);
-      return capped > 0.005 ? capped : null;
+      return capped > 0.005 ? { magnitude: capped } : null;
     }
     const { principal, monthlyRatePercent, startDate, termMonths, loanType, remainingBalance } =
       line.schedule;
@@ -284,15 +285,36 @@ function debtLineAmountForMonth(
     const monthOfLoan =
       (targetMonth.getFullYear() - startYear) * 12 + (targetMonth.getMonth() - (startMonth - 1)) + 1;
     if (monthOfLoan < 1 || monthOfLoan > termMonths) return null;
+    // Interest has to come off the REAL outstanding balance (remainingBalance
+    // minus everything paid so far, including every extra-amortization bill
+    // on this same debt) — not the closed-form balance the plain PRICE/SAC
+    // schedule alone implies. An extra payment lowers the real balance below
+    // what the nominal schedule assumes, so it genuinely lowers next month's
+    // interest too; using the nominal balance here would overstate interest
+    // for every month after an extra payment, understating exactly the
+    // benefit ("this extra payment lowers my interest") the payment is for.
+    // The fixed payment amount itself still comes from the ORIGINAL
+    // principal/term (a real loan's contractual installment doesn't
+    // recompute itself just because you paid extra — the "reduce term"
+    // policy this whole app models), same as before.
+    const realBalanceBefore = remainingBalance - paidSoFar;
+    if (realBalanceBefore <= 0.005) return null;
+    const r = monthlyRatePercent / 100;
+    const interest = realBalanceBefore * r;
     const raw =
       loanType === "price"
         ? pricePayment(principal, monthlyRatePercent, termMonths)
-        : sacPaymentForMonth(principal, monthlyRatePercent, termMonths, monthOfLoan);
+        : principal / termMonths + interest;
     const capped = Math.min(raw, remainingBalance - paidSoFar);
-    return capped > 0.005 ? capped : null;
+    if (capped <= 0.005) return null;
+    // Never let the interest portion exceed what's actually being paid this
+    // month — the final, trimmed payment (an extra bill ended the debt early)
+    // otherwise could report more interest than cash actually moved.
+    return { magnitude: capped, interestPortion: Math.max(0, Math.min(interest, capped)) };
   })();
-  if (magnitude == null) return null;
-  return line.direction === "owed_by_me" ? -magnitude : magnitude;
+  if (result == null) return null;
+  const signed = line.direction === "owed_by_me" ? -result.magnitude : result.magnitude;
+  return { amount: signed, interestPortion: result.interestPortion };
 }
 
 function billForProjection(id: number): BillForProjection | null {
@@ -502,8 +524,9 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
 
     for (const debtLine of debtLines) {
       const paidSoFar = paidByDebt.get(debtLine.debtId) ?? 0;
-      const amount = debtLineAmountForMonth(debtLine, targetMonth, paidSoFar);
-      if (amount == null) continue;
+      const result = debtLineAmountForMonth(debtLine, targetMonth, paidSoFar);
+      if (result == null) continue;
+      const { amount, interestPortion } = result;
       paidByDebt.set(debtLine.debtId, paidSoFar + Math.abs(amount));
       net += amount;
       // Negative ids keep debt lines from colliding with real bill ids in
@@ -514,6 +537,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
         amount,
         kind: "debt",
         ...(debtLine.schedule.kind === "bill" ? { billId: debtLine.schedule.bill.id } : {}),
+        ...(interestPortion != null ? { interestPortion } : {}),
       });
     }
 

@@ -1,0 +1,159 @@
+{
+  "horizon": {
+    "spanButton": {
+      "label": "Estender até a última meta/dívida",
+      "title": "Define o período para se estender até a data final da sua meta ou dívida mais distante"
+    },
+    "override": "Abrangendo {{months}} meses, até \"{{name}}\""
+  },
+  "scenario": {
+    "badge": "Cenário hipotético",
+    "reset": "Voltar ao padrão"
+  },
+  "summary": {
+    "balance": {
+      "label": "Saldo em {{month}}",
+      "caption": "{{delta}} em relação a hoje",
+      "baselineSuffix": "padrão {{amount}}"
+    },
+    "avgNet": {
+      "label": "Economia líquida média/mês",
+      "caption_one": "ao longo do próximo {{count}} mês",
+      "caption_other": "ao longo dos próximos {{count}} meses"
+    },
+    "firstShortfall": {
+      "label": "Primeiro saldo negativo",
+      "none": "Nenhum",
+      "captionNegative": "o saldo fica negativo neste mês",
+      "captionPositive": "o saldo permanece positivo durante todo o período"
+    },
+    "goalsOnTrack": {
+      "label": "Metas no prazo",
+      "value": "{{onTrack}} de {{total}}",
+      "captionEmpty": "nenhuma meta de economia ainda — adicione uma abaixo",
+      "captionAllOnTrack": "a economia projetada cobre todas as metas",
+      "captionSomeBehind": "detalhes no card de Metas abaixo"
+    }
+  },
+  "status": {
+    "onTrack": "No prazo",
+    "behind": "Atrasada"
+  },
+  "balanceChart": {
+    "title": "Saldo projetado",
+    "legend": {
+      "balance": "Saldo",
+      "whatIfBalance": "Saldo hipotético",
+      "baseline": "Padrão",
+      "goalOnTrack": "Meta no prazo",
+      "goalBehind": "Meta atrasada",
+      "shortfall": "Saldo negativo",
+      "debtPaidOff": "{{name}} quitada em {{month}}",
+      "beyondView": " (fora do período exibido)"
+    },
+    "tooltip": {
+      "interest": "Juros: {{sign}}{{amount}} ({{accrued}} acumulado até agora)",
+      "debtPaysOff": "{{name}} quitada",
+      "goal": "Meta \"{{name}}\": {{amount}} — {{status}}"
+    },
+    "goalLabel": {
+      "dueBy": "{{glyph}} {{name}} · {{amount}} até {{month}}"
+    },
+    "whatIfLineLabel": "Cenário hipotético"
+  },
+  "interestChart": {
+    "title": "Juros acumulados",
+    "caption_one": "{{amount}} ao longo de {{count}} mês",
+    "caption_other": "{{amount}} ao longo de {{count}} meses",
+    "shareSuffix": "{{percent}}% do crescimento projetado do saldo",
+    "tooltip": {
+      "thisMonth": "Juros neste mês: {{amount}}",
+      "accrued": "Acumulado até agora: {{amount}}"
+    },
+    "barLabel": "Juros / mês"
+  },
+  "savingsChart": {
+    "title": "Economia projetada por mês",
+    "description": "Construído apenas com dados sólidos: contas confirmadas (receitas e despesas), o cronograma fixo de parcelas de cada dívida ativa (ignorado se o histórico de pagamentos for irregular demais para caracterizar uma cadência real) e a média dos últimos 3 meses de gastos reais no cartão de crédito — sem médias genéricas de transações bancárias, para que uma transferência pontual não se espalhe por todos os meses futuros.",
+    "summary": {
+      "startingBalance": "Saldo inicial",
+      "cardSpendBaseline": "Gasto no cartão (média de 3 meses)"
+    },
+    "cardSpendGoal": {
+      "label": "Meta mensal de gasto no cartão",
+      "usingAverage": "Usando a média dos últimos 3 meses — digite um valor para definir uma meta fixa (também exibida no Painel)",
+      "saved": "Salvo como sua meta fixa: {{amount}}/mês"
+    },
+    "netSavingsLabel": "Economia líquida",
+    "breakdownToggle": "Detalhamento mensal"
+  },
+  "breakdown": {
+    "table": {
+      "month": "Mês",
+      "net": "Líquido",
+      "balance": "Saldo",
+      "linesButton": "Itens"
+    },
+    "detail": {
+      "lineItem": "Item",
+      "kind": "Tipo",
+      "amount": "Valor",
+      "assumedBadge": "estimado",
+      "assumedTitle": "Estimado com base na sua média de 3 meses / meta de gastos — não é uma cobrança confirmada"
+    },
+    "kind": {
+      "bill": "Conta futura",
+      "debt": "Dívida",
+      "interest": "Juros",
+      "cardSpend": "Gasto no cartão"
+    }
+  },
+  "whatIf": {
+    "title": "Simulação",
+    "description": "Cada alteração aqui recalcula os gráficos e números principais acima, em tempo real — o selo dourado marca esses valores como hipotéticos, mantendo seu cenário real como a linha tracejada para comparação. Nada aqui é salvo; use redefinir ou troque o período para voltar.",
+    "discretionary": {
+      "label": "Ajuste de gastos discricionários: {{value}}%"
+    },
+    "interestRate": {
+      "label": "Taxa de juros anual sobre saldo parado: {{value}}%",
+      "hint": "(usa a taxa Selic do Brasil por padrão — edite se ela tiver mudado)"
+    },
+    "income": { "title": "Receitas" },
+    "expenses": { "title": "Despesas" },
+    "table": {
+      "bill": "Conta",
+      "expected": "Previsto",
+      "card": "Cartão?",
+      "cardColumnTitle": "Cobrado no cartão de crédito — excluído da projeção porque já está coberto pela meta/média de gastos no cartão",
+      "override": "Substituir",
+      "cardDisabledTitle": "Cobrado no cartão — não faz parte da projeção, então substituir não tem efeito"
+    }
+  },
+  "goals": {
+    "title": "Metas",
+    "description": "Um valor-alvo até uma data, comparado com sua taxa de economia mensal projetada.",
+    "table": {
+      "name": "Meta",
+      "target": "Alvo",
+      "by": "Até",
+      "needPerMonth": "Necessário/mês",
+      "projectedPerMonth": "Projetado/mês",
+      "onTrack": "No prazo?",
+      "empty": "Nenhuma meta ainda — adicione uma abaixo para ver se sua economia projetada consegue alcançá-la.",
+      "marginToSpare": "{{amount}}/mês de sobra",
+      "marginShort": "{{amount}}/mês faltando"
+    },
+    "actions": {
+      "save": "Salvar",
+      "cancel": "Cancelar",
+      "edit": "Editar",
+      "remove": "Remover"
+    },
+    "form": {
+      "name": "Nome",
+      "targetAmount": "Valor-alvo",
+      "targetDate": "Data-alvo",
+      "submit": "Adicionar meta"
+    }
+  }
+}

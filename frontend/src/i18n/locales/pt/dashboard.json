@@ -1,0 +1,118 @@
+{
+  "modes": {
+    "review": "Revisão",
+    "trends": "Tendências",
+    "plan": "Planejar"
+  },
+  "filterByTag": "Filtrar por etiqueta",
+  "allTransactions": "Todas as transações",
+  "accountGroups": {
+    "cashOnHand": "Dinheiro disponível",
+    "cards": "Cartões",
+    "investments": "Investimentos",
+    "dueNextMonth": "{{dueNext}} devido no próximo mês",
+    "dueNextMonthWithFuture": "{{dueNext}} devido no próximo mês · {{future}} em parcelas futuras"
+  },
+  "summary": {
+    "expectedIn": "Entrada esperada",
+    "expectedInCaption": "Contas de renda confirmadas — ainda não são transações reais",
+    "expectedOut": "Saída esperada",
+    "expectedOutCaption": "Despesas comprometidas + assumidas — ainda não são transações reais",
+    "moneyIn": "Entradas",
+    "moneyOut": "Saídas"
+  },
+  "review": {
+    "heading": "Como foi {{period}}",
+    "daysLeft_one": "Ainda falta {{count}} dia — os vereditos abaixo comparam este mês em andamento com meses passados completos, então \"atrás\" pode só significar \"ainda não terminou\".",
+    "daysLeft_other": "Ainda faltam {{count}} dias — os vereditos abaixo comparam este mês em andamento com meses passados completos, então \"atrás\" pode só significar \"ainda não terminou\".",
+    "netVsUsual": "Saldo do mês vs. o seu normal",
+    "netVsUsualCaption": "Saldo de {{net}} vs. sua média de {{avg}} nos últimos {{months}} meses — {{verdict}}",
+    "aheadOfUsualPace": "à frente do seu ritmo normal.",
+    "behindUsualPace": "atrás do seu ritmo normal.",
+    "cardSpendVsGoal": "Gasto no cartão vs. sua meta",
+    "cardSpendVsUsual": "Gasto no cartão vs. o seu normal",
+    "underByAmount": "{{amount}} abaixo",
+    "overByAmount": "{{amount}} acima",
+    "cardSpendCaption": "{{spent}} cobrado vs. {{goalPhrase}}",
+    "yourGoal": "sua meta de {{amount}}",
+    "yourUsualNoGoal": "sua média recente de {{amount}} (sem meta definida)",
+    "whereItLeaked": "Onde vazou",
+    "anomaliesIntro": "Categorias bem acima do seu normal dos últimos {{months}} meses — não é a maior fatia, é a que disparou. Juntas, cerca de {{amount}} a mais que o seu ritmo normal. Clique em uma para ver as transações por trás dela.",
+    "vsUsualPerMonth": "{{value}} vs. {{avg}}/mês normal",
+    "aboveUsual": "+{{diff}} ({{pct}}% acima)",
+    "noAnomalies": "Não vazou — nenhuma categoria de despesa ficou significativamente acima do seu normal dos últimos {{months}} meses. Os gastos mantiveram o padrão de sempre.",
+    "biggestHits": "Maiores gastos individuais",
+    "biggestHitsIntro": "As {{count}} maiores despesas individuais — {{pct}}% de tudo que saiu este mês."
+  },
+  "table": {
+    "day": "Dia",
+    "source": "Origem",
+    "bill": "Conta"
+  },
+  "planning": {
+    "heading": "Planejamento: {{period}}",
+    "intro": "Este mês ainda não aconteceu — as transações reais acima são só o que já está pré-agendado (por exemplo, uma parcela futura já conhecida). Tudo abaixo é esperado, não real, dividido pelo grau de certeza: comprometido (contas recorrentes, cronograma próprio das dívidas) vs. assumido (sua meta/média de gasto no cartão, e qualquer cobrança futura conhecida no cartão sem histórico ainda).",
+    "projectedNet": "Saldo projetado",
+    "projectedNetCaption": "{{income}} de entrada esperada − {{expense}} de saída esperada",
+    "cardRoomLeft": "Margem no cartão após cobranças conhecidas",
+    "cardRoomLeftCaption": "{{goal}} de meta − {{known}} já comprometido (ex.: viagens planejadas)",
+    "inOutGlance": "Entradas vs. saídas em resumo",
+    "inOutGlanceIntro": "As três tabelas abaixo, como duas barras — a renda esperada cobre o que está saindo, e quanto da saída ainda é suposição em vez de compromisso.",
+    "flowLabels": {
+      "expectedIn": "Entrada esperada",
+      "expectedOut": "Saída esperada",
+      "committedOut": "Saída comprometida",
+      "assumedOut": "Saída assumida"
+    },
+    "expectedByCategory": "Gastos esperados por categoria",
+    "expectedByCategoryIntro": "Despesas comprometidas e assumidas agrupadas por categoria, usando a categoria de cada conta.",
+    "expectedBarName": "Esperado",
+    "expectedIncome": "Renda esperada",
+    "none": "Nenhuma.",
+    "committedExpenses": "Despesas comprometidas",
+    "committedExpensesTooltip": "Contas planejadas e o cronograma próprio de pagamento das dívidas — praticamente certo",
+    "assumedExpenses": "Despesas assumidas",
+    "assumedExpensesTooltip": "Sua meta/média de gasto no cartão, mais qualquer cobrança futura conhecida no cartão sem histórico de transações ainda — uma estimativa, não um fato",
+    "outlookTitle": "Saldo projetado nos próximos meses",
+    "outlookIntro": "A mesma conta de entrada esperada − saída esperada, para cada mês projetado — assim {{period}} aparece em contexto (\"este mês está incomumente apertado, ou é só o que vem por aí\") em vez de isolado. A barra contornada é o mês que você está planejando; clique em qualquer outra para ir até ela."
+  },
+  "chart": {
+    "moneyInOutTitle": "Entradas vs. saídas por mês",
+    "moneyInOutIntro": "Exclui transferências entre suas próprias contas e movimentações para/de investimentos — isso continua sendo seu dinheiro, não é gasto nem renda. Para meses futuros ainda não há fluxo de caixa real, então os segmentos esmaecidos mostram o que é esperado, em dois níveis de confiança — o tom mais escuro \"comprometido\" são contas recorrentes reais e o cronograma próprio das dívidas; o tom mais claro \"assumido\" é sua meta/média de gasto no cartão representando gastos que ainda não aconteceram. A linha dourada é sua média móvel de saldo dos últimos 3 meses — a direção real, sem que um mês incomumente caro ou leve pareça uma tendência. Clique em uma barra para ir até aquele mês.",
+    "legend": {
+      "in": "Entrada",
+      "expectedIn": "Entrada esperada",
+      "out": "Saída",
+      "expectedOutCommitted": "Saída esperada (comprometida)",
+      "expectedOutAssumed": "Saída esperada (assumida)",
+      "netRollingAvg": "Saldo (média 3 meses)"
+    },
+    "balanceOverTime": "Saldo ao longo do tempo",
+    "balanceOverTimeIntro": "Dinheiro disponível mais as posições de investimento atuais (meses passados são uma leve subestimativa para investimentos — só recebemos o valor de hoje da Pluggy, não um histórico, então o rendimento acumulado não é refletido). Clique em um ponto para ir até aquele mês.",
+    "balanceLineLabel": "Saldo",
+    "topCategoriesTitle": "Principais categorias ao longo do tempo",
+    "topCategoriesIntro": "Um gráfico de pizza não mostra se uma categoria está crescendo aos poucos — este mostra. Suas {{count}} maiores categorias de despesa neste período, cada uma como uma linha. Meses futuros usam contas recorrentes categorizadas (as transações reais ainda não existem), então uma linha não simplesmente cai a zero ao entrar no futuro. Clique em um ponto para ir até aquele mês.",
+    "cardSpendTitlePerMonth": "Gasto no cartão de crédito por mês",
+    "cardSpendTitleThisMonth": "Gasto no cartão de crédito este mês",
+    "byCard": "Por cartão",
+    "byCategory": "Por categoria",
+    "cardSpendIntroPerMonth": "O que você gastou em cada cartão a cada mês — separado do fluxo de caixa bancário acima, para que uma compra no cartão e o pagamento da fatura que depois a quita não sejam contados duas vezes. Clique em uma barra para ir até aquele mês.",
+    "cardSpendIntroThisMonth": "O que você gastou em cada cartão este mês — separado do fluxo de caixa bancário acima, para que uma compra no cartão e o pagamento da fatura que depois a quita não sejam contados duas vezes.",
+    "cardSpendByCardExtra": " Valores reais já agendados (ex.: uma parcela já com data) aparecem sólidos. Por cima, dois níveis mais claros: \"comprometido\" é uma conta recorrente com histórico real por trás; \"assumido\" é uma cobrança futura conhecida sem histórico ainda (ex.: uma viagem planejada) — ou, para o mês atual, o quanto da sua meta de gasto no cartão ainda não foi cobrado, para que um mês ainda em andamento não pareça um despenhadeiro ao lado de um mês já concluído.",
+    "cardSpendByCategoryExtra": " Empilhado por categoria em vez de por cartão — para onde o dinheiro realmente foi, mês a mês.",
+    "expectedCommitted": "Esperado (comprometido)",
+    "expectedAssumed": "Esperado (assumido)",
+    "goalLabel": "Meta ({{amount}})",
+    "inOutByCategoryTitle": "Entradas / saídas por categoria",
+    "includeCardActivity": "Incluir atividade do cartão de crédito",
+    "inOutIncludedNote": "As compras no cartão contam individualmente e o pagamento da fatura que as quita fica de fora, para que nada seja contado duas vezes — por isso os totais aqui podem ficar maiores que os valores de Entradas / Saídas só do banco, acima.",
+    "inOutExcludedNote": "Somente transações bancárias — a atividade do cartão de crédito está excluída.",
+    "clickSliceHint": "Clique em uma fatia ou item da legenda para ver as transações por trás dela.",
+    "pieEmpty": "Nenhuma transação neste período."
+  },
+  "drilldown": {
+    "groupByDescription": "Agrupar por descrição",
+    "close": "Fechar",
+    "empty": "Nenhuma transação nesta categoria para o período selecionado."
+  }
+}

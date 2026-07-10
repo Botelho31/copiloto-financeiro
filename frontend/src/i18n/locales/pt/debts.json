@@ -1,0 +1,206 @@
+{
+  "directions": {
+    "owedByMe": "Peguei emprestado (eu devo)",
+    "owedToMe": "Emprestei (me devem)"
+  },
+  "loanTypeOptions": {
+    "none": "Nenhum (não é um empréstimo formal)",
+    "price": "PRICE (parcela constante)",
+    "sac": "SAC (amortização constante)"
+  },
+  "direction": {
+    "owe": "Eu devo",
+    "owedToMe": "Me devem"
+  },
+  "roles": {
+    "borrow": "Pegar emprestado (recebi isso)",
+    "lend": "Emprestar (dei isso)",
+    "payOff": "Quitação (um pagamento)"
+  },
+  "roleShort": {
+    "borrow": "Peguei emprestado",
+    "lend": "Emprestei",
+    "pay_off": "Quitação"
+  },
+  "linker": {
+    "searchPlaceholder": "Buscar transações para vincular…",
+    "searching": "Buscando…",
+    "noMatches": "Nenhuma transação correspondente (já vinculada, ou anterior ao início desta dívida).",
+    "linkTitle": "Vincular"
+  },
+  "interestRate": {
+    "label": "Taxa de juros (ao mês)",
+    "unit": "% a.m.",
+    "annual": "({{rate}}% a.a.)",
+    "preview": "→ saldo devedor restante {{remaining}} ({{interest}} de juros), {{total}} de juros pagos até agora"
+  },
+  "loanType": {
+    "label": "Tipo de empréstimo"
+  },
+  "startDate": {
+    "label": "Data de início",
+    "future": " (futura)"
+  },
+  "principal": {
+    "label": "Principal"
+  },
+  "matchingRule": {
+    "toggle": "Regra de correspondência",
+    "notSet": " (não definida)",
+    "label": "Regra de correspondência",
+    "placeholder": "Como classificar exatamente as transações futuras desta dívida — ex.: padrão da contraparte, limite de valor, papel. É isso que eu vou seguir quando você pedir para atualizar esta dívida."
+  },
+  "linkedDebts": {
+    "toggle": "Dívidas vinculadas ({{count}})",
+    "label": "Dívidas vinculadas (o principal total delas conta para o total desta dívida)",
+    "notCountedYetTitle": "Ainda não começou — não é contada até começar",
+    "notCountedYet": "ainda não contada",
+    "unlinkTitle": "Desvincular",
+    "selectPlaceholder": "Vincular outra dívida…",
+    "linkButton": "Vincular"
+  },
+  "tile": {
+    "starts": "Começa em {{date}}",
+    "remaining": "Restante",
+    "paid": "Pago"
+  },
+  "payoffProjection": {
+    "label": "Quitação projetada",
+    "shortfall": "Com {{basis}} de {{amount}}/mês, isso nem cobre os juros — o saldo devedor vai continuar crescendo, não diminuindo.",
+    "basisPlanned": "o pagamento planejado",
+    "basisAverage": "a média recente de pagamento",
+    "months_one": "{{count}} mês",
+    "months_other": "{{count}} meses",
+    "approxDate": "(~{{date}})",
+    "basedOn": "Com base{{basis}} de {{amount}}/mês{{rate}}.",
+    "basedOnPlanned": " no pagamento planejado do lançamento recorrente vinculado",
+    "basedOnAverage": " na sua média recente de pagamento",
+    "atRate": " com juros de {{rate}}% ao mês"
+  },
+  "cadence": {
+    "weekly": "toda semana",
+    "monthly": "todo mês",
+    "quarterly": "todo trimestre",
+    "yearly": "todo ano",
+    "once": "como pagamento único"
+  },
+  "planBillRow": {
+    "linkedElsewhere": "atualmente paga \"{{name}}\" — marcar move para cá",
+    "anotherDebt": "outra dívida"
+  },
+  "paymentPlan": {
+    "label": "Plano de pagamento",
+    "loanFormula": "— calculado pela fórmula do empréstimo {{loanType}}: {{rate}}% a.m. ao longo de {{term}} meses{{sacNote}}.",
+    "sacNote": " (a parcela diminui à medida que o principal é amortizado)",
+    "extraAmortization": "{{cadence}} — amortização extra do lançamento recorrente \"{{name}}\", além da parcela acima.",
+    "fromBill": "{{cadence}} — do lançamento recorrente \"{{name}}\".",
+    "automatic": "— inferido pela média dos seus {{count}} pagamentos vinculados.",
+    "combinedPrefix": "Combinado, cada ",
+    "boundedBy": "Limitado pelo que ainda resta ({{remaining}}).",
+    "noneFewPayments": "Ainda sem cronograma — menos de dois pagamentos estão vinculados, então não há periodicidade para inferir.",
+    "noneTooVaried": "Sem cronograma — os pagamentos vinculados variam demais para inferir um valor confiável.",
+    "noneStaysOut": " Esta dívida fica fora das projeções de fluxo de caixa até que um lançamento de pagamento seja vinculado abaixo{{suffix}}.",
+    "noneSuffixAccumulate": " ou mais pagamentos se acumularem",
+    "paidByBills": "Pago por lançamento(s) recorrente(s)",
+    "noBillsAvailable": "Nenhum lançamento confirmado disponível para vincular ainda.",
+    "noBillsLinked": "Nenhum lançamento vinculado ainda — vincule um abaixo para deixar explícito o pagamento desta dívida.",
+    "linkAnotherBill": "Vincular {{whichBill}} lançamento ({{count}} disponíveis)",
+    "another": "outro",
+    "a": "um",
+    "filterPlaceholder": "Filtrar por nome ou categoria…",
+    "noBillsMatch": "Nenhum lançamento corresponde a \"{{filter}}\".",
+    "overrideLabel": "Não inferir cronograma pelo histórico de pagamentos (usar apenas os lançamentos acima)",
+    "overrideTitle": "Pular a heurística baseada no histórico de pagamentos mesmo que ela passasse — útil quando os lançamentos acima já dão conta dos pagamentos desta dívida.",
+    "footerLoan": "A parcela mensal de um empréstimo formal sempre vem da fórmula do empréstimo, sem mudar — mas qualquer lançamento vinculado aqui conta como uma amortização extra, além dela, quitando o saldo devedor (e a dívida) mais rápido do que o cronograma simples sozinho.",
+    "footerOther": "Cada lançamento vinculado soma seu valor e periodicidade ao pagamento esperado desta dívida, limitado pelo que ainda resta — explícito, em vez de apenas inferido do histórico.",
+    "noProjectedPayments": "Nenhum pagamento projetado nos próximos {{horizon}} meses{{suffix}}.",
+    "noProjectedSuffix": " — esta dívida só começa em {{date}}"
+  },
+  "trajectoryChart": {
+    "titleFuture": "Cronograma projetado (ainda não começou)",
+    "titleWithRate": "Crescendo com juros vs. sendo quitada",
+    "titlePlain": "Saldo devedor ao longo do tempo",
+    "avoided": "em juros evitados até agora — sem pagamento, esta dívida estaria em {{ifUnpaid}} hoje em vez de {{actual}}.",
+    "legendCashBalance": "Meu saldo",
+    "legendIfNeverPaid": "Se nunca pago",
+    "legendBalanceReal": "Saldo (real)",
+    "legendBalanceProjected": "Saldo (projetado)",
+    "canPayOffHere": "Você pode quitar aqui",
+    "notEnoughHistory": "Ainda sem histórico suficiente para o gráfico — assim que alguns pagamentos forem vinculados, o gráfico de saldo ao longo do tempo desta dívida aparece aqui.",
+    "canPayOffNote": "Você pode quitar aqui: {{month}} — o mês mais cedo em que só o seu saldo de caixa projetado já cobre tudo que ainda é devido nesta dívida, principal e juros, sem esperar o cronograma normal terminar.",
+    "captionFuture": "Esta dívida ainda não começou, então não há histórico real — a linha inteira é projetada{{source}}, a partir da própria data de início.",
+    "captionFutureSourceSchedule": " a partir do próprio cronograma do empréstimo",
+    "captionFutureSourceBill": " a partir do lançamento de pagamento vinculado",
+    "captionFutureSourcePlanned": " a partir do pagamento planejado",
+    "captionWithRate": "A linha terracota é esta dívida crescendo a juros de {{rate}}% ao mês sem nunca ser paga; a linha verde é o saldo com pagamentos — sólida onde é real{{source}}. A diferença entre elas é o quanto vale a pena quitá-la.",
+    "captionWithRateSourceSchedule": ", tracejada onde projetada a partir do próprio cronograma do empréstimo",
+    "captionWithRateSourceBill": ", tracejada onde projetada a partir do lançamento de pagamento vinculado",
+    "captionWithRateSourceHeuristic": ", tracejada onde projetada a partir da sua média recente de pagamento",
+    "captionPlain": "O saldo restante conforme cada pagamento foi lançado — sólida onde é real{{source}}.",
+    "captionPlainSourceBill": ", tracejada onde projetada a partir do lançamento de pagamento vinculado",
+    "captionPlainSourceHeuristic": ", tracejada onde projetada a partir da sua média recente de pagamento",
+    "totalInterestLifetime": "Total de juros ao longo da vida desta dívida",
+    "totalInterestRunning": "Total de juros até agora + projetado",
+    "totalPaidLifetime": "Total pago até a quitação",
+    "totalPaidRunning": "Total pago até agora + projetado",
+    "notTrueEndOfLoan": "O pagamento planejado não supera claramente os juros, então isso é apenas um total corrente até o horizonte exibido acima, não um valor final real do empréstimo."
+  },
+  "overviewChart": {
+    "title": "Todas as dívidas — saldo ao longo do tempo",
+    "legendOwedReal": "Eu devo (real)",
+    "legendOwedProjected": "Eu devo (projetado)",
+    "legendLentReal": "Me devem (real)",
+    "legendLentProjected": "Me devem (projetado)",
+    "caption": "Todas as dívidas somadas por direção — terracota é o que você deve, verde é o que devem a você (mantidos separados, sem compensação entre eles). Sólido é histórico real; tracejado projeta cada dívida adiante pelo seu próprio cronograma ou pagamentos recentes, mantendo estável onde não há base para projetar."
+  },
+  "balanceScheduleTooltip": {
+    "principalOwed": "Principal devido: {{amount}}",
+    "interestOwed": "Juros ainda devidos: {{amount}}",
+    "totalOwed": "Total devido: {{amount}}"
+  },
+  "balanceScheduleChart": {
+    "title": "O que ainda é devido — principal vs. juros",
+    "legendPrincipal": "Principal devido",
+    "legendInterest": "Juros ainda devidos",
+    "caption": "Ambos chegam a zero juntos, exatamente na quitação. Só é exato para um empréstimo formal (com taxa e cronograma PRICE/SAC definidos) — uma dívida quitada por um lançamento vinculado ou inferida do histórico aparece inteiramente como principal, já que não há fórmula para separar."
+  },
+  "card": {
+    "paidSoFar": "Pago até agora",
+    "remaining": "Restante",
+    "ofWhichInterest": "dos quais {{amount}} de juros",
+    "interestPaid": "Juros pagos",
+    "split": "Divisão",
+    "finishDate": "Data de quitação",
+    "linkedTransactions": "Transações vinculadas ({{count}})",
+    "markPaidOff": "Marcar como quitada",
+    "paidOff": "Quitada",
+    "deleteTitle": "Excluir",
+    "interestColumn": "Juros",
+    "roleColumn": "Papel",
+    "unlinkTitle": "Desvincular"
+  },
+  "page": {
+    "backToAll": "Voltar para todas as dívidas",
+    "active": "Ativas",
+    "future": "Futuras",
+    "futureNote": "Ainda não começou — a data de início ainda está por vir.",
+    "addDebt": "Adicionar dívida",
+    "addDebtDescription": "Um principal fixo é para um empréstimo simples. Uma porcentagem de divisão é para uma despesa compartilhada que você adiantou (ex.: o custo de uma construção dividido 50/50) — vincule a(s) transação(ões) da compra compartilhada como \"pegar emprestado\"/\"emprestar\" e o valor devido cresce automaticamente conforme você vincula mais.",
+    "name": "Nome",
+    "direction": "Direção",
+    "counterparty": "Contraparte",
+    "principalMode": "Modo de principal",
+    "modeFixed": "Valor fixo",
+    "modeSplit": "% de divisão das transações vinculadas",
+    "principalAmount": "Valor do principal",
+    "splitPercentage": "Porcentagem de divisão",
+    "expectedTotal": "Total esperado (com juros)",
+    "optional": "opcional",
+    "startDate": "Data de início",
+    "targetPayoffDate": "Data alvo de quitação",
+    "loanType": "Tipo de empréstimo",
+    "submit": "Adicionar dívida",
+    "matchingRuleLabel": "Regra de correspondência (opcional, pode adicionar depois)",
+    "paidOffHeading": "Quitadas"
+  }
+}

@@ -118,6 +118,12 @@ export interface ProjectedMonth {
      * bill — lets category tables attribute the amount to that bill's category
      * even though the line itself belongs to the debt. */
     billId?: number;
+    /** How much of this line's amount is interest rather than principal —
+     * only set on a "debt" line for a formal loan (loan_type + rate on
+     * file), where the PRICE/SAC formula makes the split exact. A
+     * history/bill-driven debt line has no formula to split from, so it's
+     * left unset there rather than guessed at. */
+    interestPortion?: number;
   }[];
   /** Bills flagged is_card_expense — informational only, not part of net/balance (already folded into the cardSpend line above). */
   cardExpenseBills: { id: number; name: string; amount: number }[];
@@ -198,6 +204,20 @@ export interface Debt {
   // (on top of interest_paid_so_far) — null whenever there's no rate to
   // accrue interest at all.
   projected_remaining_interest: number | null;
+  // Month-by-month "what's still owed" from today (or start_date, for a
+  // future debt) through projected_finish_date — principal_owed is the
+  // balance right after that month's payment; interest_owed is everything
+  // still left to accrue from that point through payoff (a suffix sum, not
+  // just that one month's slice), so both reach exactly 0 together at the
+  // final entry. Empty whenever projected_finish_date is null (same
+  // conditions apply — no basis to project, or the debt isn't active).
+  projected_balance_schedule: DebtBalanceScheduleEntry[];
+}
+
+export interface DebtBalanceScheduleEntry {
+  month: string;
+  principal_owed: number;
+  interest_owed: number;
 }
 
 export type DebtPaymentPlan =

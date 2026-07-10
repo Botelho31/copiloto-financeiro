@@ -1,0 +1,206 @@
+{
+  "directions": {
+    "owedByMe": "I borrowed (I owe)",
+    "owedToMe": "I lent (owed to me)"
+  },
+  "loanTypeOptions": {
+    "none": "None (not a formal loan)",
+    "price": "PRICE (constant payment)",
+    "sac": "SAC (constant amortization)"
+  },
+  "direction": {
+    "owe": "I owe",
+    "owedToMe": "Owed to me"
+  },
+  "roles": {
+    "borrow": "Borrow (I received this)",
+    "lend": "Lend (I gave this)",
+    "payOff": "Pay off (a repayment)"
+  },
+  "roleShort": {
+    "borrow": "Borrow",
+    "lend": "Lend",
+    "pay_off": "Pay off"
+  },
+  "linker": {
+    "searchPlaceholder": "Search transactions to link…",
+    "searching": "Searching…",
+    "noMatches": "No matching transactions (already linked, or before this debt started).",
+    "linkTitle": "Link"
+  },
+  "interestRate": {
+    "label": "Interest rate (per month)",
+    "unit": "% a.m.",
+    "annual": "({{rate}}% a.a.)",
+    "preview": "→ remaining {{remaining}} ({{interest}} interest), {{total}} interest paid so far"
+  },
+  "loanType": {
+    "label": "Loan type"
+  },
+  "startDate": {
+    "label": "Start date",
+    "future": " (future)"
+  },
+  "principal": {
+    "label": "Principal"
+  },
+  "matchingRule": {
+    "toggle": "Matching rule",
+    "notSet": " (not set)",
+    "label": "Matching rule",
+    "placeholder": "Exactly how to classify future transactions against this debt — e.g. counterparty pattern, amount threshold, role. This is what I'll follow when you ask me to update this debt."
+  },
+  "linkedDebts": {
+    "toggle": "Linked debts ({{count}})",
+    "label": "Linked debts (their full principal counts toward this debt's total)",
+    "notCountedYetTitle": "Hasn't started yet — not counted until it has",
+    "notCountedYet": "not counted yet",
+    "unlinkTitle": "Unlink",
+    "selectPlaceholder": "Link another debt…",
+    "linkButton": "Link"
+  },
+  "tile": {
+    "starts": "Starts {{date}}",
+    "remaining": "Remaining",
+    "paid": "Paid"
+  },
+  "payoffProjection": {
+    "label": "Projected payoff",
+    "shortfall": "At {{basis}} of {{amount}}/mo, this isn't even covering the interest — the balance will keep growing, not shrink.",
+    "basisPlanned": "the planned payment",
+    "basisAverage": "the recent average payment",
+    "months_one": "{{count}} month",
+    "months_other": "{{count}} months",
+    "approxDate": "(~{{date}})",
+    "basedOn": "Based on {{basis}} of {{amount}}/mo{{rate}}.",
+    "basedOnPlanned": "the planned payment from the linked bill",
+    "basedOnAverage": "your recent average payment",
+    "atRate": " at {{rate}}% monthly interest"
+  },
+  "cadence": {
+    "weekly": "every week",
+    "monthly": "every month",
+    "quarterly": "every quarter",
+    "yearly": "every year",
+    "once": "as a single payment"
+  },
+  "planBillRow": {
+    "linkedElsewhere": "currently pays \"{{name}}\" — checking moves it here",
+    "anotherDebt": "another debt"
+  },
+  "paymentPlan": {
+    "label": "Payment plan",
+    "loanFormula": "— computed from the {{loanType}} loan formula: {{rate}}% a.m. over {{term}} months{{sacNote}}.",
+    "sacNote": " (the payment declines as principal amortizes)",
+    "extraAmortization": "{{cadence}} — extra amortization from the \"{{name}}\" recurring bill, on top of the installment above.",
+    "fromBill": "{{cadence}} — from the \"{{name}}\" recurring bill.",
+    "automatic": "— inferred from the average of your {{count}} linked repayments.",
+    "combinedPrefix": "Combined, each ",
+    "boundedBy": "Bounded by what's still remaining ({{remaining}}).",
+    "noneFewPayments": "No schedule yet — fewer than two repayments are linked, so there's no cadence to infer.",
+    "noneTooVaried": "No schedule — the linked repayments vary too much to infer a reliable amount.",
+    "noneStaysOut": " This debt stays out of cash-flow projections until a payment bill is linked below{{suffix}}.",
+    "noneSuffixAccumulate": " or more repayments accumulate",
+    "paidByBills": "Paid by recurring bill(s)",
+    "noBillsAvailable": "No confirmed bills available to link yet.",
+    "noBillsLinked": "No bills linked yet — link one below to make this debt's payment explicit.",
+    "linkAnotherBill": "Link {{whichBill}} bill ({{count}} available)",
+    "another": "another",
+    "a": "a",
+    "filterPlaceholder": "Filter by name or category…",
+    "noBillsMatch": "No bills match \"{{filter}}\".",
+    "overrideLabel": "Don't infer a schedule from payment history (use only the bills above)",
+    "overrideTitle": "Skip the payment-history heuristic even if it would otherwise pass — useful once the bills above are already accounting for this debt's payments.",
+    "footerLoan": "A formal loan's monthly installment always comes from the loan formula, unchanged — but any bill linked here counts as an extra amortization payment on top of it, paying the balance down (and off) faster than the plain schedule alone.",
+    "footerOther": "Every linked bill's amount and cadence adds to this debt's expected payment, bounded by what's still remaining — explicit, instead of only inferred from history.",
+    "noProjectedPayments": "No projected payments in the next {{horizon}} months{{suffix}}.",
+    "noProjectedSuffix": " — this debt only starts {{date}}"
+  },
+  "trajectoryChart": {
+    "titleFuture": "Projected schedule (hasn't started yet)",
+    "titleWithRate": "Growing with interest vs being paid off",
+    "titlePlain": "Balance over time",
+    "avoided": "of interest avoided so far — untouched, this debt would be {{ifUnpaid}} today instead of {{actual}}.",
+    "legendCashBalance": "My balance",
+    "legendIfNeverPaid": "If never paid",
+    "legendBalanceReal": "Balance (real)",
+    "legendBalanceProjected": "Balance (projected)",
+    "canPayOffHere": "You can pay off here",
+    "notEnoughHistory": "Not enough history to chart yet — once a couple of repayments are linked, this debt's balance-over-time chart appears here.",
+    "canPayOffNote": "You can pay off here: {{month}} — the earliest month your projected cash balance alone covers everything still owed on this debt, principal and interest, without waiting for the regular schedule to finish it off.",
+    "captionFuture": "This debt hasn't started yet, so there's no real history — the whole line is projected{{source}}, starting from its own start date.",
+    "captionFutureSourceSchedule": " from the loan's own schedule",
+    "captionFutureSourceBill": " from the linked payment bill",
+    "captionFutureSourcePlanned": " from the planned payment",
+    "captionWithRate": "The rust line is this debt compounding at {{rate}}% a month with nothing ever paid; the green line is the balance with payments — solid where real{{source}}. The gap between them is what paying it down is worth.",
+    "captionWithRateSourceSchedule": ", dashed where projected from the loan's own schedule",
+    "captionWithRateSourceBill": ", dashed where projected from the linked payment bill",
+    "captionWithRateSourceHeuristic": ", dashed where projected from your recent average payment",
+    "captionPlain": "The remaining balance as each repayment posted — solid where real{{source}}.",
+    "captionPlainSourceBill": ", dashed where projected from the linked payment bill",
+    "captionPlainSourceHeuristic": ", dashed where projected from your recent average payment",
+    "totalInterestLifetime": "Total interest over the life of this debt",
+    "totalInterestRunning": "Total interest so far + projected",
+    "totalPaidLifetime": "Total paid by payoff",
+    "totalPaidRunning": "Total paid so far + projected",
+    "notTrueEndOfLoan": "The planned payment doesn't clearly outpace interest, so this is only a running total through the charted horizon above, not a true end-of-loan figure."
+  },
+  "overviewChart": {
+    "title": "All debts — balance over time",
+    "legendOwedReal": "I owe (real)",
+    "legendOwedProjected": "I owe (projected)",
+    "legendLentReal": "Owed to me (real)",
+    "legendLentProjected": "Owed to me (projected)",
+    "caption": "Every debt summed by direction — rust is what you owe, green is owed to you (kept separate, not netted). Solid is real history; dashed carries each debt forward on its own schedule or recent payments, holding flat where there's nothing to project from."
+  },
+  "balanceScheduleTooltip": {
+    "principalOwed": "Principal owed: {{amount}}",
+    "interestOwed": "Interest still owed: {{amount}}",
+    "totalOwed": "Total owed: {{amount}}"
+  },
+  "balanceScheduleChart": {
+    "title": "What's still owed — principal vs. interest",
+    "legendPrincipal": "Principal owed",
+    "legendInterest": "Interest still owed",
+    "caption": "Both reach zero together right at payoff. Only exact for a formal loan (rate + PRICE/SAC schedule on file) — a debt paid down by a linked bill or inferred from history shows entirely as principal, since there's no formula to split it from."
+  },
+  "card": {
+    "paidSoFar": "Paid so far",
+    "remaining": "Remaining",
+    "ofWhichInterest": "of which {{amount}} interest",
+    "interestPaid": "Interest paid",
+    "split": "Split",
+    "finishDate": "Finish date",
+    "linkedTransactions": "Linked transactions ({{count}})",
+    "markPaidOff": "Mark paid off",
+    "paidOff": "Paid off",
+    "deleteTitle": "Delete",
+    "interestColumn": "Interest",
+    "roleColumn": "Role",
+    "unlinkTitle": "Unlink"
+  },
+  "page": {
+    "backToAll": "Back to all debts",
+    "active": "Active",
+    "future": "Future",
+    "futureNote": "Hasn't started yet — its start date is still ahead.",
+    "addDebt": "Add a debt",
+    "addDebtDescription": "A fixed principal is for a simple loan. A split percentage is for a shared expense you fronted (e.g. a house-build cost split 50/50) — link the shared purchase transaction(s) as \"borrow\"/\"lend\" and the amount owed grows automatically as you link more.",
+    "name": "Name",
+    "direction": "Direction",
+    "counterparty": "Counterparty",
+    "principalMode": "Principal mode",
+    "modeFixed": "Fixed amount",
+    "modeSplit": "Split % of linked transactions",
+    "principalAmount": "Principal amount",
+    "splitPercentage": "Split percentage",
+    "expectedTotal": "Expected total (with interest)",
+    "optional": "optional",
+    "startDate": "Start date",
+    "targetPayoffDate": "Target payoff date",
+    "loanType": "Loan type",
+    "submit": "Add debt",
+    "matchingRuleLabel": "Matching rule (optional, can add later)",
+    "paidOffHeading": "Paid off"
+  }
+}

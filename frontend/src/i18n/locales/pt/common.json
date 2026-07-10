@@ -1,0 +1,35 @@
+{
+  "brand": "Controle Financeiro",
+  "nav": {
+    "dashboard": "Painel",
+    "transactions": "Transações",
+    "bills": "Pagamentos Planejados",
+    "debts": "Dívidas",
+    "projections": "Projeções"
+  },
+  "logout": "Sair",
+  "language": {
+    "en": "Inglês",
+    "pt": "Português"
+  },
+  "period": {
+    "month": "Mês",
+    "quarter": "Trimestre",
+    "semester": "Semestre",
+    "year": "Ano",
+    "custom": "Personalizado",
+    "allTime": "Todo o período",
+    "previousPeriod": "Período anterior",
+    "nextPeriod": "Próximo período"
+  },
+  "table": {
+    "date": "Data",
+    "description": "Descrição",
+    "amount": "Valor",
+    "count": "Quantidade",
+    "total": "Total",
+    "category": "Categoria",
+    "tag": "Etiqueta"
+  },
+  "noTransactionsForFilters": "Nenhuma transação para agrupar com os filtros selecionados."
+}
