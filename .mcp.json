@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "budget-tracker": {
+    "copiloto-financeiro": {
       "command": "bun",
       "args": [
-        "--env-file=/Users/lucasbotelho/Developer/budget-tracker/.env",
-        "/Users/lucasbotelho/Developer/budget-tracker/backend/src/mcp-server.ts"
+        "--env-file=/Users/lucasbotelho/Developer/copiloto-financeiro/.env",
+        "/Users/lucasbotelho/Developer/copiloto-financeiro/backend/src/mcp-server.ts"
       ]
     }
   }
