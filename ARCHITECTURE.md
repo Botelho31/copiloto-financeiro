@@ -1,9 +1,12 @@
 # Architecture
 
-Self-hosted, single-user personal budget tracker. Pulls transaction history from
+Self-hosted personal budget tracker for a household. Pulls transaction history from
 [Pluggy](https://docs.pluggy.ai/) (Brazilian open-finance aggregator) once a day, stores
 it in SQLite, and turns it into categorized spending, recurring bills, debt payoff
-tracking, and a month-by-month cash-flow projection.
+tracking, and a month-by-month cash-flow projection. Login is single-admin (no
+multi-tenant auth), but the data model supports multiple household member profiles
+under that one login — each with their own Pluggy connection and accounts, rolled up
+in a combined Household view, with debts optionally shared between two people.
 
 ## Monorepo layout
 
@@ -79,8 +82,12 @@ route/service functions the HTTP API uses, so business logic isn't duplicated.
 
 ## Auth flow
 
-Single-admin app: no signup, no multi-tenant concerns. Session is a random 32-byte
-token in an httpOnly cookie, checked on every request by a global `onBeforeHandle` hook.
+Single-admin login: no signup, no multi-tenant auth concerns. Session is a random
+32-byte token in an httpOnly cookie, checked on every request by a global
+`onBeforeHandle` hook. "Household member profiles" (the `users` table — see Data model
+below) are a separate concept from login: they're per-person data scopes selected via
+a nav dropdown once already authenticated, not separate accounts with their own
+credentials.
 
 ```mermaid
 sequenceDiagram
@@ -148,11 +155,19 @@ wrong (this bit the project once — see Pluggy client for the fix).
 
 ## Data model (core tables)
 
-SQLite, 20 sequential migrations (`backend/src/db/migrations/*.sql`), applied
+SQLite, sequential migrations (`backend/src/db/migrations/*.sql`), applied
 automatically on boot by `db/index.ts`. Simplified ER diagram of the main entities:
 
 ```mermaid
 erDiagram
+    USERS ||--o{ ITEMS : owns
+    USERS ||--o{ ACCOUNTS : owns
+    USERS ||--o{ INVESTMENTS : owns
+    USERS ||--o{ TRANSACTIONS : owns
+    USERS ||--o{ BILLS : owns
+    USERS ||--o{ GOALS : owns
+    USERS ||--o{ DEBTS : owns
+    USERS ||--o{ DEBTS : "shared_with_user_id (optional)"
     ITEMS ||--o{ ACCOUNTS : has
     ITEMS ||--o{ INVESTMENTS : has
     ACCOUNTS ||--o{ TRANSACTIONS : has
@@ -177,6 +192,13 @@ erDiagram
         int transactions_upserted
     }
 
+    USERS {
+        int id PK
+        string name
+        string color
+        string pluggy_client_id
+        string pluggy_client_secret
+    }
     ITEMS {
         string id PK
         string status
@@ -184,6 +206,7 @@ erDiagram
     ACCOUNTS {
         string id PK
         string item_id FK
+        int user_id FK
         string type
         real balance
     }
@@ -204,6 +227,7 @@ erDiagram
     }
     BILLS {
         int id PK
+        int user_id FK
         string cadence
         real expected_amount
         int debt_id FK
@@ -211,6 +235,8 @@ erDiagram
     }
     DEBTS {
         int id PK
+        int user_id FK
+        int shared_with_user_id FK
         string direction
         real interest_rate_monthly_percent
         string loan_type
@@ -219,6 +245,16 @@ erDiagram
 
 Notable modeling decisions:
 
+- **Categories and tags stay global** (one shared taxonomy across the household) —
+  every other person-owned table (`accounts`, `transactions`, `bills`, `debts`,
+  `goals`, `investments`, `sync_log`, `items`) carries a `user_id`, backfilled onto a
+  seeded default user (id 1) so the migration that added it needed no data migration
+  script. `GET` routes accept an optional `?userId=` — omitted means "Household"
+  (every person combined), not "no filter for an unscoped table."
+- **A shared debt is still exactly one row.** `debts.shared_with_user_id` is a nullable
+  pointer to the other household member, additive on top of the pre-existing
+  `split_percentage`/`debt_links`/`debt_transactions` math — a shared debt is summed
+  once in the Household rollup, not once per party.
 - **Categories** exclude "Transfers" / "Savings & Investments" from cash-flow totals via
   `excludes_from_cashflow`, while still counting real money movement in breakdowns.
 - **Debts** support both informal IOUs (history-inferred payment schedule) and formal
@@ -240,28 +276,37 @@ producing the `ProjectedMonth[]` the frontend charts and the `shortfall` flags s
 ```mermaid
 flowchart LR
     Main["main.tsx<br>ReactDOM root, i18next init"] --> App
-    App["App.tsx<br>react-router routes"] --> Layout["Layout.tsx<br>nav shell"]
+    App["App.tsx<br>react-router routes"] --> Layout["Layout.tsx<br>nav shell + person-scope switcher"]
     Layout --> Dashboard["/  Dashboard"]
     Layout --> Transactions["/transactions"]
     Layout --> Bills["/bills"]
     Layout --> Debts["/debts"]
     Layout --> Projections["/projections"]
+    Layout --> Household["/household  combined view"]
+    Layout --> Config["/config  manage people"]
 
     subgraph DataLayer["hooks/* (one per resource)"]
-        H["useAccounts · useTransactions · useCategories<br>useBills · useDebts · useGoals<br>useInvestments · useProjections · useTags · useSettings"]
+        H["useAccounts · useTransactions · useCategories<br>useBills · useDebts · useGoals · useUsers<br>useInvestments · useProjections · useTags · useSettings"]
     end
 
-    Dashboard & Transactions & Bills & Debts & Projections --> DataLayer
+    Dashboard & Transactions & Bills & Debts & Projections & Household & Config --> DataLayer
     DataLayer -->|"apiFetch() — lib/api.ts"| Backend["Elysia /api/*"]
     DataLayer -.->|"401 -> redirect"| Login["/login"]
 ```
 
 - `lib/api.ts` centralizes fetch + error handling: a 401 response hard-redirects to
   `/login` (session expired), other non-2xx responses raise `ApiError`.
+- `lib/personScope.tsx` holds the globally-selected person (or `null` for Household),
+  persisted to `localStorage`; every resource hook reads it and appends `?userId=` to
+  its request, so switching people in the nav re-scopes the whole app at once.
 - i18next with `en`/`pt` namespaced JSON locale files per feature area
   (`i18n/locales/{en,pt}/*.json`).
 - No global state library — each page composes the resource hooks it needs; hooks own
-  their own fetch/cache lifecycle.
+  their own fetch/cache lifecycle (React Query). **Pages never call `apiFetch`,
+  `useQuery`, or `useMutation` directly** — that always goes through a named hook in
+  `hooks/*.ts`; a page or component that needs a form always delegates to its own
+  component in `components/*.tsx` rather than defining a `<form>` inline. See
+  `CONTRIBUTING.md` for the full convention.
 
 ## MCP tool server
 

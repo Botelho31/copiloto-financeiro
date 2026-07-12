@@ -3,10 +3,41 @@
 Self-hosted personal budget tracker. Pulls bank transaction history daily from
 [Pluggy](https://docs.pluggy.ai/), stores it in SQLite, and answers: how much am I
 spending, will I be able to meet upcoming costs, and if not, what do I need to adjust.
+Supports a whole household — each person keeps their own bank connection and data, and
+debts can be explicitly shared between people.
 
 A Bun-workspace monorepo: `backend/` is the Elysia server (API + auth + cron sync +
 migrations), `frontend/` is a Vite + React SPA, and `shared/` holds the TypeScript types
-for the wire format between them.
+for the wire format between them. See `ARCHITECTURE.md` for how it fits together and
+`backend/API-ARCHITECTURE.md` for what belongs on which backend route. Contributing?
+Read `CONTRIBUTING.md` first.
+
+## Philosophy
+
+This is a personal tool built for one household, not a product — every decision below
+follows from that.
+
+- **The backend is the source of truth for every number.** Anything that looks like a
+  calculation — a debt payoff date, a category breakdown, a net-worth figure — is
+  computed once, on the server, and shipped to the frontend as a finished value. The
+  frontend renders; it doesn't re-derive. This was violated a few times early on (see
+  `backend/API-ARCHITECTURE.md`'s fix log) and every time it caused the UI to quietly
+  disagree with itself across pages.
+- **Real data over fixtures, when it matters.** Pluggy's pagination and balance-sign
+  quirks only ever surfaced when testing against a real bank connection — a hand-rolled
+  fixture would have happily hidden the same bug. Automated tests still run against a
+  real (if throwaway) SQLite database rather than a mocked ORM, for the same reason.
+- **Additive over rewritten.** New features (household member profiles, shared debts)
+  were built as extensions of the existing single-person model rather than a redesign —
+  a shared debt is still one row, now with an optional pointer to who it's shared with,
+  not a new subsystem.
+- **No more layers than the problem needs.** The backend is routes + services, not
+  routes + services + repositories — a third layer was considered and dropped because
+  nothing in this codebase needed the extra indirection. Add structure when duplication
+  or a real bug demands it, not in advance of one.
+- **One person's tool, sized like one.** No feature flags, no multi-tenant auth, no
+  premature abstraction for hypothetical future users. It's meant to be small enough
+  that one person can hold the whole thing in their head.
 
 ## Setup
 
@@ -18,8 +49,10 @@ for the wire format between them.
 3. Run the backend + frontend dev servers (in separate terminals):
    - `bun run dev` — backend on `:3000` with hot reload (also runs DB migrations on boot)
    - `bun run dev:frontend` — Vite dev server, proxies `/api` and `/public` to the backend
-4. Visit the Vite dev server URL's `/setup` to create the admin account (this app
-   supports exactly one user).
+4. Visit the Vite dev server URL's `/setup` to create the admin account. Login is
+   single-admin (one household, no signup), but once you're in you can add multiple
+   household member profiles from `/config` — each with their own Pluggy connection,
+   accounts, and transactions — and roll them up in the `/household` view.
 
 ## Development
 
