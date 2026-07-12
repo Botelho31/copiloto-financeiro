@@ -1,13 +1,45 @@
 {
   "name": "budget-tracker",
   "private": true,
-  "workspaces": ["backend", "frontend", "shared"],
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
   "scripts": {
     "dev": "bun --watch --jsx-import-source=@kitajs/html backend/src/index.tsx",
     "dev:frontend": "bun run --cwd frontend dev",
     "build": "bun run --cwd frontend build",
     "start": "bun --jsx-import-source=@kitajs/html backend/src/index.tsx",
     "categorize": "bun backend/src/scripts/categorize.ts",
-    "typecheck": "bun run --cwd backend typecheck && bun run --cwd frontend typecheck"
+    "typecheck": "bun run --cwd backend typecheck && bun run --cwd frontend typecheck",
+    "test": "bun run --cwd backend test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,json,md,css}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.9.5",
+    "typescript-eslint": "^8.63.0"
   }
 }
