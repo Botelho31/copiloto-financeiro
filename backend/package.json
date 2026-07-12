@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "start": "bun run src/index.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@kitajs/ts-html-plugin": "^4.1.4",

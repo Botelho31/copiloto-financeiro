@@ -1,0 +1,6 @@
+[test]
+# Runs before any test file's imports — sets DB_PATH to a fresh temp SQLite
+# file (and dummy env vars config.ts requires) before backend/src/db/index.ts
+# is ever evaluated, so the whole test run migrates and operates against a
+# real, throwaway database instead of the dev one at data/budget.sqlite.
+preload = ["./src/test/preload.ts"]
