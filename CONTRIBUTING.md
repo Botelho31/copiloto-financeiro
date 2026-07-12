@@ -7,7 +7,7 @@ sole maintainer or a future contributor.
 ## Setup
 
 Follow `README.md`'s Setup section first. In short: `bun install`, copy `.env.example`
-to `.env`, `bun run dev` + `bun run dev:frontend` in separate terminals.
+to `.env`, `bun run dev` (backend + frontend together).
 
 ## Before opening a PR / committing
 
@@ -24,9 +24,8 @@ but the four commands above aren't part of the hook and should be run manually b
 pushing.
 
 There is no frontend test suite yet — frontend changes should be manually smoke-tested
-in a running dev server (`bun run dev` + `bun run dev:frontend`) before considering the
-change done, especially anything touching Dashboard.tsx's three modes or a mutation
-hook's invalidation list.
+in a running dev server (`bun run dev`) before considering the change done, especially
+anything touching Dashboard.tsx's three modes or a mutation hook's invalidation list.
 
 ## Where things go
 

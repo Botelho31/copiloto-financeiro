@@ -25,8 +25,9 @@ flowchart LR
     frontend -- "fetch /api/* (dev: Vite proxy)" --> backend
 ```
 
-- `bun run dev` — backend on `:3000` with hot reload (migrations run on boot)
-- `bun run dev:frontend` — Vite dev server, proxies `/api` and `/public` to the backend
+- `bun run dev` — backend + frontend dev servers together (via `concurrently`); or
+  `bun run dev:backend` (`:3000`, hot reload, migrations run on boot) and
+  `bun run dev:frontend` (Vite, proxies `/api` and `/public` to the backend) separately
 - `bun run build` / `bun run start` — production: Vite build served as static files by
   the same Elysia process (single container, single port)
 

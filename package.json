@@ -8,7 +8,8 @@
     "shared"
   ],
   "scripts": {
-    "dev": "bun --watch --jsx-import-source=@kitajs/html backend/src/index.tsx",
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "dev:backend": "bun --watch --jsx-import-source=@kitajs/html backend/src/index.tsx",
     "dev:frontend": "bun run --cwd frontend dev",
     "build": "bun run --cwd frontend build",
     "start": "bun --jsx-import-source=@kitajs/html backend/src/index.tsx",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.3",
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",

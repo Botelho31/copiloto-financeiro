@@ -14,15 +14,28 @@ Read `CONTRIBUTING.md` first.
 
 ## Philosophy
 
-This is a personal tool built for one household, not a product — every decision below
-follows from that.
+An open-source, fully local budget organizer — self-hosted end to end, your data never
+leaves your own server except to talk to Pluggy for the bank sync itself. Built around
+[Open Finance Brasil](https://www.bcb.gov.br/estabilidadefinanceira/openfinance) via
+Pluggy, so it's 100% functional with Brazilian banks out of the box, not a generic tool
+retrofitted for one region. Meant to be forked and adapted, not just deployed — the
+household model, categories, and rules are all yours to reshape for how your own
+finances actually work. An MCP server (`backend/src/mcp-server.ts`) is a first-class way
+to use the app, not an afterthought bolted onto the REST API — the same domain
+operations available over HTTP are available to Claude (or any MCP client), so "reconcile
+this month's debts" or "add category rules for these vendors" can be a conversation
+instead of a form.
+
+A few concrete principles that follow from that:
 
 - **The backend is the source of truth for every number.** Anything that looks like a
   calculation — a debt payoff date, a category breakdown, a net-worth figure — is
   computed once, on the server, and shipped to the frontend as a finished value. The
   frontend renders; it doesn't re-derive. This was violated a few times early on (see
   `backend/API-ARCHITECTURE.md`'s fix log) and every time it caused the UI to quietly
-  disagree with itself across pages.
+  disagree with itself across pages — and it's what keeps the MCP tools and the REST API
+  from ever disagreeing about what a number means, since they call the exact same
+  functions.
 - **Real data over fixtures, when it matters.** Pluggy's pagination and balance-sign
   quirks only ever surfaced when testing against a real bank connection — a hand-rolled
   fixture would have happily hidden the same bug. Automated tests still run against a
@@ -35,28 +48,40 @@ follows from that.
   routes + services + repositories — a third layer was considered and dropped because
   nothing in this codebase needed the extra indirection. Add structure when duplication
   or a real bug demands it, not in advance of one.
-- **One person's tool, sized like one.** No feature flags, no multi-tenant auth, no
-  premature abstraction for hypothetical future users. It's meant to be small enough
-  that one person can hold the whole thing in their head.
+- **Sized to be forked, not just used.** No feature flags, no multi-tenant auth, no
+  premature abstraction for hypothetical future users of _this_ deployment — but the
+  domain logic stays behind clean route/service boundaries specifically so someone
+  running their own fork can change categorization rules, add a new resource, or wire up
+  a new MCP tool without fighting the architecture to do it.
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in:
-   - `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` — from your Pluggy dashboard
-   - `PLUGGY_ITEM_IDS` — comma-separated Item IDs for your already-connected bank(s)
-   - `SESSION_SECRET` — any long random string, e.g. `openssl rand -hex 32`
+1. Copy `.env.example` to `.env`. The only value you actually need to set is
+   `SESSION_SECRET` (any long random string, e.g. `openssl rand -hex 32`) — everything
+   else in there is optional:
+   - `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` / `PLUGGY_ITEM_IDS` are a one-time
+     bootstrap only, for carrying over credentials from before household member
+     profiles existed. Pluggy credentials normally live in the database now, entered
+     per-person from `/config` after setup — leave these blank for a fresh install.
+   - `CRON_SCHEDULE` (default `0 6 * * *`) — when the daily sync runs.
+   - `MIN_BUFFER` (default `0`) — balance floor below which a projected month is
+     flagged as a shortfall.
+   - `PORT` (default `3000`) / `DB_PATH` (default `./data/budget.sqlite`).
 2. Install dependencies (single lockfile, all three workspaces): `bun install`
-3. Run the backend + frontend dev servers (in separate terminals):
-   - `bun run dev` — backend on `:3000` with hot reload (also runs DB migrations on boot)
+3. Run the dev servers: `bun run dev` runs backend + frontend together in one terminal
+   (via `concurrently`). To run them separately in two terminals instead:
+   - `bun run dev:backend` — backend on `:3000` with hot reload (also runs DB migrations
+     on boot)
    - `bun run dev:frontend` — Vite dev server, proxies `/api` and `/public` to the backend
 4. Visit the Vite dev server URL's `/setup` to create the admin account. Login is
-   single-admin (one household, no signup), but once you're in you can add multiple
-   household member profiles from `/config` — each with their own Pluggy connection,
-   accounts, and transactions — and roll them up in the `/household` view.
+   single-admin (one household, no signup). Once you're in, add each household member
+   from `/config` — name, color, and their own Pluggy Client ID/Secret/Item IDs — and
+   roll everyone up in the `/household` view.
 
 ## Development
 
-- `bun run dev` / `bun run dev:frontend` — the two dev servers described above
+- `bun run dev` — both dev servers together in one terminal; `bun run dev:backend` /
+  `bun run dev:frontend` — the same two, separately
 - `bun run build` — build the frontend (Vite → `frontend/dist`), served by the backend
   in production
 - `bun run start` — run the backend from the repo root, serving the built frontend
