@@ -1,7 +1,15 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import {
+  FiCheck,
+  FiChevronDown,
+  FiChevronRight,
+  FiEdit2,
+  FiPlus,
+  FiTrash2,
+  FiX,
+} from "react-icons/fi";
 import { CategorySelect } from "../components/CategorySelect";
 import { SortableTh } from "../components/SortableTh";
 import { useCategories } from "../hooks/useCategories";
@@ -295,11 +303,41 @@ function BillTable(props: {
     <table>
       <thead>
         <tr>
-          <SortableTh label={t("table.name")} sortKey="name" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.amount")} sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.cadence")} sortKey="cadence" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.nextDue")} sortKey="nextDue" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh
+            label={t("table.name")}
+            sortKey="name"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.category")}
+            sortKey="category"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.amount")}
+            sortKey="amount"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.cadence")}
+            sortKey="cadence"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.nextDue")}
+            sortKey="nextDue"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
           <th />
         </tr>
       </thead>
@@ -323,7 +361,11 @@ function BillTable(props: {
               <td>
                 {b.name}
                 {b.is_card_expense && (
-                  <span className="badge" title={t("form.cardExpenseHint")} style={{ marginLeft: 8 }}>
+                  <span
+                    className="badge"
+                    title={t("form.cardExpenseHint")}
+                    style={{ marginLeft: 8 }}
+                  >
                     {t("table.cardBadge")}
                   </span>
                 )}
@@ -363,19 +405,35 @@ function BillTable(props: {
               <td style={{ whiteSpace: "nowrap" }}>
                 {props.pending ? (
                   <>
-                    <button className="icon" onClick={() => props.onConfirm?.(b.id)} title={t("table.confirm")}>
+                    <button
+                      className="icon"
+                      onClick={() => props.onConfirm?.(b.id)}
+                      title={t("table.confirm")}
+                    >
                       <FiCheck />
                     </button>{" "}
-                    <button className="secondary icon" onClick={() => props.onDismiss?.(b.id)} title={t("table.dismiss")}>
+                    <button
+                      className="secondary icon"
+                      onClick={() => props.onDismiss?.(b.id)}
+                      title={t("table.dismiss")}
+                    >
                       <FiX />
                     </button>
                   </>
                 ) : (
                   <>
-                    <button className="secondary icon" onClick={() => setEditingId(b.id)} title={t("table.edit")}>
+                    <button
+                      className="secondary icon"
+                      onClick={() => setEditingId(b.id)}
+                      title={t("table.edit")}
+                    >
                       <FiEdit2 />
                     </button>{" "}
-                    <button className="danger icon" onClick={() => props.onRemove?.(b.id)} title={t("table.remove")}>
+                    <button
+                      className="danger icon"
+                      onClick={() => props.onRemove?.(b.id)}
+                      title={t("table.remove")}
+                    >
                       <FiTrash2 />
                     </button>
                   </>
@@ -389,11 +447,10 @@ function BillTable(props: {
   );
 }
 
-function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
+function ProjectedByCategory(props: { categories: Category[] }) {
   const { t } = useTranslation("bills");
   const { data: projections } = useProjections(PROJECTION_HORIZON);
   const months = (projections?.months ?? []).slice(0, PROJECTION_HORIZON);
-  const billById = new Map(props.bills.map((b) => [b.id, b]));
 
   interface CategoryRow {
     name: string;
@@ -405,23 +462,36 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
     // cardExpenseBills are kept out of a month's own bill lines so the
     // Projections page doesn't double-count them against the card-spend
     // goal, but per category they're still real upcoming charges — same
-    // merge the Dashboard's expectedBreakdown makes. A debt line driven by
-    // its payment bill carries that bill's id, so it stays attributable to
-    // the bill's category here even though the line belongs to the debt.
-    const lines = [
+    // merge the Dashboard's expectedBreakdown makes. Every line already
+    // carries its own server-attributed category_name (see
+    // backend/API-ARCHITECTURE.md's R3) — no id cross-reference needed.
+    const lines: { categoryName: string | null; isUnlinkedDebt: boolean; amount: number }[] = [
       ...month.bills
-        .filter((l) => l.kind === "bill" || (l.kind === "debt" && l.billId != null))
-        .map((l) => ({ id: l.kind === "debt" ? l.billId! : l.id, amount: l.amount })),
-      ...month.cardExpenseBills,
+        .filter((l) => l.kind === "bill" || l.kind === "debt")
+        .map((l) => ({
+          categoryName: l.category_name,
+          isUnlinkedDebt: l.kind === "debt" && l.billId == null,
+          amount: l.amount,
+        })),
+      ...month.cardExpenseBills.map((l) => ({
+        categoryName: l.category_name,
+        isUnlinkedDebt: false,
+        amount: l.amount,
+      })),
     ];
     for (const line of lines) {
-      const bill = billById.get(line.id);
-      const key = bill?.category_name ?? t("projected.uncategorized");
+      // A debt line without a linked bill has no real category — bucketed
+      // under "Debt Repayment" (matching the Dashboard's own convention)
+      // rather than silently dropped. A truly-uncategorized bill instead
+      // falls back to the generic "Uncategorized" bucket.
+      const key =
+        line.categoryName ??
+        (line.isUnlinkedDebt ? t("projected.debtRepayment") : t("projected.uncategorized"));
       let row = rows.get(key);
       if (!row) {
         row = {
           name: key,
-          color: props.categories.find((c) => c.id === bill?.category_id)?.color,
+          color: props.categories.find((c) => c.name === line.categoryName)?.color,
           totals: months.map(() => 0),
         };
         rows.set(key, row);
@@ -445,7 +515,11 @@ function ProjectedByCategory(props: { bills: Bill[]; categories: Category[] }) {
 
   const cell = (value: number, key: string | number) => (
     <td key={key} className={`money ${value > 0 ? "gain" : value < 0 ? "shortfall" : ""}`}>
-      {value === 0 ? <span className="muted">—</span> : `${value > 0 ? "+" : "-"}${formatMoney(Math.abs(value))}`}
+      {value === 0 ? (
+        <span className="muted">—</span>
+      ) : (
+        `${value > 0 ? "+" : "-"}${formatMoney(Math.abs(value))}`
+      )}
     </td>
   );
 
@@ -492,8 +566,7 @@ export function BillsPage() {
   const queryClient = useQueryClient();
   // The bill hooks only invalidate ["bills"]; the by-category table below
   // reads ["projections"], which would otherwise sit stale until refocus.
-  const refreshProjections = () =>
-    queryClient.invalidateQueries({ queryKey: ["projections"] });
+  const refreshProjections = () => queryClient.invalidateQueries({ queryKey: ["projections"] });
 
   const [view, setView] = useState<"all" | "income" | "bills">("all");
   const [search, setSearch] = useState("");
@@ -594,7 +667,10 @@ export function BillsPage() {
           </label>
           <label>
             {t("filters.time")}
-            <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}>
+            <select
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
+            >
               <option value="upcoming">{t("filters.timeOptions.upcoming")}</option>
               <option value="past">{t("filters.timeOptions.past")}</option>
               <option value="all">{t("filters.timeOptions.all")}</option>
@@ -602,7 +678,10 @@ export function BillsPage() {
           </label>
           <label>
             {t("filters.debtLink")}
-            <select value={debtFilter} onChange={(e) => setDebtFilter(e.target.value as DebtFilter)}>
+            <select
+              value={debtFilter}
+              onChange={(e) => setDebtFilter(e.target.value as DebtFilter)}
+            >
               <option value="all">{t("filters.debtLinkOptions.all")}</option>
               <option value="linked">{t("filters.debtLinkOptions.linked")}</option>
               <option value="standalone">{t("filters.debtLinkOptions.standalone")}</option>
@@ -627,7 +706,7 @@ export function BillsPage() {
       <div className="card">
         <h2>{t("projected.title")}</h2>
         <p className="muted">{t("projected.subtitle")}</p>
-        <ProjectedByCategory bills={all} categories={categories ?? []} />
+        <ProjectedByCategory categories={categories ?? []} />
       </div>
 
       <div className="card">
@@ -668,7 +747,8 @@ export function BillsPage() {
       {pending.length > 0 && (
         <div className="card">
           <button className="disclosure" onClick={() => setPendingOpen((o) => !o)}>
-            {pendingOpen ? <FiChevronDown /> : <FiChevronRight />} {t("pending.toggle", { count: pending.length })}
+            {pendingOpen ? <FiChevronDown /> : <FiChevronRight />}{" "}
+            {t("pending.toggle", { count: pending.length })}
           </button>
           {pendingOpen && (
             <div style={{ marginTop: 12 }}>
@@ -678,10 +758,16 @@ export function BillsPage() {
                 pending
                 categories={categories ?? []}
                 onConfirm={(id) =>
-                  updateBill.mutate({ id, input: { confirmed: true } }, { onSuccess: refreshProjections })
+                  updateBill.mutate(
+                    { id, input: { confirmed: true } },
+                    { onSuccess: refreshProjections }
+                  )
                 }
                 onDismiss={(id) =>
-                  updateBill.mutate({ id, input: { active: false } }, { onSuccess: refreshProjections })
+                  updateBill.mutate(
+                    { id, input: { active: false } },
+                    { onSuccess: refreshProjections }
+                  )
                 }
                 onSaved={refreshProjections}
               />

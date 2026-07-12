@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiX } from "react-icons/fi";
 import { useTranslation } from "react-i18next";
 import {
@@ -23,7 +23,6 @@ import { PeriodPicker } from "../components/PeriodPicker";
 import { SortableTransactionTable } from "../components/SortableTransactionTable";
 import { SummaryCard } from "../components/SummaryCard";
 import { useAccounts } from "../hooks/useAccounts";
-import { useBills } from "../hooks/useBills";
 import { useCategories } from "../hooks/useCategories";
 import { useInvestments } from "../hooks/useInvestments";
 import { useProjections } from "../hooks/useProjections";
@@ -31,10 +30,17 @@ import { useSettings } from "../hooks/useSettings";
 import { useTags } from "../hooks/useTags";
 import { useEarliestTransactionDate, useTransactions } from "../hooks/useTransactions";
 import { formatMoney } from "../lib/format";
+import { computeNetWorth } from "../lib/netWorth";
 import { monthsInPeriod, parseIsoDate, periodFor, toIsoDate, type Period } from "../lib/period";
 
 const FALLBACK_CATEGORY_COLOR = "#6b6b6b";
 const CARD_COLORS = ["#b5542d", "#5f7fbf", "#8c6a9c", "#4a9c8f", "#c9a227"];
+
+// Review mode's "vs usual pace" verdict needs a trailing baseline that
+// predates the viewed period itself — module-level so both the transaction
+// fetch (which must actually request that earlier window) and the
+// reviewVerdict/categoryAnomalies computations agree on the same window.
+const REVIEW_LOOKBACK_MONTHS = 3;
 
 // The Projections page already computes a month-by-month breakdown (bills,
 // debts, interest, card spend) — the Dashboard just needs to look a given
@@ -56,6 +62,12 @@ interface ExpectedLine {
   id: number;
   name: string;
   amount: number;
+  // Present on a real ProjectedMonth.bills line or a cardExpenseBills entry;
+  // absent (never populated) only in the sense that a "debt" line with no
+  // linked bill carries category_name: null rather than a real name — see
+  // planningCategoryBreakdown's categoryFor for how that's resolved.
+  category_name?: string | null;
+  kind?: "bill" | "debt" | "interest" | "cardSpend";
 }
 
 // Two different confidence tiers, not one flat "faded = future": committed
@@ -71,7 +83,9 @@ function splitCommittedAssumed(month: ProjectedMonth | undefined): {
   assumed: ExpectedLine[];
 } {
   if (!month) return { committed: [], assumed: [] };
-  const committed = month.bills.filter((b) => b.kind === "bill" || b.kind === "debt" || b.kind === "interest");
+  const committed = month.bills.filter(
+    (b) => b.kind === "bill" || b.kind === "debt" || b.kind === "interest"
+  );
   const assumed: ExpectedLine[] = [
     ...month.bills.filter((b) => b.kind === "cardSpend"),
     ...month.cardExpenseBills,
@@ -114,7 +128,10 @@ function expectedBreakdown(month: ProjectedMonth | undefined): {
 // Foz is paid by bank transfer, not a card) or the card-spend goal/average
 // line itself (that's the real per-card bars' own job, not something to
 // double up as "expected" on top of them).
-function expectedCardCharges(month: ProjectedMonth | undefined): { committed: number; assumed: number } {
+function expectedCardCharges(month: ProjectedMonth | undefined): {
+  committed: number;
+  assumed: number;
+} {
   if (!month) return { committed: 0, assumed: 0 };
   // Committed: a real recurring bill with actual transaction history (e.g.
   // Nubank Ultravioleta) — about as sure as "future" gets. Assumed: a bill
@@ -335,7 +352,7 @@ function moneyTooltip(value: any): string {
 }
 
 export function DashboardPage() {
-  const { t, i18n } = useTranslation(["dashboard", "common"]);
+  const { t } = useTranslation(["dashboard", "common"]);
   const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const [drilldown, setDrilldown] = useState<{ type: "CREDIT" | "DEBIT"; category: string } | null>(
     null
@@ -380,7 +397,8 @@ export function DashboardPage() {
     const now = new Date();
     const isFuture =
       period.start.getFullYear() > now.getFullYear() ||
-      (period.start.getFullYear() === now.getFullYear() && period.start.getMonth() > now.getMonth());
+      (period.start.getFullYear() === now.getFullYear() &&
+        period.start.getMonth() > now.getMonth());
     return isFuture ? "planning" : "review";
   }, [period]);
 
@@ -408,7 +426,6 @@ export function DashboardPage() {
   }, [dashboardMode]);
 
   const { data: accounts } = useAccounts();
-  const { data: bills } = useBills();
   const { data: categories } = useCategories();
   const { data: investments } = useInvestments();
   const { data: tags } = useTags();
@@ -438,8 +455,20 @@ export function DashboardPage() {
   const today = new Date();
   const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
   const fetchTo = toIsoDate(new Date(Math.max(period.end.getTime(), tomorrow.getTime())));
+  // Review mode's reviewVerdict/categoryAnomalies below need a trailing
+  // window that predates period.start itself — without pulling those extra
+  // months in here, they silently filter down to nothing (the fetch never
+  // contained anything before period.start to filter from), and every
+  // review-mode comparison against "usual" ends up comparing against zero.
+  // Harmless for every other computation on this page: they all explicitly
+  // bound themselves to period.start/period.end, so the extra earlier rows
+  // just never match.
+  const fetchFrom =
+    dashboardMode === "review"
+      ? new Date(period.start.getFullYear(), period.start.getMonth() - REVIEW_LOOKBACK_MONTHS, 1)
+      : period.start;
   const { data: transactions } = useTransactions({
-    from: toIsoDate(period.start),
+    from: toIsoDate(fetchFrom),
     to: fetchTo,
     tagId,
   });
@@ -449,6 +478,25 @@ export function DashboardPage() {
     for (const c of categories ?? []) map.set(c.id, c.excludes_from_cashflow);
     return map;
   }, [categories]);
+
+  // Flag-based (not name-matched) so a category rename via CategorySelect
+  // can't silently break these — see backend/API-ARCHITECTURE.md's R5.
+  const categoryIsInvestmentTransfer = useMemo(() => {
+    const map = new Map<number, boolean>();
+    for (const c of categories ?? []) map.set(c.id, c.is_investment_transfer);
+    return map;
+  }, [categories]);
+
+  const categoryIsCardBillPayment = useMemo(() => {
+    const map = new Map<number, boolean>();
+    for (const c of categories ?? []) map.set(c.id, c.is_card_bill_payment);
+    return map;
+  }, [categories]);
+
+  const cardBillPaymentCategoryName = useMemo(
+    () => (categories ?? []).find((c) => c.is_card_bill_payment)?.name ?? "Debt & Credit Card",
+    [categories]
+  );
 
   const accountTypeById = useMemo(() => {
     const map = new Map<string, string>();
@@ -487,14 +535,9 @@ export function DashboardPage() {
     });
   }, [accounts, investments]);
 
-  const currentCashBalance = useMemo(
-    () => (accounts ?? []).filter((a) => a.type === "BANK").reduce((sum, a) => sum + a.balance, 0),
-    [accounts]
-  );
-
-  const currentInvestmentBalance = useMemo(
-    () => (investments ?? []).filter((i) => i.status === "ACTIVE").reduce((sum, i) => sum + i.balance, 0),
-    [investments]
+  const { bankBalance: currentCashBalance, investmentBalance: currentInvestmentBalance } = useMemo(
+    () => computeNetWorth(accounts ?? [], investments ?? []),
+    [accounts, investments]
   );
 
   // On credit card accounts, a charge is a positive DEBIT (increases what's
@@ -533,7 +576,8 @@ export function DashboardPage() {
   );
 
   const totalIn = useMemo(
-    () => inPeriodCashflowTx.filter((t) => t.type === "CREDIT").reduce((sum, t) => sum + t.amount, 0),
+    () =>
+      inPeriodCashflowTx.filter((t) => t.type === "CREDIT").reduce((sum, t) => sum + t.amount, 0),
     [inPeriodCashflowTx]
   );
 
@@ -566,15 +610,18 @@ export function DashboardPage() {
         .reduce((sum, t) => sum + (t.type === "CREDIT" ? t.amount : -Math.abs(t.amount)), 0);
       const cashBalance = currentCashBalance - netAfterMonthEnd;
 
-      // Same backward walk for investment holdings, using only the
-      // "Savings & Investments"-tagged moves: a DEBIT (money leaving the
+      // Same backward walk for investment holdings, using only
+      // is_investment_transfer-flagged moves: a DEBIT (money leaving the
       // bank into the investment) increases the investment; a CREDIT
       // (a redemption) decreases it. This doesn't account for accrued
       // yield between then and now, so past months are a slight
       // underestimate — Pluggy only gives us the investment's current
       // value, not a historical time series.
       const investmentNetAfterMonthEnd = allBankTx
-        .filter((t) => t.category_name === "Savings & Investments" && new Date(t.date) >= month.end)
+        .filter(
+          (t) =>
+            categoryIsInvestmentTransfer.get(t.category_id ?? -1) && new Date(t.date) >= month.end
+        )
         .reduce((sum, t) => sum + (t.type === "DEBIT" ? Math.abs(t.amount) : -t.amount), 0);
       const investmentBalance = currentInvestmentBalance - investmentNetAfterMonthEnd;
 
@@ -621,7 +668,15 @@ export function DashboardPage() {
       const netRollingAvg = window.reduce((sum, r) => sum + effectiveNet(r), 0) / window.length;
       return { ...row, netRollingAvg };
     });
-  }, [period, cashflowBankTx, allBankTx, currentCashBalance, currentInvestmentBalance, projections]);
+  }, [
+    period,
+    cashflowBankTx,
+    allBankTx,
+    currentCashBalance,
+    currentInvestmentBalance,
+    projections,
+    categoryIsInvestmentTransfer,
+  ]);
 
   // How much was actually charged on each card each month — a spend rate,
   // distinct from the running balance above (which includes carried debt).
@@ -629,7 +684,10 @@ export function DashboardPage() {
   // payments/refunds, not purchases.
   const cardSpendChartData = useMemo(() => {
     return monthsInPeriod(period).map((month) => {
-      const row: Record<string, string | number | Date> = { label: month.label, start: month.start };
+      const row: Record<string, string | number | Date> = {
+        label: month.label,
+        start: month.start,
+      };
       for (const card of cardAccounts) {
         row[card.name] = allCardTx
           .filter(
@@ -693,7 +751,10 @@ export function DashboardPage() {
 
   const cardCategorySpendByMonth = useMemo(() => {
     return monthsInPeriod(period).map((month) => {
-      const row: Record<string, string | number | Date> = { label: month.label, start: month.start };
+      const row: Record<string, string | number | Date> = {
+        label: month.label,
+        start: month.start,
+      };
       for (const name of cardCategoryNames) row[name] = 0;
       for (const t of allCardTx) {
         if (t.type !== "DEBIT") continue;
@@ -732,7 +793,7 @@ export function DashboardPage() {
     };
     for (const t of cashflowBankTx) {
       if (t.type !== "DEBIT") continue;
-      if (includeCardSpend && t.category_name === "Debt & Credit Card") continue;
+      if (includeCardSpend && categoryIsCardBillPayment.get(t.category_id ?? -1)) continue;
       addSpend(new Date(t.date), t.category_name ?? "Uncategorized", Math.abs(t.amount));
     }
     if (includeCardSpend) {
@@ -745,26 +806,32 @@ export function DashboardPage() {
     // Real transactions only exist for months that have already happened —
     // without this, every future month in the period would flatline to
     // zero for every category. Confirmed bills already carry a category, so
-    // a future month's expected spend can be attributed the same way, via
-    // the same id-cross-reference the Planned Payments page uses (not duplicating
-    // the projection engine's own cadence/recurrence-bounds logic here).
-    const billCategoryById = new Map((bills ?? []).map((b) => [b.id, b.category_name ?? "Uncategorized"]));
+    // a future month's expected spend can be attributed the same way — via
+    // each line's own server-attributed category_name (see
+    // backend/API-ARCHITECTURE.md's R3), no client-side id cross-reference
+    // needed at all anymore.
     const now = new Date();
     for (const month of months) {
       if (month.start <= now) continue;
       const projectedMonth = findProjectedMonth(projections, month.start);
       if (!projectedMonth) continue;
-      // A debt line driven by its payment bill carries that bill's id, so the
-      // spend still lands in the bill's category rather than vanishing when
-      // the line moves from "bill" to "debt".
+      // A debt line without a linked bill has no real category to attribute
+      // it to — bucketed as "Debt Repayment" (matching planningCategoryBreakdown's
+      // convention below) rather than silently dropped.
       const expenseLines = [
         ...projectedMonth.bills
-          .filter((l) => (l.kind === "bill" || (l.kind === "debt" && l.billId != null)) && l.amount < 0)
-          .map((l) => ({ id: l.kind === "debt" ? l.billId! : l.id, amount: l.amount })),
-        ...projectedMonth.cardExpenseBills,
+          .filter((l) => (l.kind === "bill" || l.kind === "debt") && l.amount < 0)
+          .map((l) => ({
+            name: l.category_name ?? (l.kind === "debt" ? "Debt Repayment" : "Uncategorized"),
+            amount: l.amount,
+          })),
+        ...projectedMonth.cardExpenseBills.map((l) => ({
+          name: l.category_name ?? "Uncategorized",
+          amount: l.amount,
+        })),
       ];
       for (const line of expenseLines) {
-        addSpend(month.start, billCategoryById.get(line.id) ?? "Uncategorized", -line.amount);
+        addSpend(month.start, line.name, -line.amount);
       }
     }
 
@@ -774,13 +841,16 @@ export function DashboardPage() {
       .map(([name]) => name);
 
     const monthly = months.map((month, i) => {
-      const row: Record<string, string | number | Date> = { label: month.label, start: month.start };
+      const row: Record<string, string | number | Date> = {
+        label: month.label,
+        start: month.start,
+      };
       for (const name of topNames) row[name] = perMonthTotals[i]!.get(name) ?? 0;
       return row;
     });
 
     return { monthly, topNames };
-  }, [period, cashflowBankTx, allCardTx, includeCardSpend, bills, projections]);
+  }, [period, cashflowBankTx, allCardTx, includeCardSpend, projections, categoryIsCardBillPayment]);
 
   function handleBarClick(data: any) {
     const start = data?.payload?.start ?? data?.start;
@@ -824,39 +894,38 @@ export function DashboardPage() {
         assumed: sumIncomeExpense(planningData.assumedExpenseLines).expense,
       },
     ];
-  }, [planningData, t, i18n.language]);
+  }, [planningData, t]);
 
-  // Bill lines don't carry category info directly — cross-reference each
-  // line's id against the bill list (same technique the Planned Payments page's
-  // own category projection uses) rather than duplicating cadence logic.
+  // Every line already carries its own server-attributed category_name (see
+  // backend/API-ARCHITECTURE.md's R3) — no more id cross-reference needed.
   // Two kinds of expense line here were never going to resolve to a real
   // bill category, since they aren't bills at all: the cardSpend goal/
-  // average is a synthetic aggregate (sentinel id -999998, matching the
-  // projection engine's own convention), and a debt's own repayment line
-  // (id -debtId — debts don't have a category_id in this schema) — both
-  // were silently landing in "Uncategorized" and, since they're usually the
-  // two biggest lines in the month, drowning out every actually-categorized
-  // bill. Bucket them into the same categories those amounts already show
-  // up under elsewhere in the app (the card bill payment is "Debt & Credit
-  // Card"; a debt repayment gets its own "Debt Repayment" category).
-  const CARD_SPEND_LINE_ID = -999998;
+  // average is a synthetic aggregate (kind "cardSpend"), and a debt's own
+  // repayment line with no linked bill (kind "debt", category_name null).
+  // Bucket them into the same categories those amounts already show up under
+  // elsewhere in the app (the card bill payment is whichever category is
+  // flagged is_card_bill_payment; a debt repayment gets its own "Debt
+  // Repayment" category).
   const planningCategoryBreakdown = useMemo(() => {
     if (!planningData) return [];
-    const billCategoryById = new Map((bills ?? []).map((b) => [b.id, b.category_name ?? "Uncategorized"]));
-    const categoryFor = (id: number) => {
-      if (id === CARD_SPEND_LINE_ID) return "Debt & Credit Card";
-      if (id < 0) return "Debt Repayment";
-      return billCategoryById.get(id) ?? "Uncategorized";
+    const categoryFor = (line: ExpectedLine) => {
+      if (line.kind === "cardSpend") return cardBillPaymentCategoryName;
+      if (line.category_name) return line.category_name;
+      if (line.kind === "debt") return "Debt Repayment";
+      return "Uncategorized";
     };
     const totals = new Map<string, number>();
-    for (const line of [...planningData.committedExpenseLines, ...planningData.assumedExpenseLines]) {
-      const name = categoryFor(line.id);
+    for (const line of [
+      ...planningData.committedExpenseLines,
+      ...planningData.assumedExpenseLines,
+    ]) {
+      const name = categoryFor(line);
       totals.set(name, (totals.get(name) ?? 0) + Math.abs(line.amount));
     }
     return [...totals.entries()]
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [planningData, bills]);
+  }, [planningData, cardBillPaymentCategoryName]);
 
   // Net per month goes through expectedBreakdown rather than reading
   // month.net directly — month.net deliberately leaves out cardExpenseBills
@@ -888,40 +957,35 @@ export function DashboardPage() {
   // specifically, since that's the aggregate bill payment to the card
   // issuer; counting it as well as the individual card purchases behind it
   // would double it up.
-  function categoryBreakdown(type: "CREDIT" | "DEBIT") {
-    const totals = new Map<string, number>();
-    for (const t of cashflowBankTx) {
-      if (t.type !== type) continue;
-      if (includeCardSpend && t.category_name === "Debt & Credit Card") continue;
-      const date = new Date(t.date);
-      if (date < period.start || date >= period.end) continue;
-      const name = t.category_name ?? "Uncategorized";
-      totals.set(name, (totals.get(name) ?? 0) + Math.abs(t.amount));
-    }
-    if (includeCardSpend) {
-      for (const t of allCardTx) {
+  const categoryBreakdown = useCallback(
+    (type: "CREDIT" | "DEBIT") => {
+      const totals = new Map<string, number>();
+      for (const t of cashflowBankTx) {
         if (t.type !== type) continue;
+        if (includeCardSpend && categoryIsCardBillPayment.get(t.category_id ?? -1)) continue;
         const date = new Date(t.date);
         if (date < period.start || date >= period.end) continue;
         const name = t.category_name ?? "Uncategorized";
         totals.set(name, (totals.get(name) ?? 0) + Math.abs(t.amount));
       }
-    }
-    return [...totals.entries()]
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }
-
-  const inByCategory = useMemo(
-    () => categoryBreakdown("CREDIT"),
-    [cashflowBankTx, allCardTx, period, includeCardSpend]
+      if (includeCardSpend) {
+        for (const t of allCardTx) {
+          if (t.type !== type) continue;
+          const date = new Date(t.date);
+          if (date < period.start || date >= period.end) continue;
+          const name = t.category_name ?? "Uncategorized";
+          totals.set(name, (totals.get(name) ?? 0) + Math.abs(t.amount));
+        }
+      }
+      return [...totals.entries()]
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+    },
+    [cashflowBankTx, allCardTx, period, includeCardSpend, categoryIsCardBillPayment]
   );
-  const outByCategory = useMemo(
-    () => categoryBreakdown("DEBIT"),
-    [cashflowBankTx, allCardTx, period, includeCardSpend]
-  );
 
-  const REVIEW_LOOKBACK_MONTHS = 3;
+  const inByCategory = useMemo(() => categoryBreakdown("CREDIT"), [categoryBreakdown]);
+  const outByCategory = useMemo(() => categoryBreakdown("DEBIT"), [categoryBreakdown]);
 
   // Review mode's whole point is accountability, which requires a baseline
   // to be accountable against — "did I stay in control" is meaningless
@@ -945,7 +1009,9 @@ export function DashboardPage() {
       return d >= trailingStart && d < period.start;
     };
     const trailingTx = cashflowBankTx.filter(inTrailingWindow);
-    const trailingIn = trailingTx.filter((t) => t.type === "CREDIT").reduce((s, t) => s + t.amount, 0);
+    const trailingIn = trailingTx
+      .filter((t) => t.type === "CREDIT")
+      .reduce((s, t) => s + t.amount, 0);
     const trailingOut = trailingTx
       .filter((t) => t.type === "DEBIT")
       .reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -987,7 +1053,7 @@ export function DashboardPage() {
     };
     for (const t of cashflowBankTx) {
       if (t.type !== "DEBIT") continue;
-      if (includeCardSpend && t.category_name === "Debt & Credit Card") continue;
+      if (includeCardSpend && categoryIsCardBillPayment.get(t.category_id ?? -1)) continue;
       addTrailing(new Date(t.date), t.category_name ?? "Uncategorized", Math.abs(t.amount));
     }
     if (includeCardSpend) {
@@ -1003,12 +1069,27 @@ export function DashboardPage() {
     return outByCategory
       .map((cat) => {
         const trailingAvg = (trailingTotals.get(cat.name) ?? 0) / REVIEW_LOOKBACK_MONTHS;
-        return { ...cat, trailingAvg, pctAbove: trailingAvg > 0 ? (cat.value - trailingAvg) / trailingAvg : Infinity };
+        return {
+          ...cat,
+          trailingAvg,
+          pctAbove: trailingAvg > 0 ? (cat.value - trailingAvg) / trailingAvg : Infinity,
+        };
       })
-      .filter((cat) => cat.trailingAvg >= ANOMALY_MIN_TRAILING_AVG && cat.pctAbove > ANOMALY_THRESHOLD_PERCENT)
+      .filter(
+        (cat) =>
+          cat.trailingAvg >= ANOMALY_MIN_TRAILING_AVG && cat.pctAbove > ANOMALY_THRESHOLD_PERCENT
+      )
       .sort((a, b) => b.pctAbove - a.pctAbove)
       .slice(0, 5);
-  }, [dashboardMode, period, cashflowBankTx, allCardTx, includeCardSpend, outByCategory]);
+  }, [
+    dashboardMode,
+    period,
+    cashflowBankTx,
+    allCardTx,
+    includeCardSpend,
+    outByCategory,
+    categoryIsCardBillPayment,
+  ]);
 
   const anomalyOverspend = categoryAnomalies.reduce((sum, c) => sum + (c.value - c.trailingAvg), 0);
 
@@ -1036,7 +1117,7 @@ export function DashboardPage() {
     const bank = cashflowBankTx.filter(
       (t) =>
         t.type === "DEBIT" &&
-        (!includeCardSpend || t.category_name !== "Debt & Credit Card") &&
+        (!includeCardSpend || !categoryIsCardBillPayment.get(t.category_id ?? -1)) &&
         inRange(t)
     );
     const card = includeCardSpend ? allCardTx.filter((t) => t.type === "DEBIT" && inRange(t)) : [];
@@ -1046,7 +1127,15 @@ export function DashboardPage() {
     const outTotal = outByCategory.reduce((sum, c) => sum + c.value, 0);
     const topTotal = top.reduce((sum, t) => sum + Math.abs(t.amount), 0);
     return { top, share: outTotal > 0 ? topTotal / outTotal : 0 };
-  }, [dashboardMode, period, cashflowBankTx, allCardTx, includeCardSpend, outByCategory]);
+  }, [
+    dashboardMode,
+    period,
+    cashflowBankTx,
+    allCardTx,
+    includeCardSpend,
+    outByCategory,
+    categoryIsCardBillPayment,
+  ]);
 
   const drilldownTx = useMemo(() => {
     if (!drilldown) return [];
@@ -1057,31 +1146,53 @@ export function DashboardPage() {
     const bankMatches = cashflowBankTx.filter(
       (t) =>
         t.type === drilldown.type &&
-        (!includeCardSpend || t.category_name !== "Debt & Credit Card") &&
+        (!includeCardSpend || !categoryIsCardBillPayment.get(t.category_id ?? -1)) &&
         inRange(t) &&
         (t.category_name ?? "Uncategorized") === drilldown.category
     );
     const cardMatches = includeCardSpend
       ? allCardTx.filter(
           (t) =>
-            t.type === drilldown.type && inRange(t) && (t.category_name ?? "Uncategorized") === drilldown.category
+            t.type === drilldown.type &&
+            inRange(t) &&
+            (t.category_name ?? "Uncategorized") === drilldown.category
         )
       : [];
     return [...bankMatches, ...cardMatches].sort((a, b) => b.date.localeCompare(a.date));
-  }, [cashflowBankTx, allCardTx, period, drilldown, includeCardSpend]);
+  }, [cashflowBankTx, allCardTx, period, drilldown, includeCardSpend, categoryIsCardBillPayment]);
 
   return (
     <div className="grid" style={{ gap: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div className="toggle-group">
-            <button type="button" className={dashboardMode === "review" ? "active" : undefined} onClick={switchToReview}>
+            <button
+              type="button"
+              className={dashboardMode === "review" ? "active" : undefined}
+              onClick={switchToReview}
+            >
               {t("modes.review")}
             </button>
-            <button type="button" className={dashboardMode === "trends" ? "active" : undefined} onClick={switchToTrends}>
+            <button
+              type="button"
+              className={dashboardMode === "trends" ? "active" : undefined}
+              onClick={switchToTrends}
+            >
               {t("modes.trends")}
             </button>
-            <button type="button" className={dashboardMode === "planning" ? "active" : undefined} onClick={switchToPlanning}>
+            <button
+              type="button"
+              className={dashboardMode === "planning" ? "active" : undefined}
+              onClick={switchToPlanning}
+            >
               {t("modes.plan")}
             </button>
           </div>
@@ -1099,7 +1210,10 @@ export function DashboardPage() {
         {tags && tags.length > 0 && (
           <label style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
             {t("filterByTag")}
-            <select value={tagId ?? ""} onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : undefined)}>
+            <select
+              value={tagId ?? ""}
+              onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : undefined)}
+            >
               <option value="">{t("allTransactions")}</option>
               {tags.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -1167,8 +1281,16 @@ export function DashboardPage() {
           </>
         ) : (
           <>
-            <SummaryCard label={t("summary.moneyIn")} value={formatMoney(totalIn)} tone="positive" />
-            <SummaryCard label={t("summary.moneyOut")} value={formatMoney(totalOut)} tone="negative" />
+            <SummaryCard
+              label={t("summary.moneyIn")}
+              value={formatMoney(totalIn)}
+              tone="positive"
+            />
+            <SummaryCard
+              label={t("summary.moneyOut")}
+              value={formatMoney(totalOut)}
+              tone="negative"
+            />
           </>
         )}
       </div>
@@ -1209,15 +1331,21 @@ export function DashboardPage() {
                 }`}
               >
                 <div className="label">
-                  {reviewVerdict.cardGoalIsExplicit ? t("review.cardSpendVsGoal") : t("review.cardSpendVsUsual")}
+                  {reviewVerdict.cardGoalIsExplicit
+                    ? t("review.cardSpendVsGoal")
+                    : t("review.cardSpendVsUsual")}
                 </div>
                 <div className="value">
                   {reviewVerdict.cardSpendThisMonth <= reviewVerdict.cardGoal
                     ? t("review.underByAmount", {
-                        amount: formatMoney(Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth)),
+                        amount: formatMoney(
+                          Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth)
+                        ),
                       })
                     : t("review.overByAmount", {
-                        amount: formatMoney(Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth)),
+                        amount: formatMoney(
+                          Math.abs(reviewVerdict.cardGoal - reviewVerdict.cardSpendThisMonth)
+                        ),
                       })}
                 </div>
                 <div className="caption">
@@ -1225,7 +1353,9 @@ export function DashboardPage() {
                     spent: formatMoney(reviewVerdict.cardSpendThisMonth),
                     goalPhrase: reviewVerdict.cardGoalIsExplicit
                       ? t("review.yourGoal", { amount: formatMoney(reviewVerdict.cardGoal) })
-                      : t("review.yourUsualNoGoal", { amount: formatMoney(reviewVerdict.cardGoal) }),
+                      : t("review.yourUsualNoGoal", {
+                          amount: formatMoney(reviewVerdict.cardGoal),
+                        }),
                   })}
                 </div>
               </div>
@@ -1233,7 +1363,11 @@ export function DashboardPage() {
           </div>
           <div
             className="grid"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 24, marginTop: 20 }}
+            style={{
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: 24,
+              marginTop: 20,
+            }}
           >
             <div>
               <h3>{t("review.whereItLeaked")}</h3>
@@ -1247,7 +1381,8 @@ export function DashboardPage() {
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {categoryAnomalies.map((cat) => {
-                      const selected = drilldown?.type === "DEBIT" && drilldown.category === cat.name;
+                      const selected =
+                        drilldown?.type === "DEBIT" && drilldown.category === cat.name;
                       return (
                         <button
                           key={cat.name}
@@ -1265,17 +1400,27 @@ export function DashboardPage() {
                             borderColor: selected ? "var(--text-muted)" : undefined,
                           }}
                         >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 8,
+                              minWidth: 0,
+                            }}
+                          >
                             <span
                               style={{
                                 width: 10,
                                 height: 10,
                                 borderRadius: "50%",
-                                background: categoryColorByName.get(cat.name) ?? FALLBACK_CATEGORY_COLOR,
+                                background:
+                                  categoryColorByName.get(cat.name) ?? FALLBACK_CATEGORY_COLOR,
                                 flexShrink: 0,
                               }}
                             />
-                            <span style={{ color: "var(--paper)", fontWeight: 600 }}>{cat.name}</span>
+                            <span style={{ color: "var(--paper)", fontWeight: 600 }}>
+                              {cat.name}
+                            </span>
                             <span className="muted" style={{ fontWeight: 400 }}>
                               {t("review.vsUsualPerMonth", {
                                 value: formatMoney(cat.value),
@@ -1283,7 +1428,10 @@ export function DashboardPage() {
                               })}
                             </span>
                           </span>
-                          <span className="money" style={{ color: "var(--danger)", whiteSpace: "nowrap" }}>
+                          <span
+                            className="money"
+                            style={{ color: "var(--danger)", whiteSpace: "nowrap" }}
+                          >
                             {t("review.aboveUsual", {
                               diff: formatMoney(cat.value - cat.trailingAvg),
                               pct: Math.round(cat.pctAbove * 100),
@@ -1426,9 +1574,16 @@ export function DashboardPage() {
             <div style={{ marginBottom: 16 }}>
               <h3>{t("planning.expectedByCategory")}</h3>
               <p className="muted">{t("planning.expectedByCategoryIntro")}</p>
-              <div className="chart-container" style={{ height: Math.max(120, planningCategoryBreakdown.length * 32) }}>
+              <div
+                className="chart-container"
+                style={{ height: Math.max(120, planningCategoryBreakdown.length * 32) }}
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={planningCategoryBreakdown} layout="vertical" margin={{ right: 24 }}>
+                  <BarChart
+                    data={planningCategoryBreakdown}
+                    layout="vertical"
+                    margin={{ right: 24 }}
+                  >
                     <XAxis type="number" stroke="var(--text-muted)" />
                     <YAxis type="category" dataKey="name" stroke="var(--text-muted)" width={130} />
                     <Tooltip formatter={moneyTooltip} />
@@ -1497,9 +1652,7 @@ export function DashboardPage() {
               )}
             </div>
             <div>
-              <h3 title={t("planning.assumedExpensesTooltip")}>
-                {t("planning.assumedExpenses")}
-              </h3>
+              <h3 title={t("planning.assumedExpensesTooltip")}>{t("planning.assumedExpenses")}</h3>
               {planningData.assumedExpenseLines.length === 0 ? (
                 <p className="muted">{t("planning.none")}</p>
               ) : (
@@ -1538,7 +1691,12 @@ export function DashboardPage() {
                 <YAxis stroke="var(--text-muted)" />
                 <Tooltip formatter={moneyTooltip} />
                 <ReferenceLine y={0} stroke="var(--rule)" />
-                <Bar dataKey="net" name={t("planning.projectedNet")} cursor="pointer" onClick={handleBarClick}>
+                <Bar
+                  dataKey="net"
+                  name={t("planning.projectedNet")}
+                  cursor="pointer"
+                  onClick={handleBarClick}
+                >
                   {planningOutlookData.map((row) => (
                     <Cell
                       key={row.label}
@@ -1626,7 +1784,8 @@ export function DashboardPage() {
       {chartData.length > 1 && (
         <div className="card">
           <button className="disclosure" onClick={() => setBalanceOverTimeOpen((o) => !o)}>
-            {balanceOverTimeOpen ? <FiChevronDown /> : <FiChevronRight />} {t("chart.balanceOverTime")}
+            {balanceOverTimeOpen ? <FiChevronDown /> : <FiChevronRight />}{" "}
+            {t("chart.balanceOverTime")}
           </button>
           {balanceOverTimeOpen && (
             <div style={{ marginTop: 12 }}>
@@ -1752,7 +1911,9 @@ export function DashboardPage() {
             {cardSpendChartData.length > 1
               ? t("chart.cardSpendIntroPerMonth")
               : t("chart.cardSpendIntroThisMonth")}
-            {cardChartGrouping === "card" ? t("chart.cardSpendByCardExtra") : t("chart.cardSpendByCategoryExtra")}
+            {cardChartGrouping === "card"
+              ? t("chart.cardSpendByCardExtra")
+              : t("chart.cardSpendByCategoryExtra")}
           </p>
           <div className="chart-container" style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -1797,7 +1958,9 @@ export function DashboardPage() {
                       stroke="var(--text-muted)"
                       strokeDasharray="4 4"
                       label={{
-                        value: t("chart.goalLabel", { amount: formatMoney(settings.cardSpendGoal) }),
+                        value: t("chart.goalLabel", {
+                          amount: formatMoney(settings.cardSpendGoal),
+                        }),
                         position: "insideTopLeft",
                         fill: "var(--text-muted)",
                         fontSize: 11,
@@ -1930,7 +2093,11 @@ export function DashboardPage() {
                 />
                 {t("drilldown.groupByDescription")}
               </label>
-              <button className="secondary icon" onClick={() => setDrilldown(null)} title={t("drilldown.close")}>
+              <button
+                className="secondary icon"
+                onClick={() => setDrilldown(null)}
+                title={t("drilldown.close")}
+              >
                 <FiX />
               </button>
             </div>

@@ -51,7 +51,11 @@ export interface LoanScheduleRow {
 
 // The level monthly payment for a PRICE loan — solving the annuity formula
 // for a fixed payment given principal, rate and term.
-export function pricePayment(principal: number, monthlyRatePercent: number, termMonths: number): number {
+export function pricePayment(
+  principal: number,
+  monthlyRatePercent: number,
+  termMonths: number
+): number {
   const r = monthlyRatePercent / 100;
   if (r === 0) return principal / termMonths;
   return (principal * r) / (1 - (1 + r) ** -termMonths);

@@ -4,7 +4,10 @@
 // `cookie` in its handler signature — which for us is always true, since the
 // global auth guard destructures `cookie` on every request. Use this instead
 // of `redirect()` anywhere in this app.
-export function redirectTo(set: { status?: unknown; headers: Record<string, unknown> }, url: string): string {
+export function redirectTo(
+  set: { status?: unknown; headers: Record<string, unknown> },
+  url: string
+): string {
   set.status = 302;
   set.headers["Location"] = url;
   return "";

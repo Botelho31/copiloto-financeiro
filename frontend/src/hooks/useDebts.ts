@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Debt, DebtLinkedTransaction } from "shared";
-import { apiFetch } from "../lib/api";
+import { apiFetch, appendUserId } from "../lib/api";
+import { usePersonScope } from "../lib/personScope";
 
 export function useDebts() {
-  return useQuery({ queryKey: ["debts"], queryFn: () => apiFetch<Debt[]>("/api/debts") });
+  const { activeUserId } = usePersonScope();
+  return useQuery({
+    queryKey: ["debts", activeUserId],
+    queryFn: () => apiFetch<Debt[]>(appendUserId("/api/debts", activeUserId)),
+  });
 }
 
 export function useDebtTransactions(debtId: number | undefined) {
@@ -18,6 +23,9 @@ export interface NewDebtInput {
   name: string;
   direction: "owed_by_me" | "owed_to_me";
   counterparty?: string;
+  // Set instead of counterparty when the other party is a real household
+  // member (see useUsers) — e.g. a debt split_percentage-shared with them.
+  sharedWithUserId?: number;
   principalAmount?: number;
   splitPercentage?: number;
   expectedTotalAmount?: number;
@@ -30,9 +38,17 @@ export interface NewDebtInput {
 
 export function useCreateDebt() {
   const qc = useQueryClient();
+  const { activeUserId } = usePersonScope();
   return useMutation({
-    mutationFn: (input: NewDebtInput) =>
-      apiFetch<Debt[]>("/api/debts", { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: (input: NewDebtInput) => {
+      if (activeUserId == null) {
+        return Promise.reject(new Error("Select a person from the nav before adding a debt."));
+      }
+      return apiFetch<Debt[]>("/api/debts", {
+        method: "POST",
+        body: JSON.stringify({ ...input, userId: activeUserId }),
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["debts"] }),
   });
 }
@@ -48,6 +64,8 @@ export function useUpdateDebt() {
       input: Partial<{
         name: string;
         status: string;
+        counterparty: string | null;
+        sharedWithUserId: number | null;
         startDate: string;
         targetPayoffDate: string | null;
         principalAmount: number | null;

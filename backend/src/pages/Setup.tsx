@@ -11,7 +11,9 @@ export function SetupPage(props: { error?: string }) {
         <div class="auth-page">
           <form method="post" action="/setup" class="auth-card">
             <h1>Welcome</h1>
-            <p class="muted">Create the admin account. This is the only account this app supports.</p>
+            <p class="muted">
+              Create the admin account. This is the only account this app supports.
+            </p>
             {props.error && (
               <p class="error" safe>
                 {props.error}

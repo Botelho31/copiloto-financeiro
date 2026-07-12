@@ -14,11 +14,13 @@ export interface CategorizeResult {
 // specific one can steal transactions the specific rule should have caught,
 // so prefer specific match text over broad ones.
 export function applyCategoryRule(matchTextInput: string, categoryName: string): CategorizeResult {
-  const category = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
-    | { id: number }
-    | null;
+  const category = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
+    id: number;
+  } | null;
   if (!category) {
-    const known = (db.query("SELECT name FROM categories ORDER BY name").all() as { name: string }[])
+    const known = (
+      db.query("SELECT name FROM categories ORDER BY name").all() as { name: string }[]
+    )
       .map((r) => r.name)
       .join(", ");
     throw new Error(`Unknown category "${categoryName}". Known categories: ${known}`);
@@ -29,11 +31,14 @@ export function applyCategoryRule(matchTextInput: string, categoryName: string):
     throw new Error("Match text does not normalize to a usable pattern.");
   }
 
-  const existingRule = db.query("SELECT id FROM category_rules WHERE match_text = ?").get(matchText) as
-    | { id: number }
-    | null;
+  const existingRule = db
+    .query("SELECT id FROM category_rules WHERE match_text = ?")
+    .get(matchText) as { id: number } | null;
   if (existingRule) {
-    db.query("UPDATE category_rules SET category_id = ? WHERE id = ?").run(category.id, existingRule.id);
+    db.query("UPDATE category_rules SET category_id = ? WHERE id = ?").run(
+      category.id,
+      existingRule.id
+    );
   } else {
     db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
       matchText,
@@ -61,11 +66,13 @@ export function applyCategoryRule(matchTextInput: string, categoryName: string):
 }
 
 export function setTransactionCategory(transactionId: string, categoryName: string): void {
-  const category = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
-    | { id: number }
-    | null;
+  const category = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
+    id: number;
+  } | null;
   if (!category) {
-    const known = (db.query("SELECT name FROM categories ORDER BY name").all() as { name: string }[])
+    const known = (
+      db.query("SELECT name FROM categories ORDER BY name").all() as { name: string }[]
+    )
       .map((r) => r.name)
       .join(", ");
     throw new Error(`Unknown category "${categoryName}". Known categories: ${known}`);
@@ -77,11 +84,13 @@ export function setTransactionCategory(transactionId: string, categoryName: stri
 }
 
 function requireCategoryId(categoryName: string): number {
-  const category = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
-    | { id: number }
-    | null;
+  const category = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
+    id: number;
+  } | null;
   if (!category) {
-    const known = (db.query("SELECT name FROM categories ORDER BY name").all() as { name: string }[])
+    const known = (
+      db.query("SELECT name FROM categories ORDER BY name").all() as { name: string }[]
+    )
       .map((r) => r.name)
       .join(", ");
     throw new Error(`Unknown category "${categoryName}". Known categories: ${known}`);
@@ -115,11 +124,14 @@ export function reclassifyMatching(matchTextInput: string, categoryName: string)
     throw new Error("Match text does not normalize to a usable pattern.");
   }
 
-  const existingRule = db.query("SELECT id FROM category_rules WHERE match_text = ?").get(matchText) as
-    | { id: number }
-    | null;
+  const existingRule = db
+    .query("SELECT id FROM category_rules WHERE match_text = ?")
+    .get(matchText) as { id: number } | null;
   if (existingRule) {
-    db.query("UPDATE category_rules SET category_id = ? WHERE id = ?").run(categoryId, existingRule.id);
+    db.query("UPDATE category_rules SET category_id = ? WHERE id = ?").run(
+      categoryId,
+      existingRule.id
+    );
   } else {
     db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
       matchText,

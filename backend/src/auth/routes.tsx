@@ -39,9 +39,7 @@ export const authRoutes = new Elysia()
     if (hasAdmin()) return redirectTo(set, "/login");
     const { username, password } = body as { username?: string; password?: string };
     if (!username || !password || password.length < 8) {
-      return (
-        <SetupPage error="Username and a password of at least 8 characters are required." />
-      );
+      return <SetupPage error="Username and a password of at least 8 characters are required." />;
     }
     await createAdmin(username, password);
     return redirectTo(set, "/login");

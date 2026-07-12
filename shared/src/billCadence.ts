@@ -49,7 +49,7 @@ export function billAppliesToMonth(bill: BillCadenceInfo, targetMonth: Date): bo
   const targetIdx = targetMonthIndex(targetMonth);
   const dueIdx = monthIndex(bill.nextDueDate);
 
-  if (bill.cadence === "yearly") return ((targetIdx - dueIdx) % 12 + 12) % 12 === 0;
+  if (bill.cadence === "yearly") return (((targetIdx - dueIdx) % 12) + 12) % 12 === 0;
 
   if (bill.cadence === "quarterly") {
     const monthDiff = targetIdx - dueIdx;

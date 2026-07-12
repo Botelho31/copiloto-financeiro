@@ -66,15 +66,11 @@
   },
   "payoffProjection": {
     "label": "Quitação projetada",
-    "shortfall": "Com {{basis}} de {{amount}}/mês, isso nem cobre os juros — o saldo devedor vai continuar crescendo, não diminuindo.",
-    "basisPlanned": "o pagamento planejado",
-    "basisAverage": "a média recente de pagamento",
+    "shortfall": "Com {{amount}}/mês, isso nem cobre os juros — o saldo devedor vai continuar crescendo, não diminuindo.",
     "months_one": "{{count}} mês",
     "months_other": "{{count}} meses",
     "approxDate": "(~{{date}})",
-    "basedOn": "Com base{{basis}} de {{amount}}/mês{{rate}}.",
-    "basedOnPlanned": " no pagamento planejado do lançamento recorrente vinculado",
-    "basedOnAverage": " na sua média recente de pagamento",
+    "basedOn": "Com base em {{amount}}/mês{{rate}}.",
     "atRate": " com juros de {{rate}}% ao mês"
   },
   "cadence": {

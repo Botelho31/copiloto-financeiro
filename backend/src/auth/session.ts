@@ -17,9 +17,9 @@ export function createSession(): { token: string; expiresAt: Date } {
 
 export function verifySession(token: string | undefined | null): boolean {
   if (!token) return false;
-  const row = db.query("SELECT expires_at FROM sessions WHERE id = ?").get(token) as
-    | { expires_at: string }
-    | null;
+  const row = db.query("SELECT expires_at FROM sessions WHERE id = ?").get(token) as {
+    expires_at: string;
+  } | null;
   if (!row) return false;
   if (new Date(row.expires_at).getTime() < Date.now()) {
     db.query("DELETE FROM sessions WHERE id = ?").run(token);

@@ -1,6 +1,8 @@
 import { Elysia } from "elysia";
+import { z } from "zod";
 import type { Goal } from "shared";
 import { db } from "../db";
+import { parseUserId } from "../lib/scope";
 import { computeProjection, currentBalance } from "../services/projectionEngine";
 
 interface GoalRow {
@@ -18,15 +20,18 @@ function monthsUntil(targetDate: string): number {
   return Math.max(1, months);
 }
 
-function computeGoal(row: GoalRow): Goal {
+function computeGoal(row: GoalRow, userId: number | null): Goal {
   // Includes investment holdings alongside cash — a goal is about total net
   // worth reaching a number, not just what's liquid in the bank.
+  const investmentWhere = userId != null ? "AND user_id = ?" : "";
   const investmentTotal = (
     db
-      .query("SELECT COALESCE(SUM(balance), 0) as total FROM investments WHERE status = 'ACTIVE'")
-      .get() as { total: number }
+      .query(
+        `SELECT COALESCE(SUM(balance), 0) as total FROM investments WHERE status = 'ACTIVE' ${investmentWhere}`
+      )
+      .get(...(userId != null ? [userId] : [])) as { total: number }
   ).total;
-  const currentNetWorth = currentBalance() + investmentTotal;
+  const currentNetWorth = currentBalance(userId) + investmentTotal;
 
   const months = monthsUntil(row.target_date);
   const requiredMonthlySavings = (row.target_amount - currentNetWorth) / months;
@@ -38,9 +43,10 @@ function computeGoal(row: GoalRow): Goal {
   // rate that has nothing to do with its own horizon. Deriving the rate from
   // the actual projected balance at the target date keeps this consistent
   // with what the balance chart visually shows.
-  const projection = computeProjection({ horizonMonths: months });
+  const projection = computeProjection({ horizonMonths: months, userId });
   const finalMonth = projection.months[projection.months.length - 1];
-  const projectedNetWorthAtTarget = investmentTotal + (finalMonth?.balance ?? currentBalance());
+  const projectedNetWorthAtTarget =
+    investmentTotal + (finalMonth?.balance ?? currentBalance(userId));
   const projectedMonthlySavings = (projectedNetWorthAtTarget - currentNetWorth) / months;
 
   return {
@@ -51,59 +57,101 @@ function computeGoal(row: GoalRow): Goal {
   };
 }
 
-export function listGoals(): Goal[] {
+// null userId = Household (goals from every person combined, each still
+// projected against their own net worth — a goal always belongs to one person).
+export function listGoals(userId: number | null = null): Goal[] {
+  const where = userId != null ? "WHERE user_id = ?" : "";
   const rows = db
-    .query("SELECT id, name, target_amount, target_date FROM goals ORDER BY target_date ASC")
-    .all() as GoalRow[];
-  return rows.map(computeGoal);
+    .query(
+      `SELECT id, name, target_amount, target_date FROM goals ${where} ORDER BY target_date ASC`
+    )
+    .all(...(userId != null ? [userId] : [])) as GoalRow[];
+  return rows.map((row) => computeGoal(row, userId));
+}
+
+export const NewGoalBody = z.object({
+  name: z.string().min(1),
+  targetAmount: z.number(),
+  targetDate: z.string().min(1),
+  userId: z.number().int(),
+});
+export type NewGoalInput = z.infer<typeof NewGoalBody>;
+
+// Write-only — validates and inserts, returns the new row's id. Structural
+// validation happens via NewGoalBody at the REST route boundary; the MCP
+// create_goal tool has its own Zod schema (same shape here, kept separate
+// since the MCP tool's schema also carries LLM-facing descriptions).
+export function createGoal(input: NewGoalInput): number {
+  const result = db
+    .query("INSERT INTO goals (name, target_amount, target_date, user_id) VALUES (?, ?, ?, ?)")
+    .run(input.name, input.targetAmount, input.targetDate, input.userId);
+  return Number(result.lastInsertRowid);
+}
+
+export const GoalUpdateBody = z.object({
+  name: z.string().optional(),
+  targetAmount: z.number().optional(),
+  targetDate: z.string().optional(),
+});
+export type GoalUpdateInput = z.infer<typeof GoalUpdateBody>;
+
+export function updateGoal(id: number, input: GoalUpdateInput): void {
+  if (!db.query("SELECT id FROM goals WHERE id = ?").get(id)) {
+    throw new Error(`Goal ${id} not found`);
+  }
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (input.name !== undefined) {
+    fields.push("name = ?");
+    values.push(input.name);
+  }
+  if (input.targetAmount !== undefined) {
+    fields.push("target_amount = ?");
+    values.push(input.targetAmount);
+  }
+  if (input.targetDate !== undefined) {
+    fields.push("target_date = ?");
+    values.push(input.targetDate);
+  }
+  if (fields.length > 0) {
+    values.push(id);
+    db.query(`UPDATE goals SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
+  }
+}
+
+export function deleteGoal(id: number): void {
+  db.query("DELETE FROM goals WHERE id = ?").run(id);
 }
 
 export const goalsRoutes = new Elysia({ prefix: "/api/goals" })
-  .get("/", () => listGoals())
-  .post("/", ({ body, set }) => {
-    const input = body as { name?: string; targetAmount?: number; targetDate?: string };
-    if (!input.name || !input.targetAmount || !input.targetDate) {
-      set.status = 400;
-      return { error: "name, targetAmount and targetDate are required" };
-    }
-    db.query("INSERT INTO goals (name, target_amount, target_date) VALUES (?, ?, ?)").run(
-      input.name,
-      input.targetAmount,
-      input.targetDate
-    );
-    return listGoals();
-  })
-  .patch("/:id", ({ params, body, set }) => {
-    const id = Number(params.id);
-    const existing = db.query("SELECT id FROM goals WHERE id = ?").get(id);
-    if (!existing) {
-      set.status = 404;
-      return { error: "not found" };
-    }
-
-    const input = body as Partial<{ name: string; targetAmount: number; targetDate: string }>;
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (input.name !== undefined) {
-      fields.push("name = ?");
-      values.push(input.name);
-    }
-    if (input.targetAmount !== undefined) {
-      fields.push("target_amount = ?");
-      values.push(input.targetAmount);
-    }
-    if (input.targetDate !== undefined) {
-      fields.push("target_date = ?");
-      values.push(input.targetDate);
-    }
-
-    if (fields.length > 0) {
-      values.push(id);
-      db.query(`UPDATE goals SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
-    }
-    return listGoals();
-  })
-  .delete("/:id", ({ params }) => {
-    db.query("DELETE FROM goals WHERE id = ?").run(Number(params.id));
-    return listGoals();
+  .get("/", ({ query }) => listGoals(parseUserId(query)))
+  .post(
+    "/",
+    ({ body, set, query }) => {
+      try {
+        createGoal(body);
+        return listGoals(parseUserId(query));
+      } catch (error) {
+        set.status = 400;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    { body: NewGoalBody }
+  )
+  .patch(
+    "/:id",
+    ({ params, body, set, query }) => {
+      try {
+        updateGoal(Number(params.id), body);
+        return listGoals(parseUserId(query));
+      } catch (error) {
+        set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    { body: GoalUpdateBody }
+  )
+  .delete("/:id", ({ params, query }) => {
+    deleteGoal(Number(params.id));
+    return listGoals(parseUserId(query));
   });

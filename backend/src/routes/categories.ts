@@ -1,7 +1,9 @@
 import { Elysia } from "elysia";
+import { z } from "zod";
 import type { Category, CategoryRule, UncategorizedGroup } from "shared";
 import { db } from "../db";
 import { normalizeDescription } from "../jobs/recurringDetection";
+import { parseUserId } from "../lib/scope";
 
 const DEFAULT_LOOKBACK_DAYS = 30;
 
@@ -22,16 +24,23 @@ const AUTO_PALETTE = [
   "#7d8ba3",
 ];
 
-export function getUncategorizedGroups(days: number): UncategorizedGroup[] {
+export function getUncategorizedGroups(
+  days: number,
+  userId: number | null = null
+): UncategorizedGroup[] {
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const userCondition = userId != null ? "AND t.user_id = ?" : "";
   const rows = db
     .query(
       `SELECT t.description, t.amount
        FROM transactions t
        JOIN categories c ON c.id = t.category_id
-       WHERE c.name = 'Uncategorized' AND t.date >= ?`
+       WHERE c.name = 'Uncategorized' AND t.date >= ? ${userCondition}`
     )
-    .all(since) as { description: string; amount: number }[];
+    .all(...(userId != null ? [since, userId] : [since])) as {
+    description: string;
+    amount: number;
+  }[];
 
   const groups = new Map<string, UncategorizedGroup>();
   for (const row of rows) {
@@ -48,9 +57,7 @@ export function getUncategorizedGroups(days: number): UncategorizedGroup[] {
     groups.set(key, group);
   }
 
-  return [...groups.values()].sort(
-    (a, b) => b.count - a.count || b.totalAmount - a.totalAmount
-  );
+  return [...groups.values()].sort((a, b) => b.count - a.count || b.totalAmount - a.totalAmount);
 }
 
 export function listRules(): CategoryRule[] {
@@ -64,13 +71,30 @@ export function listRules(): CategoryRule[] {
     .all() as CategoryRule[];
 }
 
+interface CategoryRow {
+  id: number;
+  name: string;
+  kind: string;
+  parent_id: number | null;
+  excludes_from_cashflow: number;
+  is_investment_transfer: number;
+  is_card_bill_payment: number;
+  color: string;
+}
+
 export function listCategories(): Category[] {
   const rows = db
     .query(
-      "SELECT id, name, kind, parent_id, excludes_from_cashflow, color FROM categories ORDER BY name"
+      `SELECT id, name, kind, parent_id, excludes_from_cashflow, is_investment_transfer, is_card_bill_payment, color
+       FROM categories ORDER BY name`
     )
-    .all() as (Omit<Category, "excludes_from_cashflow"> & { excludes_from_cashflow: number })[];
-  return rows.map((r) => ({ ...r, excludes_from_cashflow: r.excludes_from_cashflow === 1 })) as Category[];
+    .all() as CategoryRow[];
+  return rows.map((r) => ({
+    ...r,
+    excludes_from_cashflow: r.excludes_from_cashflow === 1,
+    is_investment_transfer: r.is_investment_transfer === 1,
+    is_card_bill_payment: r.is_card_bill_payment === 1,
+  })) as Category[];
 }
 
 export function createCategory(name: string, kind?: string, color?: string): Category[] {
@@ -86,117 +110,145 @@ export function createCategory(name: string, kind?: string, color?: string): Cat
   return listCategories();
 }
 
+export const CategoryUpdateBody = z.object({
+  name: z.string().optional(),
+  color: z.string().optional(),
+  excludesFromCashflow: z.boolean().optional(),
+});
+export type CategoryUpdateInput = z.infer<typeof CategoryUpdateBody>;
+
+// Shared by the REST route and the MCP update_category tool.
+export function updateCategory(id: number, input: CategoryUpdateInput): Category[] {
+  if (!db.query("SELECT id FROM categories WHERE id = ?").get(id)) {
+    throw new Error(`Category ${id} not found`);
+  }
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (input.name !== undefined) {
+    fields.push("name = ?");
+    values.push(input.name);
+  }
+  if (input.color !== undefined) {
+    fields.push("color = ?");
+    values.push(input.color);
+  }
+  if (input.excludesFromCashflow !== undefined) {
+    fields.push("excludes_from_cashflow = ?");
+    values.push(input.excludesFromCashflow ? 1 : 0);
+  }
+  if (fields.length > 0) {
+    values.push(id);
+    db.query(`UPDATE categories SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
+  }
+  return listCategories();
+}
+
+const NewCategoryBody = z.object({
+  name: z.string().min(1),
+  kind: z.string().optional(),
+  color: z.string().optional(),
+});
+
+const BulkAssignBody = z.object({
+  key: z.string().min(1),
+  categoryId: z.number().int(),
+});
+
+const NewCategoryRuleBody = z.object({
+  matchText: z.string().min(1),
+  categoryId: z.number().int(),
+});
+
 export const categoriesRoutes = new Elysia({ prefix: "/api/categories" })
   .get("/", () => listCategories())
-  .post("/", ({ body, set }) => {
-    const input = body as { name?: string; kind?: string; color?: string };
-    if (!input.name) {
-      set.status = 400;
-      return { error: "name is required" };
-    }
-    try {
-      return createCategory(input.name, input.kind, input.color);
-    } catch (error) {
-      set.status = 400;
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
-  })
-  .patch("/:id", ({ params, body, set }) => {
-    const id = Number(params.id);
-    const existing = db.query("SELECT id FROM categories WHERE id = ?").get(id);
-    if (!existing) {
-      set.status = 404;
-      return { error: "not found" };
-    }
-
-    const input = body as Partial<{ name: string; color: string; excludesFromCashflow: boolean }>;
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (input.name !== undefined) {
-      fields.push("name = ?");
-      values.push(input.name);
-    }
-    if (input.color !== undefined) {
-      fields.push("color = ?");
-      values.push(input.color);
-    }
-    if (input.excludesFromCashflow !== undefined) {
-      fields.push("excludes_from_cashflow = ?");
-      values.push(input.excludesFromCashflow ? 1 : 0);
-    }
-
-    if (fields.length > 0) {
-      values.push(id);
-      db.query(`UPDATE categories SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
-    }
-    return listCategories();
-  })
+  .post(
+    "/",
+    ({ body, set }) => {
+      try {
+        return createCategory(body.name, body.kind, body.color);
+      } catch (error) {
+        set.status = 400;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    { body: NewCategoryBody }
+  )
+  .patch(
+    "/:id",
+    ({ params, body, set }) => {
+      try {
+        return updateCategory(Number(params.id), body);
+      } catch (error) {
+        set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    { body: CategoryUpdateBody }
+  )
   .get("/rules", () => listRules())
   .get("/uncategorized-groups", ({ query }) => {
     const days = query.days ? Number(query.days) : DEFAULT_LOOKBACK_DAYS;
-    return getUncategorizedGroups(days);
+    return getUncategorizedGroups(days, parseUserId(query));
   })
-  .post("/bulk-assign", ({ body, set }) => {
-    const input = body as { key?: string; categoryId?: number };
-    if (!input.key || !input.categoryId) {
-      set.status = 400;
-      return { error: "key and categoryId are required" };
-    }
-    const normalizedKey = normalizeDescription(input.key);
-    if (!normalizedKey) {
-      set.status = 400;
-      return { error: "key does not normalize to a usable match pattern" };
-    }
-
-    const existingRule = db
-      .query("SELECT id FROM category_rules WHERE match_text = ?")
-      .get(normalizedKey) as { id: number } | null;
-    if (existingRule) {
-      db.query("UPDATE category_rules SET category_id = ? WHERE id = ?").run(
-        input.categoryId,
-        existingRule.id
-      );
-    } else {
-      db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
-        normalizedKey,
-        input.categoryId
-      );
-    }
-
-    const uncategorized = db
-      .query(
-        `SELECT t.id, t.description
-         FROM transactions t
-         JOIN categories c ON c.id = t.category_id
-         WHERE c.name = 'Uncategorized'`
-      )
-      .all() as { id: string; description: string }[];
-
-    let updated = 0;
-    for (const tx of uncategorized) {
-      if (normalizeDescription(tx.description) === normalizedKey) {
-        db.query("UPDATE transactions SET category_id = ? WHERE id = ?").run(
-          input.categoryId,
-          tx.id
-        );
-        updated += 1;
+  .post(
+    "/bulk-assign",
+    ({ body, set }) => {
+      const normalizedKey = normalizeDescription(body.key);
+      if (!normalizedKey) {
+        set.status = 400;
+        return { error: "key does not normalize to a usable match pattern" };
       }
-    }
 
-    return { updated };
-  })
-  .post("/rules", ({ body, set }) => {
-    const input = body as { matchText?: string; categoryId?: number };
-    if (!input.matchText || !input.categoryId) {
-      set.status = 400;
-      return { error: "matchText and categoryId are required" };
-    }
-    db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
-      input.matchText.toLowerCase().trim(),
-      input.categoryId
-    );
-    return listRules();
-  })
+      const existingRule = db
+        .query("SELECT id FROM category_rules WHERE match_text = ?")
+        .get(normalizedKey) as { id: number } | null;
+      if (existingRule) {
+        db.query("UPDATE category_rules SET category_id = ? WHERE id = ?").run(
+          body.categoryId,
+          existingRule.id
+        );
+      } else {
+        db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
+          normalizedKey,
+          body.categoryId
+        );
+      }
+
+      const uncategorized = db
+        .query(
+          `SELECT t.id, t.description
+           FROM transactions t
+           JOIN categories c ON c.id = t.category_id
+           WHERE c.name = 'Uncategorized'`
+        )
+        .all() as { id: string; description: string }[];
+
+      let updated = 0;
+      for (const tx of uncategorized) {
+        if (normalizeDescription(tx.description) === normalizedKey) {
+          db.query("UPDATE transactions SET category_id = ? WHERE id = ?").run(
+            body.categoryId,
+            tx.id
+          );
+          updated += 1;
+        }
+      }
+
+      return { updated };
+    },
+    { body: BulkAssignBody }
+  )
+  .post(
+    "/rules",
+    ({ body }) => {
+      db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
+        body.matchText.toLowerCase().trim(),
+        body.categoryId
+      );
+      return listRules();
+    },
+    { body: NewCategoryRuleBody }
+  )
   .delete("/rules/:id", ({ params }) => {
     db.query("DELETE FROM category_rules WHERE id = ?").run(Number(params.id));
     return listRules();

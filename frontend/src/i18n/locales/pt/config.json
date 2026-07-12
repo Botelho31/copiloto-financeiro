@@ -1,0 +1,36 @@
+{
+  "title": "Pessoas",
+  "subtitle": "Cada pessoa tem suas próprias contas, transações, contas a pagar, dívidas e metas — as credenciais do Pluggy ficam aqui por pessoa, não no .env.",
+  "table": {
+    "name": "Nome",
+    "pluggy": "Pluggy",
+    "cardSpendGoal": "Meta de gasto no cartão",
+    "pluggyConnected": "Conectado · {{count}} item(ns)",
+    "pluggyNotConnected": "Não conectado",
+    "cardSpendGoalValue": "{{amount}}",
+    "cardSpendGoalUnset": "Não definida",
+    "syncNow": "Sincronizar agora",
+    "edit": "Editar",
+    "remove": "Remover"
+  },
+  "empty": "Ninguém cadastrado ainda — adicione a primeira pessoa abaixo.",
+  "addForm": {
+    "title": "Adicionar pessoa",
+    "subtitle": "O nome é obrigatório; os campos do Pluggy podem ser preenchidos depois.",
+    "submit": "Adicionar pessoa"
+  },
+  "editForm": {
+    "submit": "Salvar"
+  },
+  "form": {
+    "name": "Nome",
+    "color": "Cor",
+    "pluggyClientId": "Pluggy Client ID",
+    "pluggyClientSecret": "Pluggy Client Secret",
+    "pluggyItemIds": "Pluggy Item IDs",
+    "pluggyItemIdsPlaceholder": "Item IDs separados por vírgula dos bancos conectados desta pessoa",
+    "unchangedPlaceholder": "Deixe em branco para manter",
+    "save": "Salvar",
+    "cancel": "Cancelar"
+  }
+}

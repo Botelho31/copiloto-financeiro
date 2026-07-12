@@ -4,6 +4,17 @@
 export * from "./amortization";
 export * from "./billCadence";
 
+// A household member — not a login account (auth stays single-admin); each
+// user has their own accounts/transactions/bills/debts/goals, scoped via
+// user_id, and their own Pluggy connection. Secret is never sent to the client.
+export interface User {
+  id: number;
+  name: string;
+  color: string;
+  hasPluggyCredentials: boolean;
+  pluggyItemIds: string[];
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -15,12 +26,14 @@ export interface Account {
   balance: number;
   currency_code: string;
   item_id: string;
+  user_id: number;
   updated_at: string;
 }
 
 export interface Investment {
   id: string;
   item_id: string;
+  user_id: number;
   name: string;
   type: string;
   subtype: string | null;
@@ -51,6 +64,15 @@ export interface Category {
   // money movement, but not income/spend, so it's excluded from cash-flow
   // totals while still visible in category breakdowns.
   excludes_from_cashflow: boolean;
+  // True only for "Savings & Investments" — money moving into/out of an
+  // investment specifically, as opposed to a plain inter-account transfer.
+  // Flagged (rather than name-matched) since the category is user-renameable.
+  is_investment_transfer: boolean;
+  // True only for "Debt & Credit Card" — the aggregate bank-side credit card
+  // bill payment, excluded wherever individual card purchases are already
+  // counted so the same spend isn't double-counted. Flagged for the same
+  // rename-safety reason as is_investment_transfer.
+  is_card_bill_payment: boolean;
   color: string;
 }
 
@@ -114,6 +136,15 @@ export interface ProjectedMonth {
     name: string;
     amount: number;
     kind: "bill" | "debt" | "interest" | "cardSpend";
+    // The real category name for a "bill" line, or a "debt" line whose
+    // schedule comes from a linked payment bill — null for a debt line with
+    // no linked bill (no real category to attribute it to; consumers
+    // conventionally bucket these under a synthetic "Debt Repayment"), and
+    // for "interest"/"cardSpend" lines (also not tied to a real category).
+    // Computed once here so every consumer attributes a line to the same
+    // category instead of independently cross-referencing bill ids — see
+    // backend/API-ARCHITECTURE.md's R3.
+    category_name: string | null;
     /** Set on a debt line whose schedule comes from the debt's linked payment
      * bill — lets category tables attribute the amount to that bill's category
      * even though the line itself belongs to the debt. */
@@ -126,7 +157,7 @@ export interface ProjectedMonth {
     interestPortion?: number;
   }[];
   /** Bills flagged is_card_expense — informational only, not part of net/balance (already folded into the cardSpend line above). */
-  cardExpenseBills: { id: number; name: string; amount: number }[];
+  cardExpenseBills: { id: number; name: string; amount: number; category_name: string | null }[];
 }
 
 export interface ProjectionResult {
@@ -143,6 +174,18 @@ export interface Debt {
   name: string;
   direction: "owed_by_me" | "owed_to_me";
   counterparty: string | null;
+  // The household member who owns/tracks this debt entry.
+  user_id: number;
+  // Set instead of (or alongside) counterparty when the other party is a real
+  // household member — e.g. "Juliana owes 20% of Estudio Foz" — rather than
+  // an outside person. Purely a typed label: split_percentage/debt_links/
+  // debt_transactions still drive all the principal/remaining math, unchanged.
+  shared_with_user_id: number | null;
+  shared_with_user_name: string | null;
+  // True when the debt is being viewed as its owner (user_id); false when
+  // viewed by the shared_with_user_id party instead. Always true in the
+  // Household (unscoped) view.
+  is_owner: boolean;
   principal_amount: number | null;
   split_percentage: number | null;
   expected_total_amount: number | null;
@@ -212,12 +255,23 @@ export interface Debt {
   // final entry. Empty whenever projected_finish_date is null (same
   // conditions apply — no basis to project, or the debt isn't active).
   projected_balance_schedule: DebtBalanceScheduleEntry[];
+  // The historical mirror of projected_balance_schedule: real past balance,
+  // month by month, from real pay_off payments — from start_date through
+  // today (empty for a debt that hasn't started yet). Computed server-side
+  // so a chart never has to reimplement the amortization/decline math to
+  // draw "what this debt's balance actually was."
+  balance_history: DebtBalanceHistoryEntry[];
 }
 
 export interface DebtBalanceScheduleEntry {
   month: string;
   principal_owed: number;
   interest_owed: number;
+}
+
+export interface DebtBalanceHistoryEntry {
+  month: string;
+  balance: number;
 }
 
 export type DebtPaymentPlan =
@@ -234,7 +288,12 @@ export type DebtPaymentPlan =
       // extra amortization payments (e.g. a lump-sum or yearly paydown) that
       // shrink the balance faster than the plain schedule alone, so they're
       // carried here for projections/charts to add on top.
-      extra_bills: { bill_id: number; bill_name: string; amount: number; cadence: Bill["cadence"] }[];
+      extra_bills: {
+        bill_id: number;
+        bill_name: string;
+        amount: number;
+        cadence: Bill["cadence"];
+      }[];
     }
   | {
       // Zero or more explicitly linked bills (each keeping its own real

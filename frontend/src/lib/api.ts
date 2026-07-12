@@ -31,3 +31,10 @@ export async function logout(): Promise<void> {
   await fetch("/logout", { method: "POST" });
   window.location.href = "/login";
 }
+
+// null userId (Household) leaves the path untouched — the backend treats a
+// missing ?userId= the same way.
+export function appendUserId(path: string, userId: number | null): string {
+  if (userId == null) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}userId=${userId}`;
+}

@@ -19,9 +19,9 @@ export async function createAdmin(username: string, password: string): Promise<v
 }
 
 export async function verifyAdmin(username: string, password: string): Promise<boolean> {
-  const row = db.query("SELECT username, password_hash FROM admin WHERE id = 1").get() as
-    | AdminRow
-    | null;
+  const row = db
+    .query("SELECT username, password_hash FROM admin WHERE id = 1")
+    .get() as AdminRow | null;
   if (!row || row.username !== username) return false;
   return verifyPassword(password, row.password_hash);
 }

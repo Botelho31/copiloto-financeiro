@@ -1,0 +1,22 @@
+{
+  "title": "Household",
+  "subtitle": "Everyone combined — pick a person from the nav above to narrow this down instead.",
+  "summary": {
+    "netWorth": "Net worth",
+    "bankBalance": "Bank balance",
+    "cardBalance": "Card balance",
+    "owedByHousehold": "Owed by household",
+    "owedToHousehold": "Owed to household",
+    "nextMonth": "Next month"
+  },
+  "breakdown": {
+    "title": "By person",
+    "subtitle": "Each person's own balances and net worth, side by side.",
+    "person": "Person",
+    "bankBalance": "Bank",
+    "cardBalance": "Card",
+    "investments": "Investments",
+    "netWorth": "Net worth",
+    "empty": "No one set up yet — add people in Config."
+  }
+}

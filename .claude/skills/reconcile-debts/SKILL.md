@@ -12,8 +12,8 @@ description: >-
 
 Every active debt can carry a `matching_rule`: a short prose description of
 which transactions belong to it (counterparty pattern, amount threshold,
-role) — e.g. *"any DEBIT to 'Ana Cristina...' > R$1,000 → pay_off; her
-regular allowance (≤R$1,000) is not part of this debt."* Nothing applies this
+role) — e.g. _"any DEBIT to 'Ana Cristina...' > R$1,000 → pay_off; her
+regular allowance (≤R$1,000) is not part of this debt."_ Nothing applies this
 automatically. This skill is the manual pass: read the rule, find matching
 unlinked transactions, link the clear ones, flag the rest.
 
@@ -45,6 +45,6 @@ unlinked transactions, link the clear ones, flag the rest.
   just a label.
 - Respect explicit exclusions in the rule text exactly as written, even when
   a transaction looks close.
-- This only *applies* existing `matching_rule` text — it doesn't write or
+- This only _applies_ existing `matching_rule` text — it doesn't write or
   edit rules. If a rule reads stale or wrong for what's actually showing up
   in transactions, say so; don't rewrite it unasked.

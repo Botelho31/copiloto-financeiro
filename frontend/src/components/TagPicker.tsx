@@ -73,13 +73,24 @@ export function TagPicker(props: { onPick: (tagId: number) => void }) {
             placeholder="Search or create…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ width: "100%", border: "none", borderBottom: "1px solid var(--rule)", borderRadius: 0 }}
+            style={{
+              width: "100%",
+              border: "none",
+              borderBottom: "1px solid var(--rule)",
+              borderRadius: 0,
+            }}
           />
           {filtered.map((t) => (
             <div
               key={t.id}
               onClick={() => pick(t.id)}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", cursor: "pointer" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                cursor: "pointer",
+              }}
             >
               <span
                 style={{

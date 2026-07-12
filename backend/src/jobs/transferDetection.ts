@@ -17,16 +17,18 @@ interface TxRow {
 }
 
 function getCategoryId(name: string): number {
-  const row = db.query("SELECT id FROM categories WHERE name = ?").get(name) as
-    | { id: number }
-    | null;
+  const row = db.query("SELECT id FROM categories WHERE name = ?").get(name) as {
+    id: number;
+  } | null;
   if (!row) throw new Error(`"${name}" category is missing — did migrations run?`);
   return row.id;
 }
 
 // Only touches transactions still in "Uncategorized" — anything the user (or
-// a rule) already categorized is left alone.
-export function detectSelfTransfers(): number {
+// a rule) already categorized is left alone. Scoped to one person's own
+// transactions at a time, so two different people's same-amount transactions
+// within the match window are never mistaken for a transfer between them.
+export function detectSelfTransfers(userId: number): number {
   const uncategorizedId = getCategoryId("Uncategorized");
   const transfersId = getCategoryId("Transfers");
 
@@ -35,10 +37,10 @@ export function detectSelfTransfers(): number {
       `SELECT t.id, t.account_id, t.date, t.amount, t.type
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
-       WHERE a.type = 'BANK' AND t.category_id = ?
+       WHERE a.type = 'BANK' AND t.category_id = ? AND t.user_id = ?
        ORDER BY t.date`
     )
-    .all(uncategorizedId) as TxRow[];
+    .all(uncategorizedId, userId) as TxRow[];
 
   const matched = new Set<string>();
   let matchedPairs = 0;

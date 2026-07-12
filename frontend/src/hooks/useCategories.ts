@@ -12,7 +12,15 @@ export function useCategories() {
 export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, kind, color }: { name: string; kind?: "income" | "expense"; color?: string }) =>
+    mutationFn: ({
+      name,
+      kind,
+      color,
+    }: {
+      name: string;
+      kind?: "income" | "expense";
+      color?: string;
+    }) =>
       apiFetch<Category[]>("/api/categories", {
         method: "POST",
         body: JSON.stringify({ name, kind, color }),

@@ -59,7 +59,8 @@
     "empty": "Nothing to project yet — confirm or add a recurring item above.",
     "category": "Category",
     "netRecurring": "Net recurring",
-    "uncategorized": "Uncategorized"
+    "uncategorized": "Uncategorized",
+    "debtRepayment": "Debt Repayment"
   },
   "form": {
     "name": "Name",

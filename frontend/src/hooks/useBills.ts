@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Bill } from "shared";
-import { apiFetch } from "../lib/api";
+import { apiFetch, appendUserId } from "../lib/api";
+import { usePersonScope } from "../lib/personScope";
 
 export function useBills() {
+  const { activeUserId } = usePersonScope();
   return useQuery({
-    queryKey: ["bills"],
-    queryFn: () => apiFetch<Bill[]>("/api/bills"),
+    queryKey: ["bills", activeUserId],
+    queryFn: () => apiFetch<Bill[]>(appendUserId("/api/bills", activeUserId)),
   });
 }
 
@@ -27,9 +29,17 @@ export interface NewBillInput {
 // amount/cadence/confirmed changes on an already-linked bill matter too.
 export function useCreateBill() {
   const queryClient = useQueryClient();
+  const { activeUserId } = usePersonScope();
   return useMutation({
-    mutationFn: (input: NewBillInput) =>
-      apiFetch<Bill[]>("/api/bills", { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: (input: NewBillInput) => {
+      if (activeUserId == null) {
+        return Promise.reject(new Error("Select a person from the nav before adding a bill."));
+      }
+      return apiFetch<Bill[]>("/api/bills", {
+        method: "POST",
+        body: JSON.stringify({ ...input, userId: activeUserId }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bills"] });
       queryClient.invalidateQueries({ queryKey: ["debts"] });

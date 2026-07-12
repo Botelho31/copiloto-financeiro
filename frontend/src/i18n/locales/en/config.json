@@ -1,0 +1,36 @@
+{
+  "title": "People",
+  "subtitle": "Each person has their own accounts, transactions, bills, debts and goals — Pluggy credentials live here per person, not in .env.",
+  "table": {
+    "name": "Name",
+    "pluggy": "Pluggy",
+    "cardSpendGoal": "Card spend goal",
+    "pluggyConnected": "Connected · {{count}} item(s)",
+    "pluggyNotConnected": "Not connected",
+    "cardSpendGoalValue": "{{amount}}",
+    "cardSpendGoalUnset": "Not set",
+    "syncNow": "Sync now",
+    "edit": "Edit",
+    "remove": "Remove"
+  },
+  "empty": "No one set up yet — add the first person below.",
+  "addForm": {
+    "title": "Add a person",
+    "subtitle": "Name is required; Pluggy fields can be filled in later.",
+    "submit": "Add person"
+  },
+  "editForm": {
+    "submit": "Save"
+  },
+  "form": {
+    "name": "Name",
+    "color": "Color",
+    "pluggyClientId": "Pluggy Client ID",
+    "pluggyClientSecret": "Pluggy Client Secret",
+    "pluggyItemIds": "Pluggy Item IDs",
+    "pluggyItemIdsPlaceholder": "Comma-separated Item IDs for this person's connected bank(s)",
+    "unchangedPlaceholder": "Leave blank to keep unchanged",
+    "save": "Save",
+    "cancel": "Cancel"
+  }
+}

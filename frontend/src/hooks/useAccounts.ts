@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Account } from "shared";
-import { apiFetch } from "../lib/api";
+import { apiFetch, appendUserId } from "../lib/api";
+import { usePersonScope } from "../lib/personScope";
 
 export function useAccounts() {
+  const { activeUserId } = usePersonScope();
   return useQuery({
-    queryKey: ["accounts"],
-    queryFn: () => apiFetch<Account[]>("/api/accounts"),
+    queryKey: ["accounts", activeUserId],
+    queryFn: () => apiFetch<Account[]>(appendUserId("/api/accounts", activeUserId)),
   });
 }

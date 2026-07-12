@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
+import { useUsers } from "../hooks/useUsers";
 import { logout } from "../lib/api";
+import { usePersonScope } from "../lib/personScope";
 
 function useNavLinks() {
   const { t } = useTranslation();
@@ -11,7 +13,32 @@ function useNavLinks() {
     { to: "/bills", label: t("nav.bills") },
     { to: "/debts", label: t("nav.debts") },
     { to: "/projections", label: t("nav.projections") },
+    { to: "/household", label: t("nav.household") },
+    { to: "/config", label: t("nav.config") },
   ];
+}
+
+function PersonSwitcher() {
+  const { t } = useTranslation();
+  const { data: users } = useUsers();
+  const { activeUserId, setActiveUserId } = usePersonScope();
+
+  return (
+    <select
+      aria-label={t("nav.person")}
+      value={activeUserId ?? "household"}
+      onChange={(e) =>
+        setActiveUserId(e.target.value === "household" ? null : Number(e.target.value))
+      }
+    >
+      <option value="household">{t("nav.household")}</option>
+      {(users ?? []).map((u) => (
+        <option key={u.id} value={u.id}>
+          {u.name}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function LanguageSwitcher() {
@@ -56,6 +83,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+        <PersonSwitcher />
         <LanguageSwitcher />
         <form
           className="logout-form"

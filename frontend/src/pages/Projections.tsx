@@ -1,5 +1,13 @@
 import { Fragment, type FormEvent, useEffect, useState } from "react";
-import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import {
+  FiCheck,
+  FiChevronDown,
+  FiChevronRight,
+  FiEdit2,
+  FiPlus,
+  FiTrash2,
+  FiX,
+} from "react-icons/fi";
 import { useTranslation } from "react-i18next";
 import {
   Bar,
@@ -99,13 +107,21 @@ type BalancePoint = ProjectedMonth & {
 function BalanceTooltip(props: {
   active?: boolean;
   label?: string;
-  payload?: { name?: string; value?: number; color?: string; dataKey?: string; payload?: BalancePoint }[];
+  payload?: {
+    name?: string;
+    value?: number;
+    color?: string;
+    dataKey?: string;
+    payload?: BalancePoint;
+  }[];
   debtEndMarkers: { id: number; name: string; projected_finish_date: string }[];
   goals: Goal[];
 }) {
   const { t } = useTranslation("projections");
   if (!props.active || !props.payload || props.payload.length === 0) return null;
-  const finishing = props.debtEndMarkers.filter((d) => d.projected_finish_date.slice(0, 7) === props.label);
+  const finishing = props.debtEndMarkers.filter(
+    (d) => d.projected_finish_date.slice(0, 7) === props.label
+  );
   const goalsDue = props.goals.filter((g) => g.target_date.slice(0, 7) === props.label);
   const point = props.payload[0]?.payload;
   return (
@@ -128,7 +144,10 @@ function BalanceTooltip(props: {
         </p>
       )}
       {finishing.length > 0 && (
-        <p className="recharts-tooltip-item" style={{ margin: "4px 0 0", color: DEBT_COLOR, fontWeight: 600 }}>
+        <p
+          className="recharts-tooltip-item"
+          style={{ margin: "4px 0 0", color: DEBT_COLOR, fontWeight: 600 }}
+        >
           {finishing.map((d) => t("balanceChart.tooltip.debtPaysOff", { name: d.name })).join(", ")}
         </p>
       )}
@@ -177,7 +196,12 @@ function ScenarioBadge() {
   return (
     <span
       className="badge"
-      style={{ color: "var(--gold)", borderColor: "var(--gold)", fontFamily: "var(--font-sans)", fontWeight: 500 }}
+      style={{
+        color: "var(--gold)",
+        borderColor: "var(--gold)",
+        fontFamily: "var(--font-sans)",
+        fontWeight: 500,
+      }}
     >
       {t("scenario.badge")}
     </span>
@@ -194,8 +218,18 @@ function GoalStatusCell(props: { goal: Goal }) {
       : 1;
   return (
     <td>
-      <span className={g.on_track ? "gain" : "shortfall"}>{g.on_track ? t("status.onTrack") : t("status.behind")}</span>
-      <div style={{ width: 90, height: 4, background: "var(--rule)", borderRadius: 2, margin: "6px 0 4px" }}>
+      <span className={g.on_track ? "gain" : "shortfall"}>
+        {g.on_track ? t("status.onTrack") : t("status.behind")}
+      </span>
+      <div
+        style={{
+          width: 90,
+          height: 4,
+          background: "var(--rule)",
+          borderRadius: 2,
+          margin: "6px 0 4px",
+        }}
+      >
         <div
           style={{
             width: `${ratio * 100}%`,
@@ -261,9 +295,27 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
     <table>
       <thead>
         <tr>
-          <SortableTh label={t("breakdown.table.month")} sortKey="label" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
-          <SortableTh label={t("breakdown.table.net")} sortKey="net" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
-          <SortableTh label={t("breakdown.table.balance")} sortKey="balance" activeKey={monthSortKey} direction={monthSortDirection} onSort={toggleMonthSort} />
+          <SortableTh
+            label={t("breakdown.table.month")}
+            sortKey="label"
+            activeKey={monthSortKey}
+            direction={monthSortDirection}
+            onSort={toggleMonthSort}
+          />
+          <SortableTh
+            label={t("breakdown.table.net")}
+            sortKey="net"
+            activeKey={monthSortKey}
+            direction={monthSortDirection}
+            onSort={toggleMonthSort}
+          />
+          <SortableTh
+            label={t("breakdown.table.balance")}
+            sortKey="balance"
+            activeKey={monthSortKey}
+            direction={monthSortDirection}
+            onSort={toggleMonthSort}
+          />
           <th />
         </tr>
       </thead>
@@ -273,13 +325,16 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
             <tr>
               <td>{m.label}</td>
               <td className={m.net < 0 ? "money shortfall" : "money"}>{formatMoney(m.net)}</td>
-              <td className={m.shortfall ? "money shortfall" : "money"}>{formatMoney(m.balance)}</td>
+              <td className={m.shortfall ? "money shortfall" : "money"}>
+                {formatMoney(m.balance)}
+              </td>
               <td>
                 <button
                   className="link-button"
                   onClick={() => setExpanded((e) => (e === m.monthIndex ? null : m.monthIndex))}
                 >
-                  {expanded === m.monthIndex ? <FiChevronDown /> : <FiChevronRight />} {t("breakdown.table.linesButton")}
+                  {expanded === m.monthIndex ? <FiChevronDown /> : <FiChevronRight />}{" "}
+                  {t("breakdown.table.linesButton")}
                 </button>
               </td>
             </tr>
@@ -289,9 +344,21 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
                   <table>
                     <thead>
                       <tr>
-                        <SortableTh label={t("breakdown.detail.lineItem")} sortKey="name" activeKey={lineSortKey} direction={lineSortDirection} onSort={toggleLineSort} />
+                        <SortableTh
+                          label={t("breakdown.detail.lineItem")}
+                          sortKey="name"
+                          activeKey={lineSortKey}
+                          direction={lineSortDirection}
+                          onSort={toggleLineSort}
+                        />
                         <th>{t("breakdown.detail.kind")}</th>
-                        <SortableTh label={t("breakdown.detail.amount")} sortKey="amount" activeKey={lineSortKey} direction={lineSortDirection} onSort={toggleLineSort} />
+                        <SortableTh
+                          label={t("breakdown.detail.amount")}
+                          sortKey="amount"
+                          activeKey={lineSortKey}
+                          direction={lineSortDirection}
+                          onSort={toggleLineSort}
+                        />
                       </tr>
                     </thead>
                     <tbody>
@@ -330,7 +397,8 @@ function MonthlyBreakdownTable(props: { months: ProjectedMonth[] }) {
 function monthsUntil(targetDate: string): number {
   const now = new Date();
   const target = new Date(targetDate);
-  const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+  const months =
+    (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
   return Math.max(1, months);
 }
 
@@ -340,8 +408,11 @@ export function ProjectionsPage() {
   // A goal's own date can fall well outside any fixed granularity step —
   // this overrides the granularity-derived horizon entirely rather than
   // trying to fit it into month/quarter/semester/year buckets.
-  const [horizonOverride, setHorizonOverride] = useState<{ months: number; name: string } | null>(null);
-  const horizonMonths = horizonOverride?.months ?? GRANULARITY_TO_HORIZON_MONTHS[period.granularity];
+  const [horizonOverride, setHorizonOverride] = useState<{ months: number; name: string } | null>(
+    null
+  );
+  const horizonMonths =
+    horizonOverride?.months ?? GRANULARITY_TO_HORIZON_MONTHS[period.granularity];
 
   const { data: baseline } = useProjections(horizonMonths);
   const { data: bills } = useBills();
@@ -413,18 +484,16 @@ export function ProjectionsPage() {
   // "interest" — the compounding interest the projection already applied to
   // the balance) so the chart can show accrual alongside the trajectory,
   // per month and as a running total.
-  let interestRunningTotal = 0;
-  const balanceChartData: BalancePoint[] = months.map((m, i) => {
-    const interest = m.bills.filter((b) => b.kind === "interest").reduce((sum, b) => sum + b.amount, 0);
-    interestRunningTotal += interest;
-    return {
-      ...m,
-      baselineBalance: baselineMonths[i]?.balance ?? null,
-      interest,
-      interestToDate: interestRunningTotal,
-    };
-  });
-  const totalInterest = interestRunningTotal;
+  const monthlyInterest = months.map((m) =>
+    m.bills.filter((b) => b.kind === "interest").reduce((sum, b) => sum + b.amount, 0)
+  );
+  const balanceChartData: BalancePoint[] = months.map((m, i) => ({
+    ...m,
+    baselineBalance: baselineMonths[i]?.balance ?? null,
+    interest: monthlyInterest[i]!,
+    interestToDate: monthlyInterest.slice(0, i + 1).reduce((sum, v) => sum + v, 0),
+  }));
+  const totalInterest = monthlyInterest.reduce((sum, v) => sum + v, 0);
   const balanceGrowth = endBalance - startingBalance;
   // "How much of this climb is just interest?" — only meaningful when the
   // balance actually grows and interest contributed something.
@@ -482,7 +551,12 @@ export function ProjectionsPage() {
   const [editGoalAmount, setEditGoalAmount] = useState("");
   const [editGoalDate, setEditGoalDate] = useState("");
 
-  function startEditGoal(g: { id: number; name: string; target_amount: number; target_date: string }) {
+  function startEditGoal(g: {
+    id: number;
+    name: string;
+    target_amount: number;
+    target_date: string;
+  }) {
     setEditingGoalId(g.id);
     setEditGoalName(g.name);
     setEditGoalAmount(String(g.target_amount));
@@ -494,7 +568,11 @@ export function ProjectionsPage() {
     updateGoal.mutate(
       {
         id: editingGoalId,
-        input: { name: editGoalName, targetAmount: Number(editGoalAmount), targetDate: editGoalDate },
+        input: {
+          name: editGoalName,
+          targetAmount: Number(editGoalAmount),
+          targetDate: editGoalDate,
+        },
       },
       { onSuccess: () => setEditingGoalId(null) }
     );
@@ -606,11 +684,22 @@ export function ProjectionsPage() {
             </div>
           )}
         </div>
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))" }}
+        >
           <SummaryCard
             label={t("summary.balance.label", { month: lastMonth?.label ?? "—" })}
             value={formatMoney(endBalance)}
-            tone={!lastMonth ? undefined : endBalance < 0 ? "bad" : endBalance >= startingBalance ? "good" : undefined}
+            tone={
+              !lastMonth
+                ? undefined
+                : endBalance < 0
+                  ? "bad"
+                  : endBalance >= startingBalance
+                    ? "good"
+                    : undefined
+            }
             caption={
               t("summary.balance.caption", {
                 delta: `${endBalance - startingBalance >= 0 ? "+" : ""}${formatMoney(endBalance - startingBalance)}`,
@@ -628,7 +717,9 @@ export function ProjectionsPage() {
           />
           <SummaryCard
             label={t("summary.firstShortfall.label")}
-            value={firstShortfall?.label ?? (months.length > 0 ? t("summary.firstShortfall.none") : "—")}
+            value={
+              firstShortfall?.label ?? (months.length > 0 ? t("summary.firstShortfall.none") : "—")
+            }
             tone={months.length === 0 ? undefined : firstShortfall ? "bad" : "good"}
             caption={
               firstShortfall
@@ -638,7 +729,11 @@ export function ProjectionsPage() {
           />
           <SummaryCard
             label={t("summary.goalsOnTrack.label")}
-            value={goalCount === 0 ? "—" : t("summary.goalsOnTrack.value", { onTrack: goalsOnTrack, total: goalCount })}
+            value={
+              goalCount === 0
+                ? "—"
+                : t("summary.goalsOnTrack.value", { onTrack: goalsOnTrack, total: goalCount })
+            }
             tone={goalCount === 0 ? undefined : goalsOnTrack === goalCount ? "good" : "bad"}
             caption={
               goalCount === 0
@@ -677,12 +772,22 @@ export function ProjectionsPage() {
             <svg width="14" height="10" aria-hidden="true">
               <line x1="0" y1="5" x2="14" y2="5" stroke="var(--accent)" strokeWidth="2" />
             </svg>
-            {showBaselineOverlay ? t("balanceChart.legend.whatIfBalance") : t("balanceChart.legend.balance")}
+            {showBaselineOverlay
+              ? t("balanceChart.legend.whatIfBalance")
+              : t("balanceChart.legend.balance")}
           </span>
           {showBaselineOverlay && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <svg width="14" height="10" aria-hidden="true">
-                <line x1="0" y1="5" x2="14" y2="5" stroke="var(--text-muted)" strokeWidth="2" strokeDasharray="4 3" />
+                <line
+                  x1="0"
+                  y1="5"
+                  x2="14"
+                  y2="5"
+                  stroke="var(--text-muted)"
+                  strokeWidth="2"
+                  strokeDasharray="4 3"
+                />
               </svg>
               {t("balanceChart.legend.baseline")}
             </span>
@@ -730,7 +835,9 @@ export function ProjectionsPage() {
             <LineChart data={balanceChartData} syncId="balance-projection">
               <XAxis dataKey="label" stroke="var(--text-muted)" />
               <YAxis stroke="var(--text-muted)" width={60} />
-              <Tooltip content={<BalanceTooltip debtEndMarkers={debtEndMarkers} goals={goals ?? []} />} />
+              <Tooltip
+                content={<BalanceTooltip debtEndMarkers={debtEndMarkers} goals={goals ?? []} />}
+              />
               {showBaselineOverlay && (
                 <Line
                   type="monotone"
@@ -744,7 +851,11 @@ export function ProjectionsPage() {
               <Line
                 type="monotone"
                 dataKey="balance"
-                name={showBaselineOverlay ? t("balanceChart.whatIfLineLabel") : t("balanceChart.legend.balance")}
+                name={
+                  showBaselineOverlay
+                    ? t("balanceChart.whatIfLineLabel")
+                    : t("balanceChart.legend.balance")
+                }
                 stroke="var(--accent)"
                 strokeWidth={2}
                 dot={(props: any) => {
@@ -879,7 +990,13 @@ export function ProjectionsPage() {
               }}
             >
               <h3
-                style={{ margin: 0, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 8 }}
+                style={{
+                  margin: 0,
+                  fontSize: 15,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
               >
                 <svg width="10" height="10" aria-hidden="true">
                   <rect width="10" height="10" rx="2" fill="var(--gold)" />
@@ -887,7 +1004,10 @@ export function ProjectionsPage() {
                 {t("interestChart.title")}
               </h3>
               <span className="muted" style={{ fontSize: 12 }}>
-                {t("interestChart.caption", { amount: formatMoney(totalInterest), count: months.length })}
+                {t("interestChart.caption", {
+                  amount: formatMoney(totalInterest),
+                  count: months.length,
+                })}
                 {interestShareOfGrowth != null &&
                   ` · ${t("interestChart.shareSuffix", { percent: Math.round(interestShareOfGrowth * 100) })}`}
               </span>
@@ -916,7 +1036,10 @@ export function ProjectionsPage() {
           className="grid"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 16 }}
         >
-          <SummaryCard label={t("savingsChart.summary.startingBalance")} value={formatMoney(result?.startingBalance ?? 0)} />
+          <SummaryCard
+            label={t("savingsChart.summary.startingBalance")}
+            value={formatMoney(result?.startingBalance ?? 0)}
+          />
           <SummaryCard
             label={t("savingsChart.summary.cardSpendBaseline")}
             value={formatMoney(result?.cardSpendActualAverage ?? 0)}
@@ -944,7 +1067,9 @@ export function ProjectionsPage() {
             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
               {cardSpendGoal === ""
                 ? t("savingsChart.cardSpendGoal.usingAverage")
-                : t("savingsChart.cardSpendGoal.saved", { amount: formatMoney(Number(cardSpendGoal)) })}
+                : t("savingsChart.cardSpendGoal.saved", {
+                    amount: formatMoney(Number(cardSpendGoal)),
+                  })}
             </div>
           </div>
         </div>
@@ -967,7 +1092,8 @@ export function ProjectionsPage() {
           onClick={() => setBreakdownOpen((o) => !o)}
           style={{ marginTop: 16, fontSize: 16 }}
         >
-          {breakdownOpen ? <FiChevronDown /> : <FiChevronRight />} {t("savingsChart.breakdownToggle")}
+          {breakdownOpen ? <FiChevronDown /> : <FiChevronRight />}{" "}
+          {t("savingsChart.breakdownToggle")}
         </button>
         {breakdownOpen && <MonthlyBreakdownTable months={months} />}
       </div>
@@ -1027,18 +1153,33 @@ export function ProjectionsPage() {
 
         <div
           className="grid"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 24, alignItems: "start", marginTop: 16 }}
+          style={{
+            gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
+            gap: 24,
+            alignItems: "start",
+            marginTop: 16,
+          }}
         >
           <div>
             <h3 style={{ marginTop: 0 }}>{t("whatIf.income.title")}</h3>
             <table>
               <thead>
                 <tr>
-                  <SortableTh label={t("whatIf.table.bill")} sortKey="name" activeKey={incomeSortKey} direction={incomeSortDirection} onSort={toggleIncomeSort} />
-                  <SortableTh label={t("whatIf.table.expected")} sortKey="expected" activeKey={incomeSortKey} direction={incomeSortDirection} onSort={toggleIncomeSort} />
-                  <th title={t("whatIf.table.cardColumnTitle")}>
-                    {t("whatIf.table.card")}
-                  </th>
+                  <SortableTh
+                    label={t("whatIf.table.bill")}
+                    sortKey="name"
+                    activeKey={incomeSortKey}
+                    direction={incomeSortDirection}
+                    onSort={toggleIncomeSort}
+                  />
+                  <SortableTh
+                    label={t("whatIf.table.expected")}
+                    sortKey="expected"
+                    activeKey={incomeSortKey}
+                    direction={incomeSortDirection}
+                    onSort={toggleIncomeSort}
+                  />
+                  <th title={t("whatIf.table.cardColumnTitle")}>{t("whatIf.table.card")}</th>
                   <th>{t("whatIf.table.override")}</th>
                 </tr>
               </thead>
@@ -1065,7 +1206,12 @@ export function ProjectionsPage() {
                           if (value === undefined) delete next[b.id];
                           else next[b.id] = value;
                           setBillAmounts(next);
-                          recompute(next, discretionaryDeltaPercent, interestRateAnnualPercent, cardSpendGoal);
+                          recompute(
+                            next,
+                            discretionaryDeltaPercent,
+                            interestRateAnnualPercent,
+                            cardSpendGoal
+                          );
                         }}
                       />
                     </td>
@@ -1073,18 +1219,27 @@ export function ProjectionsPage() {
                 ))}
               </tbody>
             </table>
-
           </div>
           <div>
             <h3 style={{ marginTop: 0 }}>{t("whatIf.expenses.title")}</h3>
             <table>
               <thead>
                 <tr>
-                  <SortableTh label={t("whatIf.table.bill")} sortKey="name" activeKey={expenseSortKey} direction={expenseSortDirection} onSort={toggleExpenseSort} />
-                  <SortableTh label={t("whatIf.table.expected")} sortKey="expected" activeKey={expenseSortKey} direction={expenseSortDirection} onSort={toggleExpenseSort} />
-                  <th title={t("whatIf.table.cardColumnTitle")}>
-                    {t("whatIf.table.card")}
-                  </th>
+                  <SortableTh
+                    label={t("whatIf.table.bill")}
+                    sortKey="name"
+                    activeKey={expenseSortKey}
+                    direction={expenseSortDirection}
+                    onSort={toggleExpenseSort}
+                  />
+                  <SortableTh
+                    label={t("whatIf.table.expected")}
+                    sortKey="expected"
+                    activeKey={expenseSortKey}
+                    direction={expenseSortDirection}
+                    onSort={toggleExpenseSort}
+                  />
+                  <th title={t("whatIf.table.cardColumnTitle")}>{t("whatIf.table.card")}</th>
                   <th>{t("whatIf.table.override")}</th>
                 </tr>
               </thead>
@@ -1109,7 +1264,12 @@ export function ProjectionsPage() {
                           if (value === undefined) delete next[b.id];
                           else next[b.id] = value;
                           setBillAmounts(next);
-                          recompute(next, discretionaryDeltaPercent, interestRateAnnualPercent, cardSpendGoal);
+                          recompute(
+                            next,
+                            discretionaryDeltaPercent,
+                            interestRateAnnualPercent,
+                            cardSpendGoal
+                          );
                         }}
                       />
                     </td>
@@ -1127,12 +1287,48 @@ export function ProjectionsPage() {
         <table>
           <thead>
             <tr>
-              <SortableTh label={t("goals.table.name")} sortKey="name" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label={t("goals.table.target")} sortKey="target" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label={t("goals.table.by")} sortKey="by" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label={t("goals.table.needPerMonth")} sortKey="needPerMonth" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label={t("goals.table.projectedPerMonth")} sortKey="projectedPerMonth" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
-              <SortableTh label={t("goals.table.onTrack")} sortKey="onTrack" activeKey={goalSortKey} direction={goalSortDirection} onSort={toggleGoalSort} />
+              <SortableTh
+                label={t("goals.table.name")}
+                sortKey="name"
+                activeKey={goalSortKey}
+                direction={goalSortDirection}
+                onSort={toggleGoalSort}
+              />
+              <SortableTh
+                label={t("goals.table.target")}
+                sortKey="target"
+                activeKey={goalSortKey}
+                direction={goalSortDirection}
+                onSort={toggleGoalSort}
+              />
+              <SortableTh
+                label={t("goals.table.by")}
+                sortKey="by"
+                activeKey={goalSortKey}
+                direction={goalSortDirection}
+                onSort={toggleGoalSort}
+              />
+              <SortableTh
+                label={t("goals.table.needPerMonth")}
+                sortKey="needPerMonth"
+                activeKey={goalSortKey}
+                direction={goalSortDirection}
+                onSort={toggleGoalSort}
+              />
+              <SortableTh
+                label={t("goals.table.projectedPerMonth")}
+                sortKey="projectedPerMonth"
+                activeKey={goalSortKey}
+                direction={goalSortDirection}
+                onSort={toggleGoalSort}
+              />
+              <SortableTh
+                label={t("goals.table.onTrack")}
+                sortKey="onTrack"
+                activeKey={goalSortKey}
+                direction={goalSortDirection}
+                onSort={toggleGoalSort}
+              />
               <th />
             </tr>
           </thead>
@@ -1148,7 +1344,11 @@ export function ProjectionsPage() {
               editingGoalId === g.id ? (
                 <tr key={g.id}>
                   <td>
-                    <input type="text" value={editGoalName} onChange={(e) => setEditGoalName(e.target.value)} />
+                    <input
+                      type="text"
+                      value={editGoalName}
+                      onChange={(e) => setEditGoalName(e.target.value)}
+                    />
                   </td>
                   <td>
                     <input
@@ -1160,7 +1360,11 @@ export function ProjectionsPage() {
                     />
                   </td>
                   <td>
-                    <input type="date" value={editGoalDate} onChange={(e) => setEditGoalDate(e.target.value)} />
+                    <input
+                      type="date"
+                      value={editGoalDate}
+                      onChange={(e) => setEditGoalDate(e.target.value)}
+                    />
                   </td>
                   <td className="money">{formatMoney(g.required_monthly_savings)}</td>
                   <td className="money">{formatMoney(g.projected_monthly_savings)}</td>
@@ -1169,7 +1373,11 @@ export function ProjectionsPage() {
                     <button className="icon" onClick={saveEditGoal} title={t("goals.actions.save")}>
                       <FiCheck />
                     </button>{" "}
-                    <button className="secondary icon" onClick={() => setEditingGoalId(null)} title={t("goals.actions.cancel")}>
+                    <button
+                      className="secondary icon"
+                      onClick={() => setEditingGoalId(null)}
+                      title={t("goals.actions.cancel")}
+                    >
                       <FiX />
                     </button>
                   </td>
@@ -1183,10 +1391,18 @@ export function ProjectionsPage() {
                   <td className="money">{formatMoney(g.projected_monthly_savings)}</td>
                   <GoalStatusCell goal={g} />
                   <td>
-                    <button className="secondary icon" onClick={() => startEditGoal(g)} title={t("goals.actions.edit")}>
+                    <button
+                      className="secondary icon"
+                      onClick={() => startEditGoal(g)}
+                      title={t("goals.actions.edit")}
+                    >
                       <FiEdit2 />
                     </button>{" "}
-                    <button className="danger icon" onClick={() => deleteGoal.mutate(g.id)} title={t("goals.actions.remove")}>
+                    <button
+                      className="danger icon"
+                      onClick={() => deleteGoal.mutate(g.id)}
+                      title={t("goals.actions.remove")}
+                    >
                       <FiTrash2 />
                     </button>
                   </td>
@@ -1203,7 +1419,12 @@ export function ProjectionsPage() {
         >
           <label>
             {t("goals.form.name")}
-            <input type="text" value={goalName} onChange={(e) => setGoalName(e.target.value)} required />
+            <input
+              type="text"
+              value={goalName}
+              onChange={(e) => setGoalName(e.target.value)}
+              required
+            />
           </label>
           <label>
             {t("goals.form.targetAmount")}
@@ -1217,7 +1438,12 @@ export function ProjectionsPage() {
           </label>
           <label>
             {t("goals.form.targetDate")}
-            <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} required />
+            <input
+              type="date"
+              value={goalDate}
+              onChange={(e) => setGoalDate(e.target.value)}
+              required
+            />
           </label>
           <button type="submit">
             <FiPlus /> {t("goals.form.submit")}

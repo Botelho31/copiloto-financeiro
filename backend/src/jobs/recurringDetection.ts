@@ -67,23 +67,25 @@ function mostCommonCategoryId(categoryIds: (number | null)[]): number | null {
   return best;
 }
 
-function existingBillKeys(): Set<string> {
-  const rows = db.query("SELECT name FROM recurring_bills").all() as { name: string }[];
+function existingBillKeys(userId: number): Set<string> {
+  const rows = db.query("SELECT name FROM recurring_bills WHERE user_id = ?").all(userId) as {
+    name: string;
+  }[];
   return new Set(rows.map((r) => normalizeDescription(r.name)));
 }
 
 function categoryKind(categoryId: number | null): string | null {
   if (categoryId == null) return null;
-  const row = db.query("SELECT kind FROM categories WHERE id = ?").get(categoryId) as
-    | { kind: string }
-    | null;
+  const row = db.query("SELECT kind FROM categories WHERE id = ?").get(categoryId) as {
+    kind: string;
+  } | null;
   return row?.kind ?? null;
 }
 
 function incomeCategoryId(): number | null {
-  const row = db.query("SELECT id FROM categories WHERE kind = 'income' LIMIT 1").get() as
-    | { id: number }
-    | null;
+  const row = db.query("SELECT id FROM categories WHERE kind = 'income' LIMIT 1").get() as {
+    id: number;
+  } | null;
   return row?.id ?? null;
 }
 
@@ -93,14 +95,14 @@ function incomeCategoryId(): number | null {
 // kind, not the transaction type, so a detected income pattern needs an
 // income-kind category to project correctly — default to "Income" if the
 // group's most common category isn't already income-kind.
-export function detectRecurringBills(): number {
+export function detectRecurringBills(userId: number): number {
   const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
   const transactions = db
     .query(
       `SELECT id, date, description, amount, type, category_id FROM transactions
-       WHERE date >= ?`
+       WHERE date >= ? AND user_id = ?`
     )
-    .all(since) as TxRow[];
+    .all(since, userId) as TxRow[];
 
   const groups = new Map<string, TxRow[]>();
   for (const tx of transactions) {
@@ -111,7 +113,7 @@ export function detectRecurringBills(): number {
     groups.set(key, list);
   }
 
-  const alreadyTracked = existingBillKeys();
+  const alreadyTracked = existingBillKeys(userId);
   let created = 0;
 
   for (const [key, txs] of groups) {
@@ -140,10 +142,10 @@ export function detectRecurringBills(): number {
 
     const insert = db
       .query(
-        `INSERT INTO recurring_bills (name, category_id, expected_amount, cadence, next_due_date, source, confirmed, active)
-         VALUES (?, ?, ?, ?, ?, 'detected', 0, 1)`
+        `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, next_due_date, source, confirmed, active)
+         VALUES (?, ?, ?, ?, ?, ?, 'detected', 0, 1)`
       )
-      .run(lastTx.description, categoryId, meanAmount, cadence, nextDueDate);
+      .run(lastTx.description, userId, categoryId, meanAmount, cadence, nextDueDate);
 
     const billId = Number(insert.lastInsertRowid);
     for (const tx of txs) {

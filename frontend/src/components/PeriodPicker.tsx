@@ -69,7 +69,11 @@ export function PeriodPicker(props: {
             </button>
           ))}
           {props.allTimeStart && (
-            <button type="button" className={isAllTime ? "active" : undefined} onClick={selectAllTime}>
+            <button
+              type="button"
+              className={isAllTime ? "active" : undefined}
+              onClick={selectAllTime}
+            >
               {t("period.allTime")}
             </button>
           )}

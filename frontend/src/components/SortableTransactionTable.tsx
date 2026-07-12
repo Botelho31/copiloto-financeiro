@@ -19,9 +19,27 @@ export function SortableTransactionTable(props: { transactions: Transaction[] })
     <table>
       <thead>
         <tr>
-          <SortableTh label={t("table.date")} sortKey="date" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.amount")} sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh
+            label={t("table.date")}
+            sortKey="date"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.description")}
+            sortKey="description"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.amount")}
+            sortKey="amount"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
         </tr>
       </thead>
       <tbody>

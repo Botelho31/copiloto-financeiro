@@ -1,18 +1,34 @@
 import { Elysia } from "elysia";
+import { z } from "zod";
 import type { Transaction } from "shared";
 import { db } from "../db";
 import { normalizeDescription } from "../jobs/recurringDetection";
+import { parseUserId } from "../lib/scope";
+
+const UpdateTransactionCategoryBody = z.object({
+  categoryId: z.number().int(),
+  createRule: z.boolean().optional(),
+});
+
+const BulkCategorizeBody = z.object({
+  transactionIds: z.array(z.string()).min(1),
+  categoryId: z.number().int(),
+});
 
 export const transactionsRoutes = new Elysia({ prefix: "/api/transactions" })
-  .get("/earliest-date", () => {
-    const row = db.query("SELECT MIN(date) as date FROM transactions").get() as {
-      date: string | null;
-    };
+  .get("/earliest-date", ({ query }) => {
+    const userId = parseUserId(query);
+    const where = userId != null ? "WHERE user_id = ?" : "";
+    const row = db
+      .query(`SELECT MIN(date) as date FROM transactions ${where}`)
+      .get(...(userId != null ? [userId] : [])) as { date: string | null };
     return { date: row.date };
   })
   .get("/search", ({ query }) => {
     const q = (query.q as string | undefined)?.trim();
     if (!q) return [];
+    const userId = parseUserId(query);
+    const userCondition = userId != null ? "AND t.user_id = ?" : "";
     // Deliberately spans all time, not the currently-selected period — this
     // is for fast ad-hoc categorization ("search for 'uber', label all of
     // them"), not for reviewing a specific month.
@@ -22,16 +38,21 @@ export const transactionsRoutes = new Elysia({ prefix: "/api/transactions" })
                 t.category_id, c.name as category_name
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
-         WHERE t.description LIKE ?
+         WHERE t.description LIKE ? ${userCondition}
          ORDER BY t.date DESC
          LIMIT 1000`
       )
-      .all(`%${q}%`) as Transaction[];
+      .all(`%${q}%`, ...(userId != null ? [userId] : [])) as Transaction[];
   })
   .get("/", ({ query }) => {
     const conditions: string[] = [];
     const params: unknown[] = [];
 
+    const userId = parseUserId(query);
+    if (userId != null) {
+      conditions.push("t.user_id = ?");
+      params.push(userId);
+    }
     if (query.from) {
       conditions.push("t.date >= ?");
       params.push(query.from);
@@ -49,9 +70,7 @@ export const transactionsRoutes = new Elysia({ prefix: "/api/transactions" })
       params.push(query.accountId);
     }
     if (query.tagId) {
-      conditions.push(
-        "t.id IN (SELECT transaction_id FROM transaction_tags WHERE tag_id = ?)"
-      );
+      conditions.push("t.id IN (SELECT transaction_id FROM transaction_tags WHERE tag_id = ?)");
       params.push(Number(query.tagId));
     }
 
@@ -73,56 +92,53 @@ export const transactionsRoutes = new Elysia({ prefix: "/api/transactions" })
       )
       .all(...(params as [])) as Transaction[];
   })
-  .patch("/:id", ({ params, body, set }) => {
-    const input = body as { categoryId?: number; createRule?: boolean };
-    if (!input.categoryId) {
-      set.status = 400;
-      return { error: "categoryId is required" };
-    }
+  .patch(
+    "/:id",
+    ({ params, body, set }) => {
+      const tx = db.query("SELECT description FROM transactions WHERE id = ?").get(params.id) as {
+        description: string;
+      } | null;
+      if (!tx) {
+        set.status = 404;
+        return { error: "not found" };
+      }
 
-    const tx = db.query("SELECT description FROM transactions WHERE id = ?").get(params.id) as
-      | { description: string }
-      | null;
-    if (!tx) {
-      set.status = 404;
-      return { error: "not found" };
-    }
+      db.query("UPDATE transactions SET category_id = ? WHERE id = ?").run(
+        body.categoryId,
+        params.id
+      );
 
-    db.query("UPDATE transactions SET category_id = ? WHERE id = ?").run(
-      input.categoryId,
-      params.id
-    );
-
-    if (input.createRule) {
-      const matchText = normalizeDescription(tx.description);
-      if (matchText) {
-        const existing = db
-          .query("SELECT id FROM category_rules WHERE match_text = ?")
-          .get(matchText);
-        if (!existing) {
-          db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
-            matchText,
-            input.categoryId
-          );
+      if (body.createRule) {
+        const matchText = normalizeDescription(tx.description);
+        if (matchText) {
+          const existing = db
+            .query("SELECT id FROM category_rules WHERE match_text = ?")
+            .get(matchText);
+          if (!existing) {
+            db.query("INSERT INTO category_rules (match_text, category_id) VALUES (?, ?)").run(
+              matchText,
+              body.categoryId
+            );
+          }
         }
       }
-    }
 
-    return { ok: true };
-  })
-  .post("/bulk-categorize", ({ body, set }) => {
-    const input = body as { transactionIds?: string[]; categoryId?: number };
-    if (!input.transactionIds?.length || !input.categoryId) {
-      set.status = 400;
-      return { error: "transactionIds and categoryId are required" };
-    }
-    // Direct override, regardless of current category — unlike rule-based
-    // categorization (which only ever touches "Uncategorized" rows), this
-    // is for explicitly reclassifying a group the user picked in the UI.
-    const placeholders = input.transactionIds.map(() => "?").join(",");
-    db.query(`UPDATE transactions SET category_id = ? WHERE id IN (${placeholders})`).run(
-      input.categoryId,
-      ...input.transactionIds
-    );
-    return { updated: input.transactionIds.length };
-  });
+      return { ok: true };
+    },
+    { body: UpdateTransactionCategoryBody }
+  )
+  .post(
+    "/bulk-categorize",
+    ({ body }) => {
+      // Direct override, regardless of current category — unlike rule-based
+      // categorization (which only ever touches "Uncategorized" rows), this
+      // is for explicitly reclassifying a group the user picked in the UI.
+      const placeholders = body.transactionIds.map(() => "?").join(",");
+      db.query(`UPDATE transactions SET category_id = ? WHERE id IN (${placeholders})`).run(
+        body.categoryId,
+        ...body.transactionIds
+      );
+      return { updated: body.transactionIds.length };
+    },
+    { body: BulkCategorizeBody }
+  );

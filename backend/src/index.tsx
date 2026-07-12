@@ -18,6 +18,7 @@ import { settingsRoutes } from "./routes/settings";
 import { syncRoutes } from "./routes/sync";
 import { tagsRoutes } from "./routes/tags";
 import { transactionsRoutes } from "./routes/transactions";
+import { usersRoutes } from "./routes/users";
 
 const backendDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(backendDir, "../public");
@@ -51,6 +52,7 @@ const app = new Elysia()
   .use(syncRoutes)
   .use(tagsRoutes)
   .use(transactionsRoutes)
+  .use(usersRoutes)
   .get("/assets/*", ({ params, set }) =>
     serveFile(join(frontendDistDir, "assets", params["*"]), set)
   )

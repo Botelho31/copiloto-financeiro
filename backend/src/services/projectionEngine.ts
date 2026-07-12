@@ -2,7 +2,7 @@ import type { BillOverride, ProjectedMonth, ProjectionResult } from "shared";
 import { billAppliesToMonth, monthlyEquivalentAmount, pricePayment } from "shared";
 import { config } from "../config";
 import { db } from "../db";
-import { getDebtTransactions, listDebts } from "../routes/debts";
+import { listDebts } from "./debts";
 import { getSettings } from "../routes/settings";
 
 const DEFAULT_HORIZON_MONTHS = 6;
@@ -26,6 +26,7 @@ interface BillForProjection {
   recurrenceStartDate: string | null;
   recurrenceEndDate: string | null;
   isIncome: boolean;
+  categoryName: string | null;
 }
 
 export type { BillOverride, ProjectedMonth, ProjectionResult };
@@ -39,15 +40,20 @@ export interface ProjectionOptions {
   interestRateAnnualPercent?: number;
   /** Replaces the computed 3-month card-spend average with a fixed target — a spending goal rather than a historical fact. */
   cardSpendGoal?: number;
+  /** null (default) = Household: every person's accounts/bills/debts combined. */
+  userId?: number | null;
 }
 
 // Only BANK-type accounts (checking/savings) represent liquid cash. A CREDIT
 // account's `balance` is the amount owed on the card — a liability, not cash
 // on hand — so it must not be pooled into the projected starting balance.
-export function currentBalance(): number {
+export function currentBalance(userId: number | null = null): number {
+  const userCondition = userId != null ? "AND user_id = ?" : "";
   const row = db
-    .query("SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'BANK'")
-    .get() as { total: number };
+    .query(
+      `SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'BANK' ${userCondition}`
+    )
+    .get(...(userId != null ? [userId] : [])) as { total: number };
   return row.total;
 }
 
@@ -65,23 +71,29 @@ export function currentBalance(): number {
 // an installment due in December isn't coming due in August. Subtract out
 // anything dated beyond next month so this reflects only what's actually
 // coming due on the very next statement.
-export function currentCardBalance(): number {
+export function currentCardBalance(userId: number | null = null): number {
+  const userCondition = userId != null ? "AND user_id = ?" : "";
   const totalRow = db
-    .query("SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'CREDIT'")
-    .get() as { total: number };
+    .query(
+      `SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'CREDIT' ${userCondition}`
+    )
+    .get(...(userId != null ? [userId] : [])) as { total: number };
 
   const now = new Date();
   const dueAfterNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 1)
     .toISOString()
     .slice(0, 10);
+  const notYetDueUserCondition = userId != null ? "AND a.user_id = ?" : "";
   const notYetDueRow = db
     .query(
       `SELECT COALESCE(SUM(t.amount), 0) as total
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
-       WHERE a.type = 'CREDIT' AND t.type = 'DEBIT' AND t.date >= ?`
+       WHERE a.type = 'CREDIT' AND t.type = 'DEBIT' AND t.date >= ? ${notYetDueUserCondition}`
     )
-    .get(dueAfterNextMonth) as { total: number };
+    .get(...(userId != null ? [dueAfterNextMonth, userId] : [dueAfterNextMonth])) as {
+    total: number;
+  };
 
   return totalRow.total - notYetDueRow.total;
 }
@@ -91,16 +103,17 @@ export function currentCardBalance(): number {
 // goal/average line rather than being additional spend on top of it. They
 // still exist as trackable bills (visible, editable, deletable on the Bills
 // page); the flag just keeps the projection from double-counting them.
-function activeConfirmedBills(): BillForProjection[] {
+function activeConfirmedBills(userId: number | null): BillForProjection[] {
+  const userCondition = userId != null ? "AND b.user_id = ?" : "";
   const rows = db
     .query(
       `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
-              b.recurrence_start_date, b.recurrence_end_date, c.kind as category_kind
+              b.recurrence_start_date, b.recurrence_end_date, c.kind as category_kind, c.name as category_name
        FROM recurring_bills b
        LEFT JOIN categories c ON c.id = b.category_id
-       WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 0`
+       WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 0 ${userCondition}`
     )
-    .all() as {
+    .all(...(userId != null ? [userId] : [])) as {
     id: number;
     name: string;
     expected_amount: number;
@@ -109,6 +122,7 @@ function activeConfirmedBills(): BillForProjection[] {
     recurrence_start_date: string | null;
     recurrence_end_date: string | null;
     category_kind: string | null;
+    category_name: string | null;
   }[];
 
   return rows.map((r) => ({
@@ -120,6 +134,7 @@ function activeConfirmedBills(): BillForProjection[] {
     recurrenceStartDate: r.recurrence_start_date,
     recurrenceEndDate: r.recurrence_end_date,
     isIncome: r.category_kind === "income",
+    categoryName: r.category_name,
   }));
 }
 
@@ -129,15 +144,17 @@ function activeConfirmedBills(): BillForProjection[] {
 // wherever the point is specifically "what's expected to hit a card this
 // month" (e.g. the Dashboard's per-card chart), just not folded into the
 // overall cashflow numbers.
-function cardExpenseBills(): BillForProjection[] {
+function cardExpenseBills(userId: number | null): BillForProjection[] {
+  const userCondition = userId != null ? "AND b.user_id = ?" : "";
   const rows = db
     .query(
       `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
-              b.recurrence_start_date, b.recurrence_end_date
+              b.recurrence_start_date, b.recurrence_end_date, c.name as category_name
        FROM recurring_bills b
-       WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 1`
+       LEFT JOIN categories c ON c.id = b.category_id
+       WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 1 ${userCondition}`
     )
-    .all() as {
+    .all(...(userId != null ? [userId] : [])) as {
     id: number;
     name: string;
     expected_amount: number;
@@ -145,6 +162,7 @@ function cardExpenseBills(): BillForProjection[] {
     next_due_date: string | null;
     recurrence_start_date: string | null;
     recurrence_end_date: string | null;
+    category_name: string | null;
   }[];
 
   return rows.map((r) => ({
@@ -156,6 +174,7 @@ function cardExpenseBills(): BillForProjection[] {
     recurrenceStartDate: r.recurrence_start_date,
     recurrenceEndDate: r.recurrence_end_date,
     isIncome: false,
+    categoryName: r.category_name,
   }));
 }
 
@@ -167,12 +186,13 @@ function cardExpenseBills(): BillForProjection[] {
 // and a 3-month average of actual credit card spend (a much more stable
 // proxy for discretionary spending than raw bank-transaction noise, since
 // it's just charges — no transfers, no loan disbursements, no one-off wires).
-function cardSpendBaseline(): number {
+function cardSpendBaseline(userId: number | null): number {
   const now = new Date();
   const since = new Date();
   since.setMonth(since.getMonth() - BASELINE_LOOKBACK_MONTHS);
   const sinceStr = since.toISOString().slice(0, 10);
   const nowStr = now.toISOString().slice(0, 10);
+  const userCondition = userId != null ? "AND a.user_id = ?" : "";
 
   // Pluggy pre-registers future installments (e.g. an Airbnb booking split
   // 6x) as PENDING transactions dated when they'll actually be charged —
@@ -198,9 +218,12 @@ function cardSpendBaseline(): number {
            FROM recurring_bill_matches m
            JOIN recurring_bills b ON b.id = m.recurring_bill_id
            WHERE b.confirmed = 1 AND b.active = 1
-         )`
+         )
+         ${userCondition}`
     )
-    .get(sinceStr, nowStr) as { total: number };
+    .get(...(userId != null ? [sinceStr, nowStr, userId] : [sinceStr, nowStr])) as {
+    total: number;
+  };
 
   return row.total / BASELINE_LOOKBACK_MONTHS;
 }
@@ -261,7 +284,10 @@ function debtLineAmountForMonth(
 ): { amount: number; interestPortion?: number } | null {
   const result = (() => {
     if (line.schedule.kind === "flat") {
-      const capped = Math.min(line.schedule.monthlyAmount, line.schedule.remainingBalance - paidSoFar);
+      const capped = Math.min(
+        line.schedule.monthlyAmount,
+        line.schedule.remainingBalance - paidSoFar
+      );
       return capped > 0.005 ? { magnitude: capped } : null;
     }
     if (line.schedule.kind === "bill") {
@@ -283,7 +309,9 @@ function debtLineAmountForMonth(
     // the exact same class of bug for bill due dates).
     const [startYear, startMonth] = startDate.split("-").map(Number);
     const monthOfLoan =
-      (targetMonth.getFullYear() - startYear) * 12 + (targetMonth.getMonth() - (startMonth - 1)) + 1;
+      (targetMonth.getFullYear() - startYear) * 12 +
+      (targetMonth.getMonth() - (startMonth - 1)) +
+      1;
     if (monthOfLoan < 1 || monthOfLoan > termMonths) return null;
     // Interest has to come off the REAL outstanding balance (remainingBalance
     // minus everything paid so far, including every extra-amortization bill
@@ -320,9 +348,11 @@ function debtLineAmountForMonth(
 function billForProjection(id: number): BillForProjection | null {
   const r = db
     .query(
-      `SELECT id, name, expected_amount, cadence, next_due_date,
-              recurrence_start_date, recurrence_end_date
-       FROM recurring_bills WHERE id = ?`
+      `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
+              b.recurrence_start_date, b.recurrence_end_date, c.name as category_name
+       FROM recurring_bills b
+       LEFT JOIN categories c ON c.id = b.category_id
+       WHERE b.id = ?`
     )
     .get(id) as {
     id: number;
@@ -332,6 +362,7 @@ function billForProjection(id: number): BillForProjection | null {
     next_due_date: string | null;
     recurrence_start_date: string | null;
     recurrence_end_date: string | null;
+    category_name: string | null;
   } | null;
   if (!r) return null;
   return {
@@ -343,6 +374,7 @@ function billForProjection(id: number): BillForProjection | null {
     recurrenceStartDate: r.recurrence_start_date,
     recurrenceEndDate: r.recurrence_end_date,
     isIncome: false,
+    categoryName: r.category_name,
   };
 }
 
@@ -360,8 +392,13 @@ interface DebtSchedules {
 // in routes/debts.ts — the single resolution the Debts page also displays)
 // into a projection line. Debts whose plan is "none" stay out of the
 // projection rather than being guessed at.
-function activeDebtSchedules(): DebtSchedules {
-  const debts = listDebts().filter((d) => d.status === "active" && d.remaining > 1);
+function activeDebtSchedules(userId: number | null): DebtSchedules {
+  // A debt merely shared with this person (not owned) doesn't inject payment
+  // obligations into their own forecast — listDebts already includes it for
+  // visibility on the Debts page, but only owned debts feed the projection.
+  const debts = listDebts(userId).filter(
+    (d) => d.status === "active" && d.remaining > 1 && d.is_owner
+  );
   const lines: DebtProjectionLine[] = [];
   const consumedBillIds = new Set<number>();
 
@@ -437,10 +474,9 @@ function activeDebtSchedules(): DebtSchedules {
 }
 
 export function computeProjection(options: ProjectionOptions = {}): ProjectionResult {
+  const userId = options.userId ?? null;
   const horizonMonths = options.horizonMonths ?? DEFAULT_HORIZON_MONTHS;
-  const overridesByBillId = new Map(
-    (options.billOverrides ?? []).map((o) => [o.billId, o.amount])
-  );
+  const overridesByBillId = new Map((options.billOverrides ?? []).map((o) => [o.billId, o.amount]));
   const discretionaryDeltaPercent = options.discretionaryDeltaPercent ?? 0;
   const interestRateAnnualPercent =
     options.interestRateAnnualPercent ?? DEFAULT_INTEREST_RATE_ANNUAL_PERCENT;
@@ -449,29 +485,30 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
   // stated annual rate over 12 months.
   const monthlyInterestRate = (1 + interestRateAnnualPercent / 100) ** (1 / 12) - 1;
 
-  const { lines: debtLines, consumedBillIds } = activeDebtSchedules();
-  const bills = activeConfirmedBills().filter((b) => !consumedBillIds.has(b.id));
-  const cardBills = cardExpenseBills();
+  const { lines: debtLines, consumedBillIds } = activeDebtSchedules(userId);
+  const bills = activeConfirmedBills(userId).filter((b) => !consumedBillIds.has(b.id));
+  const cardBills = cardExpenseBills(userId);
   // Income now comes entirely from confirmed income-kind bills — no generic
   // bank-transaction averaging left to contribute a "baseline" figure.
   const baselineIncome = 0;
-  const cardSpendActualAverage = cardSpendBaseline();
+  const cardSpendActualAverage = cardSpendBaseline(userId);
   // A cardSpendGoal is a deliberate target, not a recomputation of history —
   // it replaces the average outright rather than being scaled by the
   // discretionary delta (that delta is for nudging the real average, not for
   // adjusting an already-explicit goal). A per-request override wins if
-  // given (what-if simulation); otherwise fall back to the persisted global
-  // goal, so it applies consistently everywhere without re-specifying it.
-  const cardSpendGoal = options.cardSpendGoal ?? getSettings().cardSpendGoal ?? undefined;
+  // given (what-if simulation); otherwise fall back to the persisted per-
+  // person goal, so it applies consistently everywhere without re-specifying
+  // it. Household (userId null) has no single goal to fall back to.
+  const cardSpendGoal = options.cardSpendGoal ?? getSettings(userId).cardSpendGoal ?? undefined;
   const baselineExpense =
     cardSpendGoal ?? cardSpendActualAverage * (1 + discretionaryDeltaPercent / 100);
 
-  const startingBalance = currentBalance();
+  const startingBalance = currentBalance(userId);
   // The very next month's card bill is a known, real number — what's
   // already on the card today — not a recurring assumption. Only the goal/
   // average stands in for months further out, where there's no concrete
   // balance yet to point to.
-  const currentCardOwed = currentCardBalance();
+  const currentCardOwed = currentCardBalance(userId);
 
   let balance = startingBalance;
   const months: ProjectedMonth[] = [];
@@ -500,6 +537,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
               : "Credit card spending (3mo avg)",
         amount: -cardExpenseThisMonth,
         kind: "cardSpend",
+        category_name: null,
       });
     }
 
@@ -508,7 +546,13 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
       const amount = monthlyEquivalentAmount(bill, overridesByBillId.get(bill.id));
       const signed = bill.isIncome ? amount : -amount;
       net += signed;
-      billLines.push({ id: bill.id, name: bill.name, amount: signed, kind: "bill" });
+      billLines.push({
+        id: bill.id,
+        name: bill.name,
+        amount: signed,
+        kind: "bill",
+        category_name: bill.categoryName,
+      });
     }
 
     // Not added to net/billLines — already folded into cardExpenseThisMonth
@@ -520,6 +564,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
         id: bill.id,
         name: bill.name,
         amount: -monthlyEquivalentAmount(bill, overridesByBillId.get(bill.id)),
+        category_name: bill.categoryName,
       }));
 
     for (const debtLine of debtLines) {
@@ -536,6 +581,11 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
         name: `${debtLine.name} (debt)`,
         amount,
         kind: "debt",
+        // A debt line without a linked bill has no real category to
+        // attribute it to — left null rather than guessed at (consumers
+        // conventionally bucket these under a synthetic "Debt Repayment").
+        category_name:
+          debtLine.schedule.kind === "bill" ? debtLine.schedule.bill.categoryName : null,
         ...(debtLine.schedule.kind === "bill" ? { billId: debtLine.schedule.bill.id } : {}),
         ...(interestPortion != null ? { interestPortion } : {}),
       });
@@ -555,6 +605,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
         name: `Interest (${interestRateAnnualPercent}% a.a.)`,
         amount: interest,
         kind: "interest",
+        category_name: null,
       });
     }
 

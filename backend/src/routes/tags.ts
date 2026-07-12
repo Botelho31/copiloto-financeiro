@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { z } from "zod";
 import type { Tag } from "shared";
 import { db } from "../db";
 
@@ -46,34 +47,29 @@ export function bulkUntag(transactionIds: string[], tagId: number): number {
   return transactionIds.length;
 }
 
+const NewTagBody = z.object({ name: z.string().min(1), color: z.string().optional() });
+const BulkTagBody = z.object({
+  transactionIds: z.array(z.string()).min(1),
+  tagId: z.number().int(),
+});
+
 export const tagsRoutes = new Elysia({ prefix: "/api/tags" })
   .get("/", () => listTags())
-  .post("/", ({ body, set }) => {
-    const input = body as { name?: string; color?: string };
-    if (!input.name) {
-      set.status = 400;
-      return { error: "name is required" };
-    }
-    try {
-      return createTag(input.name, input.color);
-    } catch (error) {
-      set.status = 400;
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
+  .post(
+    "/",
+    ({ body, set }) => {
+      try {
+        return createTag(body.name, body.color);
+      } catch (error) {
+        set.status = 400;
+        return { error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    { body: NewTagBody }
+  )
+  .post("/bulk-tag", ({ body }) => ({ tagged: bulkTag(body.transactionIds, body.tagId) }), {
+    body: BulkTagBody,
   })
-  .post("/bulk-tag", ({ body, set }) => {
-    const input = body as { transactionIds?: string[]; tagId?: number };
-    if (!input.transactionIds?.length || !input.tagId) {
-      set.status = 400;
-      return { error: "transactionIds and tagId are required" };
-    }
-    return { tagged: bulkTag(input.transactionIds, input.tagId) };
-  })
-  .post("/bulk-untag", ({ body, set }) => {
-    const input = body as { transactionIds?: string[]; tagId?: number };
-    if (!input.transactionIds?.length || !input.tagId) {
-      set.status = 400;
-      return { error: "transactionIds and tagId are required" };
-    }
-    return { untagged: bulkUntag(input.transactionIds, input.tagId) };
+  .post("/bulk-untag", ({ body }) => ({ untagged: bulkUntag(body.transactionIds, body.tagId) }), {
+    body: BulkTagBody,
   });

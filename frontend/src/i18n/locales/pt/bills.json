@@ -59,7 +59,8 @@
     "empty": "Nada para projetar ainda — confirme ou adicione um item recorrente acima.",
     "category": "Categoria",
     "netRecurring": "Recorrente líquido",
-    "uncategorized": "Sem categoria"
+    "uncategorized": "Sem categoria",
+    "debtRepayment": "Pagamento de Dívida"
   },
   "form": {
     "name": "Nome",

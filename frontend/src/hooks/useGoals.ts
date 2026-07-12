@@ -1,16 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Goal } from "shared";
-import { apiFetch } from "../lib/api";
+import { apiFetch, appendUserId } from "../lib/api";
+import { usePersonScope } from "../lib/personScope";
 
 export function useGoals() {
-  return useQuery({ queryKey: ["goals"], queryFn: () => apiFetch<Goal[]>("/api/goals") });
+  const { activeUserId } = usePersonScope();
+  return useQuery({
+    queryKey: ["goals", activeUserId],
+    queryFn: () => apiFetch<Goal[]>(appendUserId("/api/goals", activeUserId)),
+  });
 }
 
 export function useCreateGoal() {
   const qc = useQueryClient();
+  const { activeUserId } = usePersonScope();
   return useMutation({
-    mutationFn: (input: { name: string; targetAmount: number; targetDate: string }) =>
-      apiFetch<Goal[]>("/api/goals", { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: (input: { name: string; targetAmount: number; targetDate: string }) => {
+      if (activeUserId == null) {
+        return Promise.reject(new Error("Select a person from the nav before adding a goal."));
+      }
+      return apiFetch<Goal[]>("/api/goals", {
+        method: "POST",
+        body: JSON.stringify({ ...input, userId: activeUserId }),
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
   });
 }

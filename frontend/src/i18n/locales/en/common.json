@@ -5,7 +5,10 @@
     "transactions": "Transactions",
     "bills": "Planned Payments",
     "debts": "Debts",
-    "projections": "Projections"
+    "projections": "Projections",
+    "household": "Household",
+    "config": "Config",
+    "person": "Person"
   },
   "logout": "Log out",
   "language": {

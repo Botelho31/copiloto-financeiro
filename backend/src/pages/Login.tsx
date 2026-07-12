@@ -22,12 +22,7 @@ export function LoginPage(props: { error?: string }) {
             </label>
             <label>
               Password
-              <input
-                type="password"
-                name="password"
-                autocomplete="current-password"
-                required
-              />
+              <input type="password" name="password" autocomplete="current-password" required />
             </label>
             <button type="submit">Log in</button>
           </form>

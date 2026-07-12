@@ -4,19 +4,29 @@ import type { Transaction } from "shared";
 import { z } from "zod";
 import { db } from "./db";
 import { listAccounts } from "./routes/accounts";
-import { listBills } from "./routes/bills";
-import { createCategory, getUncategorizedGroups, listCategories, listRules } from "./routes/categories";
+import { createBill, deleteBill, listBills, updateBill } from "./routes/bills";
 import {
+  createCategory,
+  getUncategorizedGroups,
+  listCategories,
+  listRules,
+  updateCategory,
+} from "./routes/categories";
+import {
+  createDebt,
+  deleteDebt,
   getDebtTransactions,
   linkDebtToDebt,
   linkTransactionsToDebt,
   listDebts,
   unlinkDebtFromDebt,
-} from "./routes/debts";
-import { listGoals } from "./routes/goals";
+  updateDebt,
+} from "./services/debts";
+import { createGoal, deleteGoal, listGoals, updateGoal } from "./routes/goals";
 import { listInvestments } from "./routes/investments";
-import { getSettings } from "./routes/settings";
+import { getSettings, updateSettings } from "./routes/settings";
 import { getLastSync } from "./routes/sync";
+import { createUser, deleteUser, listUsers, updateUser } from "./routes/users";
 import { computeProjection } from "./services/projectionEngine";
 import { bulkTag, bulkUntag, createTag, listTags } from "./routes/tags";
 import { detectRecurringBills } from "./jobs/recurringDetection";
@@ -36,11 +46,100 @@ function json(value: unknown) {
 function errorResult(error: unknown) {
   return {
     isError: true,
-    content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+    content: [
+      { type: "text" as const, text: error instanceof Error ? error.message : String(error) },
+    ],
   };
 }
 
 const server = new McpServer({ name: "budget-tracker", version: "1.0.0" });
+
+server.registerTool(
+  "list_users",
+  {
+    description:
+      "List household members (id, name, color, whether they have Pluggy credentials on file). " +
+      "Most other tools take an optional userId to scope to one person (omit for the Household " +
+      "view, everyone combined) — look up ids here first.",
+  },
+  async () => json(listUsers())
+);
+
+server.registerTool(
+  "create_user",
+  {
+    description:
+      "Add a new household member — their own profile with independent accounts, transactions, " +
+      "bills, debts, and goals. Pluggy credentials (their own client id/secret/item ids, separate " +
+      "from anyone else's) can be set now or later via update_user.",
+    inputSchema: {
+      name: z.string(),
+      color: z
+        .string()
+        .optional()
+        .describe("Hex color, e.g. '#5f7fbf' — used as their badge color across the app"),
+      pluggyClientId: z.string().optional(),
+      pluggyClientSecret: z.string().optional(),
+      pluggyItemIds: z
+        .string()
+        .optional()
+        .describe("Comma-separated Pluggy Item IDs for this person's connected bank(s)"),
+    },
+  },
+  async (input) => {
+    try {
+      return json(createUser(input));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "update_user",
+  {
+    description:
+      "Update a household member's name, color, or Pluggy credentials. Omit pluggyClientSecret to " +
+      "leave it unchanged (there's no way to read it back once set).",
+    inputSchema: {
+      id: z.number().int(),
+      name: z.string().optional(),
+      color: z.string().optional(),
+      pluggyClientId: z.string().nullable().optional(),
+      pluggyClientSecret: z.string().optional(),
+      pluggyItemIds: z
+        .string()
+        .nullable()
+        .optional()
+        .describe("Comma-separated Pluggy Item IDs, or null to clear"),
+    },
+  },
+  async ({ id, ...input }) => {
+    try {
+      return json(updateUser(id, input));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
+
+server.registerTool(
+  "delete_user",
+  {
+    description:
+      "Delete a household member and everything they own (accounts, transactions, bills, debts, " +
+      "goals, settings, sync history). Refuses if they're the last remaining person, or if they're " +
+      "still shared_with_user_id on an active debt (unlink that first).",
+    inputSchema: { id: z.number().int() },
+  },
+  async ({ id }) => {
+    try {
+      return json(deleteUser(id));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
+);
 
 server.registerTool(
   "list_categories",
@@ -80,9 +179,14 @@ server.registerTool(
       "Group still-Uncategorized transactions by normalized description over a lookback window, to spot patterns worth categorizing.",
     inputSchema: {
       days: z.number().int().positive().optional().describe("Lookback window in days (default 30)"),
+      userId: z
+        .number()
+        .int()
+        .optional()
+        .describe("Scope to one person (see list_users); omit for Household"),
     },
   },
-  async ({ days }) => json(getUncategorizedGroups(days ?? 30))
+  async ({ days, userId }) => json(getUncategorizedGroups(days ?? 30, userId ?? null))
 );
 
 server.registerTool(
@@ -93,8 +197,12 @@ server.registerTool(
     inputSchema: {
       matchText: z
         .string()
-        .describe("Text to match against transaction descriptions (case/accent-insensitive substring)"),
-      categoryName: z.string().describe("Exact existing category name, e.g. 'Transport', 'Shopping'"),
+        .describe(
+          "Text to match against transaction descriptions (case/accent-insensitive substring)"
+        ),
+      categoryName: z
+        .string()
+        .describe("Exact existing category name, e.g. 'Transport', 'Shopping'"),
     },
   },
   async ({ matchText, categoryName }) => {
@@ -138,28 +246,11 @@ server.registerTool(
     },
   },
   async ({ id, name, color, excludesFromCashflow }) => {
-    const existing = db.query("SELECT id FROM categories WHERE id = ?").get(id);
-    if (!existing) return errorResult(`Category ${id} not found`);
-
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (name !== undefined) {
-      fields.push("name = ?");
-      values.push(name);
+    try {
+      return json(updateCategory(id, { name, color, excludesFromCashflow }));
+    } catch (error) {
+      return errorResult(error);
     }
-    if (color !== undefined) {
-      fields.push("color = ?");
-      values.push(color);
-    }
-    if (excludesFromCashflow !== undefined) {
-      fields.push("excludes_from_cashflow = ?");
-      values.push(excludesFromCashflow ? 1 : 0);
-    }
-    if (fields.length > 0) {
-      values.push(id);
-      db.query(`UPDATE categories SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
-    }
-    return json(listCategories());
   }
 );
 
@@ -193,7 +284,8 @@ server.registerTool(
 server.registerTool(
   "tag_transactions",
   {
-    description: "Apply a tag to a set of transactions (use list_transactions or search to find IDs first).",
+    description:
+      "Apply a tag to a set of transactions (use list_transactions or search to find IDs first).",
     inputSchema: {
       transactionIds: z.array(z.string()),
       tagId: z.number().int(),
@@ -295,8 +387,15 @@ server.registerTool(
       descriptionRegex: z
         .string()
         .optional()
-        .describe("JS RegExp (case-insensitive) against the raw description — applied after the SQL filters"),
+        .describe(
+          "JS RegExp (case-insensitive) against the raw description — applied after the SQL filters"
+        ),
       limit: z.number().int().positive().max(5000).optional().describe("Default 200"),
+      userId: z
+        .number()
+        .int()
+        .optional()
+        .describe("Scope to one person (see list_users); omit for Household"),
     },
   },
   async ({
@@ -309,9 +408,14 @@ server.registerTool(
     descriptionContains,
     descriptionRegex,
     limit,
+    userId,
   }) => {
     const conditions: string[] = [];
     const params: unknown[] = [];
+    if (userId != null) {
+      conditions.push("t.user_id = ?");
+      params.push(userId);
+    }
     if (from) {
       conditions.push("t.date >= ?");
       params.push(from);
@@ -363,10 +467,19 @@ server.registerTool(
   }
 );
 
+const userIdScopeParam = z
+  .number()
+  .int()
+  .optional()
+  .describe("Scope to one person (see list_users); omit for Household");
+
 server.registerTool(
   "list_accounts",
-  { description: "List all synced BANK/CREDIT accounts with current balances." },
-  async () => json(listAccounts())
+  {
+    description: "List all synced BANK/CREDIT accounts with current balances.",
+    inputSchema: { userId: userIdScopeParam },
+  },
+  async ({ userId }) => json(listAccounts(userId ?? null))
 );
 
 server.registerTool(
@@ -374,14 +487,19 @@ server.registerTool(
   {
     description:
       "List synced investment holdings (Pluggy's separate Investments API, not Accounts). Only status='ACTIVE' rows are current holdings — 'TOTAL_WITHDRAWAL' means already redeemed.",
+    inputSchema: { userId: userIdScopeParam },
   },
-  async () => json(listInvestments())
+  async ({ userId }) => json(listInvestments(userId ?? null))
 );
 
 server.registerTool(
   "list_bills",
-  { description: "List recurring bills (manual + auto-detected), including pending/unconfirmed ones." },
-  async () => json(listBills())
+  {
+    description:
+      "List recurring bills (manual + auto-detected), including pending/unconfirmed ones.",
+    inputSchema: { userId: userIdScopeParam },
+  },
+  async ({ userId }) => json(listBills(userId ?? null))
 );
 
 server.registerTool(
@@ -390,6 +508,7 @@ server.registerTool(
     description: "Create a new recurring bill (manual source, confirmed and active by default).",
     inputSchema: {
       name: z.string(),
+      userId: z.number().int().describe("Which person this bill belongs to (see list_users)"),
       categoryName: z.string().optional(),
       expectedAmount: z.number(),
       cadence: z.enum(["weekly", "monthly", "quarterly", "yearly", "once"]),
@@ -414,6 +533,7 @@ server.registerTool(
   },
   async ({
     name,
+    userId,
     categoryName,
     expectedAmount,
     cadence,
@@ -423,44 +543,47 @@ server.registerTool(
     isCardExpense,
     debtName,
   }) => {
-    let categoryId: number | null = null;
+    let categoryId: number | undefined;
     if (categoryName) {
-      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
-        | { id: number }
-        | null;
+      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
+        id: number;
+      } | null;
       if (!row) return errorResult(`Unknown category "${categoryName}"`);
       categoryId = row.id;
     }
-    let debtId: number | null = null;
+    let debtId: number | undefined;
     if (debtName) {
-      const row = db.query("SELECT id FROM debts WHERE name = ?").get(debtName) as
-        | { id: number }
-        | null;
+      const row = db.query("SELECT id FROM debts WHERE name = ?").get(debtName) as {
+        id: number;
+      } | null;
       if (!row) return errorResult(`Unknown debt "${debtName}"`);
       debtId = row.id;
     }
-    db.query(
-      `INSERT INTO recurring_bills (name, category_id, expected_amount, cadence, next_due_date, recurrence_start_date, recurrence_end_date, is_card_expense, debt_id, source, confirmed, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1, 1)`
-    ).run(
-      name,
-      categoryId,
-      expectedAmount,
-      cadence,
-      nextDueDate ?? null,
-      recurrenceStartDate ?? null,
-      recurrenceEndDate ?? null,
-      isCardExpense ? 1 : 0,
-      debtId
-    );
-    return json(listBills());
+    try {
+      createBill({
+        name,
+        userId,
+        categoryId,
+        expectedAmount,
+        cadence,
+        nextDueDate,
+        recurrenceStartDate,
+        recurrenceEndDate,
+        isCardExpense,
+        debtId,
+      });
+      return json(listBills(userId));
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
 server.registerTool(
   "update_bill",
   {
-    description: "Update a bill — confirm/dismiss a detected candidate, change amount/cadence/category, etc.",
+    description:
+      "Update a bill — confirm/dismiss a detected candidate, change amount/cadence/category, etc.",
     inputSchema: {
       id: z.number().int(),
       name: z.string().optional(),
@@ -485,6 +608,9 @@ server.registerTool(
         ),
       confirmed: z.boolean().optional(),
       active: z.boolean().optional(),
+      userId: userIdScopeParam.describe(
+        "Scope the returned list (see list_users); omit for Household"
+      ),
     },
   },
   async ({
@@ -500,74 +626,46 @@ server.registerTool(
     debtName,
     confirmed,
     active,
+    userId,
   }) => {
-    const existing = db.query("SELECT id FROM recurring_bills WHERE id = ?").get(id);
-    if (!existing) return errorResult(`Bill ${id} not found`);
-
-    const fields: string[] = [];
-    const values: unknown[] = [];
+    let categoryId: number | undefined;
+    if (categoryName !== undefined) {
+      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
+        id: number;
+      } | null;
+      if (!row) return errorResult(`Unknown category "${categoryName}"`);
+      categoryId = row.id;
+    }
+    let debtId: number | null | undefined;
     if (debtName !== undefined) {
       if (debtName === null) {
-        fields.push("debt_id = ?");
-        values.push(null);
+        debtId = null;
       } else {
-        const row = db.query("SELECT id FROM debts WHERE name = ?").get(debtName) as
-          | { id: number }
-          | null;
+        const row = db.query("SELECT id FROM debts WHERE name = ?").get(debtName) as {
+          id: number;
+        } | null;
         if (!row) return errorResult(`Unknown debt "${debtName}"`);
-        fields.push("debt_id = ?");
-        values.push(row.id);
+        debtId = row.id;
       }
     }
-    if (name !== undefined) {
-      fields.push("name = ?");
-      values.push(name);
+    try {
+      updateBill(id, {
+        name,
+        categoryId,
+        expectedAmount,
+        cadence,
+        nextDueDate,
+        recurrenceStartDate,
+        recurrenceEndDate,
+        isCardExpense,
+        debtId,
+        confirmed,
+        active,
+      });
+      return json(listBills(userId ?? null));
+    } catch (error) {
+      return errorResult(error);
     }
-    if (categoryName !== undefined) {
-      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as
-        | { id: number }
-        | null;
-      if (!row) return errorResult(`Unknown category "${categoryName}"`);
-      fields.push("category_id = ?");
-      values.push(row.id);
-    }
-    if (expectedAmount !== undefined) {
-      fields.push("expected_amount = ?");
-      values.push(expectedAmount);
-    }
-    if (cadence !== undefined) {
-      fields.push("cadence = ?");
-      values.push(cadence);
-    }
-    if (nextDueDate !== undefined) {
-      fields.push("next_due_date = ?");
-      values.push(nextDueDate);
-    }
-    if (recurrenceStartDate !== undefined) {
-      fields.push("recurrence_start_date = ?");
-      values.push(recurrenceStartDate);
-    }
-    if (recurrenceEndDate !== undefined) {
-      fields.push("recurrence_end_date = ?");
-      values.push(recurrenceEndDate);
-    }
-    if (isCardExpense !== undefined) {
-      fields.push("is_card_expense = ?");
-      values.push(isCardExpense ? 1 : 0);
-    }
-    if (confirmed !== undefined) {
-      fields.push("confirmed = ?");
-      values.push(confirmed ? 1 : 0);
-    }
-    if (active !== undefined) {
-      fields.push("active = ?");
-      values.push(active ? 1 : 0);
-    }
-    if (fields.length > 0) {
-      values.push(id);
-      db.query(`UPDATE recurring_bills SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
-    }
-    return json(listBills());
   }
 );
 
@@ -575,35 +673,55 @@ server.registerTool(
   "delete_bill",
   {
     description: "Delete a bill and its recurring-match history.",
-    inputSchema: { id: z.number().int() },
+    inputSchema: {
+      id: z.number().int(),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
+    },
   },
-  async ({ id }) => {
-    db.query("DELETE FROM recurring_bill_matches WHERE recurring_bill_id = ?").run(id);
-    db.query("DELETE FROM recurring_bills WHERE id = ?").run(id);
-    return json(listBills());
+  async ({ id, userId }) => {
+    deleteBill(id);
+    return json(listBills(userId ?? null));
   }
 );
 
 server.registerTool(
   "get_sync_status",
-  { description: "Get the most recent Pluggy sync log entry." },
-  async () => json(getLastSync())
+  {
+    description: "Get the most recent Pluggy sync log entry.",
+    inputSchema: {
+      userId: userIdScopeParam.describe(
+        "One person's last sync; omit for the Household's most recent across everyone"
+      ),
+    },
+  },
+  async ({ userId }) => json(getLastSync(userId ?? null))
 );
 
 server.registerTool(
   "trigger_sync",
   {
     description:
-      "Manually trigger a Pluggy sync (pulls latest accounts/transactions/investments, then runs recurring-bill and self-transfer detection). No-ops if a sync is already running.",
+      "Manually trigger a Pluggy sync (pulls latest accounts/transactions/investments, then runs recurring-bill and self-transfer detection) for one person, or everyone with Pluggy credentials on file if userId is omitted. No-ops if a sync is already running.",
+    inputSchema: {
+      userId: z
+        .number()
+        .int()
+        .optional()
+        .describe("Sync just this person (see list_users); omit to sync everyone"),
+    },
   },
-  async () => json(await triggerSync("mcp"))
+  async ({ userId }) => json(await triggerSync("mcp", userId))
 );
 
 server.registerTool(
   "detect_recurring_bills",
-  { description: "Re-scan transaction history for recurring-bill candidates (normally runs automatically after each sync)." },
-  async () => {
-    const created = detectRecurringBills();
+  {
+    description:
+      "Re-scan one person's transaction history for recurring-bill candidates (normally runs automatically after each sync).",
+    inputSchema: { userId: z.number().int().describe("Which person to scan (see list_users)") },
+  },
+  async ({ userId }) => {
+    const created = detectRecurringBills(userId);
     return json({ created });
   }
 );
@@ -612,10 +730,11 @@ server.registerTool(
   "detect_self_transfers",
   {
     description:
-      "Re-scan for transfers between your own BANK accounts (normally runs automatically after each sync).",
+      "Re-scan one person's own BANK accounts for transfers between them (normally runs automatically after each sync).",
+    inputSchema: { userId: z.number().int().describe("Which person to scan (see list_users)") },
   },
-  async () => {
-    const pairs = detectSelfTransfers();
+  async ({ userId }) => {
+    const pairs = detectSelfTransfers(userId);
     return json({ pairs });
   }
 );
@@ -624,9 +743,10 @@ server.registerTool(
   "list_debts",
   {
     description:
-      "List debts (money borrowed or lent) with computed totals: principal, total_paid, remaining, percent_complete, interest_paid_so_far, plus payment_plan (how each debt's expected payment is calculated: loan formula, linked payment bill, history-inferred, or none).",
+      "List debts (money borrowed or lent) with computed totals: principal, total_paid, remaining, percent_complete, interest_paid_so_far, plus payment_plan (how each debt's expected payment is calculated: loan formula, linked payment bill, history-inferred, or none). Scoped to one person, a debt shows whether they own it or are the sharedWithUserId party (isOwner distinguishes the two).",
+    inputSchema: { userId: userIdScopeParam },
   },
-  async () => json(listDebts())
+  async ({ userId }) => json(listDebts(userId ?? null))
 );
 
 server.registerTool(
@@ -645,17 +765,34 @@ server.registerTool(
       "Create a debt. Either principalAmount (a simple fixed loan) or splitPercentage (a shared expense you fronted — principal is computed as that % of whatever borrow/lend transactions get linked) must be given, not both.",
     inputSchema: {
       name: z.string(),
+      userId: z.number().int().describe("Which person owns/tracks this debt (see list_users)"),
       direction: z
         .enum(["owed_by_me", "owed_to_me"])
         .describe("owed_by_me = you borrowed; owed_to_me = you lent"),
-      counterparty: z.string().optional(),
+      counterparty: z
+        .string()
+        .optional()
+        .describe(
+          "Free-text label for an outside party — use sharedWithUserId instead when the other party is a household member"
+        ),
+      sharedWithUserId: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "Set when the other party is a real household member (see list_users) rather than an " +
+            "outside person — e.g. a debt split_percentage-shared with Juliana. Purely a typed label; " +
+            "split_percentage/link_debt_to_debt still drive all the principal/remaining math."
+        ),
       principalAmount: z.number().optional(),
       splitPercentage: z.number().min(0).max(100).optional(),
       expectedTotalAmount: z.number().optional().describe("Total incl. interest, if known"),
       interestRateMonthlyPercent: z
         .number()
         .optional()
-        .describe("Real per-month rate the loan carries (e.g. from a bank statement), for reference only"),
+        .describe(
+          "Real per-month rate the loan carries (e.g. from a bank statement), for reference only"
+        ),
       startDate: z.string().describe("ISO date"),
       targetPayoffDate: z.string().optional(),
       loanType: z
@@ -676,33 +813,18 @@ server.registerTool(
         .describe(
           "Precise, explicit rule for classifying future transactions against this debt " +
             "(counterparty pattern, amount threshold, role) — e.g. \"DEBIT to 'Ana Cristina...' " +
-            "> R$1,000 → pay_off; her allowance (≤R$1,000) is not part of this debt.\" Set this so " +
+            '> R$1,000 → pay_off; her allowance (≤R$1,000) is not part of this debt." Set this so ' +
             "future debt-state updates can be applied exactly, without re-deriving the rule."
         ),
     },
   },
   async (input) => {
-    if (input.principalAmount == null && input.splitPercentage == null) {
-      return errorResult("either principalAmount or splitPercentage is required");
+    try {
+      createDebt(input);
+      return json(listDebts(input.userId));
+    } catch (error) {
+      return errorResult(error);
     }
-    db.query(
-      `INSERT INTO debts (name, direction, counterparty, principal_amount, split_percentage, expected_total_amount, interest_rate_monthly_percent, start_date, target_payoff_date, notes, matching_rule, loan_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      input.name,
-      input.direction,
-      input.counterparty ?? null,
-      input.principalAmount ?? null,
-      input.splitPercentage ?? null,
-      input.expectedTotalAmount ?? null,
-      input.interestRateMonthlyPercent ?? null,
-      input.startDate,
-      input.targetPayoffDate ?? null,
-      input.notes ?? null,
-      input.matchingRule ?? null,
-      input.loanType ?? null
-    );
-    return json(listDebts());
   }
 );
 
@@ -714,6 +836,16 @@ server.registerTool(
     inputSchema: {
       id: z.number().int(),
       status: z.enum(["active", "paid_off"]).optional(),
+      counterparty: z.string().nullable().optional(),
+      sharedWithUserId: z
+        .number()
+        .int()
+        .nullable()
+        .optional()
+        .describe(
+          "Set when the other party is a real household member (see list_users), or null to clear"
+        ),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
       startDate: z.string().optional().describe("ISO date"),
       targetPayoffDate: z.string().nullable().optional(),
       principalAmount: z.number().nullable().optional(),
@@ -766,73 +898,13 @@ server.registerTool(
         ),
     },
   },
-  async ({
-    id,
-    status,
-    startDate,
-    targetPayoffDate,
-    principalAmount,
-    splitPercentage,
-    expectedTotalAmount,
-    interestRateMonthlyPercent,
-    loanType,
-    notes,
-    matchingRule,
-    overrideAutomaticSchedule,
-  }) => {
-    const existing = db.query("SELECT id FROM debts WHERE id = ?").get(id);
-    if (!existing) return errorResult(`Debt ${id} not found`);
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (overrideAutomaticSchedule !== undefined) {
-      fields.push("override_automatic_schedule = ?");
-      values.push(overrideAutomaticSchedule ? 1 : 0);
+  async ({ id, userId, ...input }) => {
+    try {
+      updateDebt(id, input);
+      return json(listDebts(userId ?? null));
+    } catch (error) {
+      return errorResult(error);
     }
-    if (status !== undefined) {
-      fields.push("status = ?");
-      values.push(status);
-    }
-    if (splitPercentage !== undefined) {
-      fields.push("split_percentage = ?");
-      values.push(splitPercentage);
-    }
-    if (startDate !== undefined) {
-      fields.push("start_date = ?");
-      values.push(startDate);
-    }
-    if (targetPayoffDate !== undefined) {
-      fields.push("target_payoff_date = ?");
-      values.push(targetPayoffDate);
-    }
-    if (principalAmount !== undefined) {
-      fields.push("principal_amount = ?");
-      values.push(principalAmount);
-    }
-    if (expectedTotalAmount !== undefined) {
-      fields.push("expected_total_amount = ?");
-      values.push(expectedTotalAmount);
-    }
-    if (matchingRule !== undefined) {
-      fields.push("matching_rule = ?");
-      values.push(matchingRule);
-    }
-    if (interestRateMonthlyPercent !== undefined) {
-      fields.push("interest_rate_monthly_percent = ?");
-      values.push(interestRateMonthlyPercent);
-    }
-    if (loanType !== undefined) {
-      fields.push("loan_type = ?");
-      values.push(loanType);
-    }
-    if (notes !== undefined) {
-      fields.push("notes = ?");
-      values.push(notes);
-    }
-    if (fields.length > 0) {
-      values.push(id);
-      db.query(`UPDATE debts SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
-    }
-    return json(listDebts());
   }
 );
 
@@ -840,12 +912,14 @@ server.registerTool(
   "delete_debt",
   {
     description: "Delete a debt and its transaction links.",
-    inputSchema: { id: z.number().int() },
+    inputSchema: {
+      id: z.number().int(),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
+    },
   },
-  async ({ id }) => {
-    db.query("DELETE FROM debt_transactions WHERE debt_id = ?").run(id);
-    db.query("DELETE FROM debts WHERE id = ?").run(id);
-    return json(listDebts());
+  async ({ id, userId }) => {
+    deleteDebt(id);
+    return json(listDebts(userId ?? null));
   }
 );
 
@@ -858,11 +932,12 @@ server.registerTool(
       debtId: z.number().int(),
       transactionIds: z.array(z.string()),
       role: z.enum(["borrow", "lend", "pay_off"]),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
     },
   },
-  async ({ debtId, transactionIds, role }) => {
+  async ({ debtId, transactionIds, role, userId }) => {
     linkTransactionsToDebt(debtId, transactionIds, role);
-    return json(listDebts());
+    return json(listDebts(userId ?? null));
   }
 );
 
@@ -870,14 +945,18 @@ server.registerTool(
   "unlink_transactions_from_debt",
   {
     description: "Remove transactions from a debt.",
-    inputSchema: { debtId: z.number().int(), transactionIds: z.array(z.string()) },
+    inputSchema: {
+      debtId: z.number().int(),
+      transactionIds: z.array(z.string()),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
+    },
   },
-  async ({ debtId, transactionIds }) => {
+  async ({ debtId, transactionIds, userId }) => {
     const placeholders = transactionIds.map(() => "?").join(",");
     db.query(
       `DELETE FROM debt_transactions WHERE debt_id = ? AND transaction_id IN (${placeholders})`
     ).run(debtId, ...transactionIds);
-    return json(listDebts());
+    return json(listDebts(userId ?? null));
   }
 );
 
@@ -893,12 +972,13 @@ server.registerTool(
     inputSchema: {
       parentDebtId: z.number().int().describe("The debt whose origin sum grows"),
       childDebtId: z.number().int().describe("The debt whose principal feeds into the parent"),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
     },
   },
-  async ({ parentDebtId, childDebtId }) => {
+  async ({ parentDebtId, childDebtId, userId }) => {
     try {
       linkDebtToDebt(parentDebtId, childDebtId);
-      return json(listDebts());
+      return json(listDebts(userId ?? null));
     } catch (error) {
       return errorResult(error);
     }
@@ -912,11 +992,12 @@ server.registerTool(
     inputSchema: {
       parentDebtId: z.number().int(),
       childDebtId: z.number().int(),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
     },
   },
-  async ({ parentDebtId, childDebtId }) => {
+  async ({ parentDebtId, childDebtId, userId }) => {
     unlinkDebtFromDebt(parentDebtId, childDebtId);
-    return json(listDebts());
+    return json(listDebts(userId ?? null));
   }
 );
 
@@ -925,8 +1006,9 @@ server.registerTool(
   {
     description:
       "List savings goals with computed feasibility: required_monthly_savings (to hit the target by the date) vs projected_monthly_savings (from recent baseline + confirmed bills), and on_track.",
+    inputSchema: { userId: userIdScopeParam },
   },
-  async () => json(listGoals())
+  async ({ userId }) => json(listGoals(userId ?? null))
 );
 
 server.registerTool(
@@ -935,17 +1017,18 @@ server.registerTool(
     description: "Create a savings goal — a target net-worth amount by a date.",
     inputSchema: {
       name: z.string(),
+      userId: z.number().int().describe("Which person this goal belongs to (see list_users)"),
       targetAmount: z.number(),
       targetDate: z.string().describe("ISO date"),
     },
   },
-  async ({ name, targetAmount, targetDate }) => {
-    db.query("INSERT INTO goals (name, target_amount, target_date) VALUES (?, ?, ?)").run(
-      name,
-      targetAmount,
-      targetDate
-    );
-    return json(listGoals());
+  async ({ name, userId, targetAmount, targetDate }) => {
+    try {
+      createGoal({ name, userId, targetAmount, targetDate });
+      return json(listGoals(userId));
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -958,70 +1041,63 @@ server.registerTool(
       name: z.string().optional(),
       targetAmount: z.number().optional(),
       targetDate: z.string().optional().describe("ISO date"),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
     },
   },
-  async ({ id, name, targetAmount, targetDate }) => {
-    const existing = db.query("SELECT id FROM goals WHERE id = ?").get(id);
-    if (!existing) return errorResult(`Goal ${id} not found`);
-
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (name !== undefined) {
-      fields.push("name = ?");
-      values.push(name);
+  async ({ id, name, targetAmount, targetDate, userId }) => {
+    try {
+      updateGoal(id, { name, targetAmount, targetDate });
+      return json(listGoals(userId ?? null));
+    } catch (error) {
+      return errorResult(error);
     }
-    if (targetAmount !== undefined) {
-      fields.push("target_amount = ?");
-      values.push(targetAmount);
-    }
-    if (targetDate !== undefined) {
-      fields.push("target_date = ?");
-      values.push(targetDate);
-    }
-    if (fields.length > 0) {
-      values.push(id);
-      db.query(`UPDATE goals SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
-    }
-    return json(listGoals());
   }
 );
 
 server.registerTool(
   "delete_goal",
-  { description: "Delete a savings goal.", inputSchema: { id: z.number().int() } },
-  async ({ id }) => {
-    db.query("DELETE FROM goals WHERE id = ?").run(id);
-    return json(listGoals());
+  {
+    description: "Delete a savings goal.",
+    inputSchema: {
+      id: z.number().int(),
+      userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
+    },
+  },
+  async ({ id, userId }) => {
+    deleteGoal(id);
+    return json(listGoals(userId ?? null));
   }
 );
 
 server.registerTool(
   "get_settings",
-  { description: "Get global app settings — currently just cardSpendGoal, the persisted monthly credit card spending target used by projections and shown on the Dashboard." },
-  async () => json(getSettings())
+  {
+    description:
+      "Get one person's app settings — currently just cardSpendGoal, the persisted monthly credit card spending target used by projections and shown on the Dashboard.",
+    inputSchema: {
+      userId: z
+        .number()
+        .int()
+        .describe("Which person (see list_users) — settings are per-person, not global"),
+    },
+  },
+  async ({ userId }) => json(getSettings(userId))
 );
 
 server.registerTool(
   "update_settings",
   {
     description:
-      "Update global app settings. Set cardSpendGoal to a number to persist a standing monthly card-spend target (replaces the 3-month actual average everywhere it's used); set it to null to clear the goal and fall back to the average.",
+      "Update one person's app settings. Set cardSpendGoal to a number to persist a standing monthly card-spend target (replaces the 3-month actual average everywhere it's used); set it to null to clear the goal and fall back to the average.",
     inputSchema: {
+      userId: z
+        .number()
+        .int()
+        .describe("Which person (see list_users) — settings are per-person, not global"),
       cardSpendGoal: z.number().nullable().optional(),
     },
   },
-  async ({ cardSpendGoal }) => {
-    if (cardSpendGoal !== undefined) {
-      if (cardSpendGoal === null) {
-        db.query("DELETE FROM app_settings WHERE key = 'cardSpendGoal'").run();
-      } else {
-        db.query(
-          "INSERT INTO app_settings (key, value) VALUES ('cardSpendGoal', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-        ).run(String(cardSpendGoal));
-      }
-    }
-    return json(getSettings());
-  }
+  async ({ userId, cardSpendGoal }) => json(updateSettings(userId, { cardSpendGoal }))
 );
 
 server.registerTool(
@@ -1030,28 +1106,51 @@ server.registerTool(
     description:
       "Compute the cash-flow projection: starting balance, then month by month, built from confirmed bills (income + expense), each active debt's own repayment schedule, a 3-month average (or persisted goal) of card spend, and compounding interest on idle cash. Each month's bills[] line item is tagged kind: bill/debt/interest/cardSpend, and cardExpenseBills[] lists bills flagged is_card_expense (already folded into the cardSpend line, shown separately here for visibility, not double-counted in net).",
     inputSchema: {
-      horizonMonths: z.number().int().optional().describe("How many months ahead to project (default 6)"),
+      userId: userIdScopeParam.describe(
+        "One person's own projection (only debts they own feed it); omit for the combined Household projection"
+      ),
+      horizonMonths: z
+        .number()
+        .int()
+        .optional()
+        .describe("How many months ahead to project (default 6)"),
       billOverrides: z
         .array(z.object({ billId: z.number().int(), amount: z.number() }))
         .optional()
-        .describe("What-if: override a specific bill's amount for this computation only, not persisted"),
+        .describe(
+          "What-if: override a specific bill's amount for this computation only, not persisted"
+        ),
       discretionaryDeltaPercent: z
         .number()
         .optional()
-        .describe("What-if: scale the card-spend average by this percent (e.g. -10 for 10% less discretionary spend). No effect if cardSpendGoal is set (a goal is explicit, not scaled)."),
+        .describe(
+          "What-if: scale the card-spend average by this percent (e.g. -10 for 10% less discretionary spend). No effect if cardSpendGoal is set (a goal is explicit, not scaled)."
+        ),
       interestRateAnnualPercent: z
         .number()
         .optional()
-        .describe("What-if: override the annual interest rate on idle cash (default: persisted Selic-based rate)"),
+        .describe(
+          "What-if: override the annual interest rate on idle cash (default: persisted Selic-based rate)"
+        ),
       cardSpendGoal: z
         .number()
         .optional()
-        .describe("What-if: override the card-spend goal for this computation only, without persisting it"),
+        .describe(
+          "What-if: override the card-spend goal for this computation only, without persisting it"
+        ),
     },
   },
-  async ({ horizonMonths, billOverrides, discretionaryDeltaPercent, interestRateAnnualPercent, cardSpendGoal }) =>
+  async ({
+    userId,
+    horizonMonths,
+    billOverrides,
+    discretionaryDeltaPercent,
+    interestRateAnnualPercent,
+    cardSpendGoal,
+  }) =>
     json(
       computeProjection({
+        userId: userId ?? null,
         horizonMonths,
         billOverrides,
         discretionaryDeltaPercent,

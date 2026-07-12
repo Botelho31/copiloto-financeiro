@@ -111,7 +111,9 @@ export function TransactionsPage() {
           <TransactionsTable
             transactions={transactions ?? []}
             categories={categories ?? []}
-            onCategorize={(id, catId) => updateCategory.mutate({ id, categoryId: catId, createRule: true })}
+            onCategorize={(id, catId) =>
+              updateCategory.mutate({ id, categoryId: catId, createRule: true })
+            }
           />
         )}
       </div>
@@ -143,7 +145,10 @@ export function TransactionsPage() {
           (isSearching ? (
             <p className="muted">{t("search.searching")}</p>
           ) : (
-            <GroupedTransactionList transactions={searchResults ?? []} categories={categories ?? []} />
+            <GroupedTransactionList
+              transactions={searchResults ?? []}
+              categories={categories ?? []}
+            />
           ))}
       </div>
     </div>
@@ -197,7 +202,13 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
 
           <form
             onSubmit={submitNewRule}
-            style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap", marginBottom: 16 }}
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "end",
+              flexWrap: "wrap",
+              marginBottom: 16,
+            }}
           >
             <label>
               {t("rules.matchText")}
@@ -238,8 +249,20 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
             <table>
               <thead>
                 <tr>
-                  <SortableTh label={t("rules.matchText")} sortKey="matchText" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-                  <SortableTh label={t("common:table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+                  <SortableTh
+                    label={t("rules.matchText")}
+                    sortKey="matchText"
+                    activeKey={sortKey}
+                    direction={direction}
+                    onSort={toggleSort}
+                  />
+                  <SortableTh
+                    label={t("common:table.category")}
+                    sortKey="category"
+                    activeKey={sortKey}
+                    direction={direction}
+                    onSort={toggleSort}
+                  />
                   <th />
                 </tr>
               </thead>
@@ -249,7 +272,11 @@ function CategoryRulesPanel(props: { categories: Category[] }) {
                     <td>{r.match_text}</td>
                     <td>{r.category_name}</td>
                     <td>
-                      <button className="danger icon" onClick={() => deleteRule.mutate(r.id)} title={t("rules.deleteTitle")}>
+                      <button
+                        className="danger icon"
+                        onClick={() => deleteRule.mutate(r.id)}
+                        title={t("rules.deleteTitle")}
+                      >
                         <FiTrash2 />
                       </button>
                     </td>
@@ -290,9 +317,27 @@ function UncategorizedGroupsTable(props: {
     <table>
       <thead>
         <tr>
-          <SortableTh label={t("common:table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("common:table.count")} sortKey="count" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("common:table.total")} sortKey="total" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh
+            label={t("common:table.description")}
+            sortKey="description"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("common:table.count")}
+            sortKey="count"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("common:table.total")}
+            sortKey="total"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
           <th>{t("categorize.assignTo")}</th>
         </tr>
       </thead>
@@ -345,10 +390,34 @@ function TransactionsTable(props: {
     <table>
       <thead>
         <tr>
-          <SortableTh label={t("table.date")} sortKey="date" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.amount")} sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh
+            label={t("table.date")}
+            sortKey="date"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.description")}
+            sortKey="description"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.amount")}
+            sortKey="amount"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.category")}
+            sortKey="category"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
         </tr>
       </thead>
       <tbody>

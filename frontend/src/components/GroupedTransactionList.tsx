@@ -20,7 +20,10 @@ interface Group {
   transactionIds: string[];
 }
 
-export function GroupedTransactionList(props: { transactions: Transaction[]; categories: Category[] }) {
+export function GroupedTransactionList(props: {
+  transactions: Transaction[];
+  categories: Category[];
+}) {
   const { t } = useTranslation();
   const bulkCategorize = useBulkCategorizeTransactions();
   const bulkTag = useBulkTagTransactions();
@@ -72,10 +75,34 @@ export function GroupedTransactionList(props: { transactions: Transaction[]; cat
     <table>
       <thead>
         <tr>
-          <SortableTh label={t("table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.count")} sortKey="count" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.total")} sortKey="total" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-          <SortableTh label={t("table.category")} sortKey="category" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+          <SortableTh
+            label={t("table.description")}
+            sortKey="description"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.count")}
+            sortKey="count"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.total")}
+            sortKey="total"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
+          <SortableTh
+            label={t("table.category")}
+            sortKey="category"
+            activeKey={sortKey}
+            direction={direction}
+            onSort={toggleSort}
+          />
           <th>{t("table.tag")}</th>
         </tr>
       </thead>
@@ -95,7 +122,9 @@ export function GroupedTransactionList(props: { transactions: Transaction[]; cat
               />
             </td>
             <td>
-              <TagPicker onPick={(tagId) => bulkTag.mutate({ transactionIds: g.transactionIds, tagId })} />
+              <TagPicker
+                onPick={(tagId) => bulkTag.mutate({ transactionIds: g.transactionIds, tagId })}
+              />
             </td>
           </tr>
         ))}

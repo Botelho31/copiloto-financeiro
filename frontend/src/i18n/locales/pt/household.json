@@ -1,0 +1,22 @@
+{
+  "title": "Família",
+  "subtitle": "Todos combinados — selecione uma pessoa no menu acima para filtrar.",
+  "summary": {
+    "netWorth": "Patrimônio líquido",
+    "bankBalance": "Saldo em conta",
+    "cardBalance": "Saldo no cartão",
+    "owedByHousehold": "Devido pela família",
+    "owedToHousehold": "Devido à família",
+    "nextMonth": "Próximo mês"
+  },
+  "breakdown": {
+    "title": "Por pessoa",
+    "subtitle": "Saldos e patrimônio líquido de cada pessoa, lado a lado.",
+    "person": "Pessoa",
+    "bankBalance": "Conta",
+    "cardBalance": "Cartão",
+    "investments": "Investimentos",
+    "netWorth": "Patrimônio líquido",
+    "empty": "Ninguém cadastrado ainda — adicione pessoas em Configurações."
+  }
+}

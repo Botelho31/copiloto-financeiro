@@ -5,7 +5,10 @@
     "transactions": "Transações",
     "bills": "Pagamentos Planejados",
     "debts": "Dívidas",
-    "projections": "Projeções"
+    "projections": "Projeções",
+    "household": "Família",
+    "config": "Configurações",
+    "person": "Pessoa"
   },
   "logout": "Sair",
   "language": {

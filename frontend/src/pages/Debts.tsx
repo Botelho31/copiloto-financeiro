@@ -1,8 +1,14 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { FiArrowLeft, FiChevronDown, FiChevronRight, FiLink, FiPlus, FiTrash2 } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiChevronDown,
+  FiChevronRight,
+  FiLink,
+  FiPlus,
+  FiTrash2,
+} from "react-icons/fi";
 import { MdLinkOff } from "react-icons/md";
 import {
   Area,
@@ -19,14 +25,7 @@ import {
   YAxis,
 } from "recharts";
 import type { Bill, Debt, DebtLinkedTransaction } from "shared";
-import {
-  addMonthsIso,
-  billAppliesToMonth,
-  localMonthDate,
-  monthlyEquivalentAmount,
-  pricePayment,
-  simulateAmortization,
-} from "shared";
+import { addMonthsIso, simulateAmortization } from "shared";
 import {
   useCreateDebt,
   useDebtTransactions,
@@ -41,11 +40,11 @@ import {
 import { useBills, useUpdateBill } from "../hooks/useBills";
 import { useProjections } from "../hooks/useProjections";
 import { useSearchTransactions } from "../hooks/useTransactions";
-import { apiFetch } from "../lib/api";
 import { useSortableTable } from "../hooks/useSortableTable";
 import { SortableTh } from "../components/SortableTh";
 import { formatDate, formatMoney, formatMonthLabel } from "../lib/format";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- used only via `typeof ... [number]` below
 const DIRECTION_VALUES = ["owed_by_me", "owed_to_me"] as const;
 function directionOptions(t: TFunction<"debts">) {
   return [
@@ -54,6 +53,7 @@ function directionOptions(t: TFunction<"debts">) {
   ];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- used only via `typeof ... [number]` below
 const LOAN_TYPE_VALUES = ["", "price", "sac"] as const;
 function loanTypeOptions(t: TFunction<"debts">) {
   return [
@@ -109,7 +109,12 @@ function DebtLinker(props: { debtId: number; startDate: string; linkedIds: Set<s
   const filteredResults = (rawResults ?? []).filter(
     (tx) => tx.date >= props.startDate && !props.linkedIds.has(tx.id)
   );
-  const { sorted: results, sortKey, direction, toggleSort } = useSortableTable(
+  const {
+    sorted: results,
+    sortKey,
+    direction,
+    toggleSort,
+  } = useSortableTable(
     filteredResults,
     (tx, key) => (key === "date" ? tx.date : key === "description" ? tx.description : tx.amount),
     "date",
@@ -127,7 +132,10 @@ function DebtLinker(props: { debtId: number; startDate: string; linkedIds: Set<s
           onChange={(e) => setQuery(e.target.value)}
           style={{ flex: 1, minWidth: 200 }}
         />
-        <select value={role} onChange={(e) => setRole(e.target.value as "borrow" | "lend" | "pay_off")}>
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as "borrow" | "lend" | "pay_off")}
+        >
           {roleOptions(t).map((r) => (
             <option key={r.value} value={r.value}>
               {r.label}
@@ -144,9 +152,27 @@ function DebtLinker(props: { debtId: number; startDate: string; linkedIds: Set<s
           <table>
             <thead>
               <tr>
-                <SortableTh label={t("common:table.date")} sortKey="date" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-                <SortableTh label={t("common:table.description")} sortKey="description" activeKey={sortKey} direction={direction} onSort={toggleSort} />
-                <SortableTh label={t("common:table.amount")} sortKey="amount" activeKey={sortKey} direction={direction} onSort={toggleSort} />
+                <SortableTh
+                  label={t("common:table.date")}
+                  sortKey="date"
+                  activeKey={sortKey}
+                  direction={direction}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label={t("common:table.description")}
+                  sortKey="description"
+                  activeKey={sortKey}
+                  direction={direction}
+                  onSort={toggleSort}
+                />
+                <SortableTh
+                  label={t("common:table.amount")}
+                  sortKey="amount"
+                  activeKey={sortKey}
+                  direction={direction}
+                  onSort={toggleSort}
+                />
                 <th />
               </tr>
             </thead>
@@ -159,7 +185,9 @@ function DebtLinker(props: { debtId: number; startDate: string; linkedIds: Set<s
                   <td>
                     <button
                       className="link-button"
-                      onClick={() => link.mutate({ debtId: props.debtId, transactionIds: [tx.id], role })}
+                      onClick={() =>
+                        link.mutate({ debtId: props.debtId, transactionIds: [tx.id], role })
+                      }
                       title={t("linker.linkTitle")}
                     >
                       <FiLink />
@@ -296,7 +324,11 @@ function StartDateEditor(props: { debt: Debt }) {
         onBlur={save}
         className="money"
       />
-      {isFutureDebt(props.debt) && <span className="muted" style={{ fontSize: 12 }}>{t("startDate.future")}</span>}
+      {isFutureDebt(props.debt) && (
+        <span className="muted" style={{ fontSize: 12 }}>
+          {t("startDate.future")}
+        </span>
+      )}
     </div>
   );
 }
@@ -365,7 +397,11 @@ function MatchingRuleEditor(props: { debt: Debt }) {
 
   return (
     <div>
-      <button className="link-button" onClick={() => setOpen((o) => !o)} style={{ alignSelf: "start" }}>
+      <button
+        className="link-button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ alignSelf: "start" }}
+      >
         {open ? <FiChevronDown /> : <FiChevronRight />} {t("matchingRule.toggle")}
         {props.debt.matching_rule ? "" : t("matchingRule.notSet")}
       </button>
@@ -400,14 +436,17 @@ function LinkedDebtsEditor(props: { debt: Debt; allDebts: Debt[] }) {
 
   return (
     <div>
-      <button className="link-button" onClick={() => setOpen((o) => !o)} style={{ alignSelf: "start" }}>
-        {open ? <FiChevronDown /> : <FiChevronRight />} {t("linkedDebts.toggle", { count: props.debt.linked_debts.length })}
+      <button
+        className="link-button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ alignSelf: "start" }}
+      >
+        {open ? <FiChevronDown /> : <FiChevronRight />}{" "}
+        {t("linkedDebts.toggle", { count: props.debt.linked_debts.length })}
       </button>
       {open && (
         <div style={{ marginTop: 8 }}>
-          <div className="label muted">
-            {t("linkedDebts.label")}
-          </div>
+          <div className="label muted">{t("linkedDebts.label")}</div>
           {props.debt.linked_debts.length > 0 && (
             <ul style={{ margin: "4px 0", paddingLeft: 20 }}>
               {props.debt.linked_debts.map((ld) => (
@@ -473,7 +512,8 @@ function DebtTile(props: { debt: Debt; onSelect: () => void }) {
   const { t } = useTranslation("debts");
   const d = props.debt;
   const tone = d.direction === "owed_by_me" ? "negative" : "positive";
-  const directionLabel = d.direction === "owed_by_me" ? t("direction.owe") : t("direction.owedToMe");
+  const directionLabel =
+    d.direction === "owed_by_me" ? t("direction.owe") : t("direction.owedToMe");
 
   return (
     <div
@@ -488,7 +528,9 @@ function DebtTile(props: { debt: Debt; onSelect: () => void }) {
         }
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8 }}>
+      <div
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 8 }}
+      >
         <h3 style={{ margin: 0, fontSize: 16 }}>{d.name}</h3>
         <span
           style={{
@@ -509,11 +551,15 @@ function DebtTile(props: { debt: Debt; onSelect: () => void }) {
       {(d.loan_type || isFutureDebt(d)) && (
         <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
           {d.loan_type && <span className="badge">{LOAN_TYPE_LABEL[d.loan_type]}</span>}
-          {isFutureDebt(d) && <span className="badge">{t("tile.starts", { date: formatDate(d.start_date) })}</span>}
+          {isFutureDebt(d) && (
+            <span className="badge">{t("tile.starts", { date: formatDate(d.start_date) })}</span>
+          )}
         </div>
       )}
       <div style={{ marginTop: 14 }}>
-        <div className="label muted">{d.status === "active" ? t("tile.remaining") : t("tile.paid")}</div>
+        <div className="label muted">
+          {d.status === "active" ? t("tile.remaining") : t("tile.paid")}
+        </div>
         <div className="money" style={{ fontSize: 20 }}>
           {formatMoney(d.status === "active" ? d.remaining : d.total_paid)}
         </div>
@@ -525,18 +571,6 @@ function DebtTile(props: { debt: Debt; onSelect: () => void }) {
   );
 }
 
-const RECENT_PAYOFF_COUNT = 6;
-const MAX_PROJECTION_MONTHS = 1200; // 100 years — a sane cap, not a real answer
-
-// "Current rate" means recent behavior, not all-time average — if payments
-// used to be small and have since grown (or vice versa), the last few
-// actually paid amounts are a better forecast than the full history.
-function recentAvgPayment(payOffTx: DebtLinkedTransaction[]): number | null {
-  const recent = [...payOffTx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, RECENT_PAYOFF_COUNT);
-  if (recent.length === 0) return null;
-  return recent.reduce((sum, t) => sum + Math.abs(t.amount), 0) / recent.length;
-}
-
 // Monthly-equivalent of everything driving the debt's combined plan (every
 // linked bill, converted to its own monthly-equivalent, plus the automatic
 // heuristic if it's also contributing) — an explicit figure beats a
@@ -544,6 +578,7 @@ function recentAvgPayment(payOffTx: DebtLinkedTransaction[]): number | null {
 // each month".
 function plannedMonthlyPayment(d: Debt): number | null {
   const plan = d.payment_plan;
+  if (plan.source === "loan") return plan.monthly_amount;
   if (plan.source !== "combined") return null;
   const billsMonthly = plan.bills.reduce((sum, b) => {
     switch (b.cadence) {
@@ -564,71 +599,79 @@ function plannedMonthlyPayment(d: Debt): number | null {
   return total > 0 ? total : null;
 }
 
-function PayoffProjection(props: { debt: Debt; payOffTx: DebtLinkedTransaction[] }) {
+// Reads year/month straight off "YYYY-MM-DD" strings, same as
+// monthsBetweenDates in backend/src/routes/debts.ts — new Date(iso) parses as
+// UTC midnight, which can shift a 1st-of-month date into the previous month
+// in a negative-UTC-offset timezone. Purely a presentational month count
+// between two already-known dates, not a financial computation.
+function monthsBetweenIso(fromDate: string, toDate: string): number {
+  const [fromYear, fromMonth] = fromDate.split("-").map(Number);
+  const [toYear, toMonth] = toDate.split("-").map(Number);
+  return (toYear! - fromYear!) * 12 + (toMonth! - fromMonth!);
+}
+
+// Renders the backend's own projected_finish_date/payment_plan directly —
+// PaymentPlanSection (above) already explains which basis was used and why;
+// this is just "so when does it end." Never re-derives a payoff date or
+// monthly pace itself: an earlier version fell back to its own average-
+// payment heuristic for loan-type debts (since plannedMonthlyPayment used to
+// return null for them) and could show a confident date even when the
+// backend's own regularity check (see computePaymentPlan's coefficient-of-
+// variation gate) had explicitly decided there wasn't enough basis to
+// project — see backend/API-ARCHITECTURE.md's R2 for the incident.
+function PayoffProjection(props: { debt: Debt }) {
   const { t } = useTranslation("debts");
   const d = props.debt;
 
-  const projection = useMemo(() => {
-    if (d.status !== "active" || d.remaining <= 0) return null;
-    const planned = plannedMonthlyPayment(d);
-    const avgMonthlyPayment = planned ?? recentAvgPayment(props.payOffTx);
-    if (avgMonthlyPayment == null) return null;
+  if (d.status !== "active" || d.remaining <= 0) return null;
+  // PaymentPlanSection already renders the "no basis at all" explanation for
+  // source === "none" in detail right above this — no need to repeat it here.
+  if (d.payment_plan.source === "none") return null;
 
-    const monthlyRate = (d.interest_rate_monthly_percent ?? 0) / 100;
-    const monthlyInterestCost = d.remaining * monthlyRate;
-    if (avgMonthlyPayment <= monthlyInterestCost) {
-      return { avgMonthlyPayment, fromPlan: planned != null, months: null, payoffDate: null };
-    }
+  const monthlyAmount = plannedMonthlyPayment(d);
 
-    let balance = d.remaining;
-    let months = 0;
-    while (balance > 0 && months < MAX_PROJECTION_MONTHS) {
-      balance = balance * (1 + monthlyRate) - avgMonthlyPayment;
-      months++;
-    }
-    const payoffDate = new Date();
-    payoffDate.setMonth(payoffDate.getMonth() + months);
-    return { avgMonthlyPayment, fromPlan: planned != null, months, payoffDate };
-  }, [d, props.payOffTx]);
+  if (d.projected_finish_date == null) {
+    // A plan exists but the backend's own walk-forward (computeProjectedBalanceSchedule)
+    // never reaches payoff within its ceiling — e.g. the payment doesn't even
+    // cover accruing interest. Same authoritative signal as before, just read
+    // off the field instead of re-derived by comparing against interest here.
+    return (
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--rule)" }}>
+        <div className="label muted">{t("payoffProjection.label")}</div>
+        <div className="shortfall" style={{ marginTop: 4 }}>
+          {t("payoffProjection.shortfall", {
+            amount: monthlyAmount != null ? formatMoney(monthlyAmount) : "—",
+          })}
+        </div>
+      </div>
+    );
+  }
 
-  if (!projection) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const months = Math.max(0, monthsBetweenIso(today, d.projected_finish_date));
 
   return (
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--rule)" }}>
       <div className="label muted">{t("payoffProjection.label")}</div>
-      {projection.months == null ? (
-        <div className="shortfall" style={{ marginTop: 4 }}>
-          {t("payoffProjection.shortfall", {
-            basis: projection.fromPlan ? t("payoffProjection.basisPlanned") : t("payoffProjection.basisAverage"),
-            amount: formatMoney(projection.avgMonthlyPayment),
+      <div style={{ marginTop: 4 }}>
+        <span style={{ fontWeight: 600 }}>{t("payoffProjection.months", { count: months })}</span>{" "}
+        <span className="muted">
+          {t("payoffProjection.approxDate", {
+            date: new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(
+              new Date(d.projected_finish_date)
+            ),
+          })}
+        </span>
+      </div>
+      {monthlyAmount != null && (
+        <div className="muted" style={{ fontSize: "0.85em", marginTop: 2 }}>
+          {t("payoffProjection.basedOn", {
+            amount: formatMoney(monthlyAmount),
+            rate: d.interest_rate_monthly_percent
+              ? t("payoffProjection.atRate", { rate: d.interest_rate_monthly_percent })
+              : "",
           })}
         </div>
-      ) : (
-        <>
-          <div style={{ marginTop: 4 }}>
-            <span style={{ fontWeight: 600 }}>
-              {t("payoffProjection.months", { count: projection.months })}
-            </span>{" "}
-            <span className="muted">
-              {t("payoffProjection.approxDate", {
-                date: new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(
-                  projection.payoffDate!
-                ),
-              })}
-            </span>
-          </div>
-          <div className="muted" style={{ fontSize: "0.85em", marginTop: 2 }}>
-            {t("payoffProjection.basedOn", {
-              basis: projection.fromPlan
-                ? t("payoffProjection.basedOnPlanned")
-                : t("payoffProjection.basedOnAverage"),
-              amount: formatMoney(projection.avgMonthlyPayment),
-              rate: d.interest_rate_monthly_percent
-                ? t("payoffProjection.atRate", { rate: d.interest_rate_monthly_percent })
-                : "",
-            })}
-          </div>
-        </>
       )}
     </div>
   );
@@ -695,7 +738,9 @@ function PlanBillRow(props: {
         </span>
         {linkedElsewhere && (
           <span className="muted" style={{ display: "block", fontSize: 12 }}>
-            {t("planBillRow.linkedElsewhere", { name: b.debt_name ?? t("planBillRow.anotherDebt") })}
+            {t("planBillRow.linkedElsewhere", {
+              name: b.debt_name ?? t("planBillRow.anotherDebt"),
+            })}
           </span>
         )}
       </span>
@@ -787,7 +832,10 @@ function PaymentPlanSection(props: { debt: Debt }) {
               <div key={b.bill_id}>
                 <span style={{ fontWeight: 600 }}>{formatMoney(b.amount)}</span>{" "}
                 <span className="muted">
-                  {t("paymentPlan.extraAmortization", { cadence: cadenceLabel(t, b.cadence), name: b.bill_name })}
+                  {t("paymentPlan.extraAmortization", {
+                    cadence: cadenceLabel(t, b.cadence),
+                    name: b.bill_name,
+                  })}
                 </span>
               </div>
             ))}
@@ -799,13 +847,18 @@ function PaymentPlanSection(props: { debt: Debt }) {
               <div key={b.bill_id}>
                 <span style={{ fontWeight: 600 }}>{formatMoney(b.amount)}</span>{" "}
                 <span className="muted">
-                  {t("paymentPlan.fromBill", { cadence: cadenceLabel(t, b.cadence), name: b.bill_name })}
+                  {t("paymentPlan.fromBill", {
+                    cadence: cadenceLabel(t, b.cadence),
+                    name: b.bill_name,
+                  })}
                 </span>
               </div>
             ))}
             {plan.automatic && (
               <div>
-                <span style={{ fontWeight: 600 }}>≈{formatMoney(plan.automatic.monthly_amount)}/mo</span>{" "}
+                <span style={{ fontWeight: 600 }}>
+                  ≈{formatMoney(plan.automatic.monthly_amount)}/mo
+                </span>{" "}
                 <span className="muted">
                   {t("paymentPlan.automatic", { count: plan.automatic.payment_count })}
                 </span>
@@ -839,7 +892,10 @@ function PaymentPlanSection(props: { debt: Debt }) {
               <div className="label muted" style={{ fontSize: 11 }}>
                 {formatMonthLabel(p.label)}
               </div>
-              <div className={`money ${p.amount >= 0 ? "gain" : "shortfall"}`} style={{ fontSize: 13 }}>
+              <div
+                className={`money ${p.amount >= 0 ? "gain" : "shortfall"}`}
+                style={{ fontSize: 13 }}
+              >
                 {p.amount >= 0 ? "+" : "-"}
                 {formatMoney(Math.abs(p.amount))}
               </div>
@@ -851,7 +907,9 @@ function PaymentPlanSection(props: { debt: Debt }) {
         <p className="muted" style={{ fontSize: "0.85em", marginTop: 8, marginBottom: 0 }}>
           {t("paymentPlan.noProjectedPayments", {
             horizon: PLAN_PREVIEW_HORIZON,
-            suffix: isFutureDebt(d) ? t("paymentPlan.noProjectedSuffix", { date: formatDate(d.start_date) }) : "",
+            suffix: isFutureDebt(d)
+              ? t("paymentPlan.noProjectedSuffix", { date: formatDate(d.start_date) })
+              : "",
           })}
         </p>
       )}
@@ -895,7 +953,8 @@ function PaymentPlanSection(props: { debt: Debt }) {
                 >
                   {billPickerOpen ? <FiChevronDown /> : <FiChevronRight />}
                   {t("paymentPlan.linkAnotherBill", {
-                    whichBill: linkedBills.length > 0 ? t("paymentPlan.another") : t("paymentPlan.a"),
+                    whichBill:
+                      linkedBills.length > 0 ? t("paymentPlan.another") : t("paymentPlan.a"),
                     count: candidateBills.length,
                   })}
                 </button>
@@ -948,14 +1007,23 @@ function PaymentPlanSection(props: { debt: Debt }) {
       </div>
       {plan.source !== "loan" && (
         <label
-          style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            marginTop: 10,
+          }}
           title={t("paymentPlan.overrideTitle")}
         >
           <input
             type="checkbox"
             checked={d.override_automatic_schedule}
             onChange={(e) =>
-              updateDebt.mutate({ id: d.id, input: { overrideAutomaticSchedule: e.target.checked } })
+              updateDebt.mutate({
+                id: d.id,
+                input: { overrideAutomaticSchedule: e.target.checked },
+              })
             }
           />
           {t("paymentPlan.overrideLabel")}
@@ -993,174 +1061,43 @@ interface BalancePoint {
   kind: "actual" | "projected";
 }
 
-// One debt's month-by-month balance, real history first then projection.
-// With an interest rate the history is interest-aware (simulateAmortization);
-// without one it's the server-computed remaining stepped back through each
-// payment. Projection comes from the loan's own schedule when there is one,
-// else the recent-average-payment heuristic. Shared by the per-debt chart and
-// the page-level overview so both agree on what a debt's trajectory is.
-// A loan-type debt's own PRICE/SAC schedule, but with every extra
-// amortization bill linked to it (see DebtPaymentPlan's "loan" variant — the
-// computed installment stays authoritative, these are on top of it) counted
-// against the same shared remainingBalance cap the backend's projection
-// engine uses (see activeDebtSchedules/debtLineAmountForMonth in
-// projectionEngine.ts): the installment's own interest/amortization split
-// still comes from the plain, extras-ignorant formula every month (the
-// contract's fixed payment never changes because of an extra payment), but
-// cumulative cash toward the debt — installment plus every extra bill — is
-// tracked against startBalance and trims/stops the schedule the moment it's
-// exhausted, exactly like the backend does. A naive "recompute interest off
-// a balance already reduced by extras" model would pay off measurably slower
-// than this and would silently disagree with the real projection.
-interface LoanStep {
-  balance: number;
-  interest: number;
-}
+// One debt's month-by-month balance, real history first then projection —
+// read straight off the backend's own balance_history/projected_balance_schedule
+// (see computeBalanceHistory/computeProjectedBalanceSchedule in
+// backend/src/routes/debts.ts) rather than re-simulated here. An earlier
+// version of this function reimplemented the PRICE/SAC + extra-bill-capping
+// math by hand to draw a *historical* chart, since the backend only exposed
+// a future-facing schedule — see backend/API-ARCHITECTURE.md's R1 for why
+// that was a maintenance risk (any change to the real projection logic had
+// to be mirrored here by hand or the chart would silently disagree with it).
+// The only client-side work left is merging two already-authoritative
+// series and, for a debt that hasn't started yet, restating its own known
+// principal as the anchor point before the schedule's first (already
+// post-payment) entry.
+function debtBalanceSeries(d: Debt): BalancePoint[] {
+  const history: BalancePoint[] = d.balance_history.map((h) => ({
+    date: `${h.month}-01`,
+    balance: h.balance,
+    kind: "actual",
+  }));
 
-function loanStepsWithExtras(
-  startBalance: number,
-  ratePercent: number,
-  loanType: "price" | "sac",
-  termMonths: number,
-  anchorDate: string,
-  extraBills: Bill[]
-): LoanStep[] {
-  const r = ratePercent / 100;
-  const fixedPayment = loanType === "price" ? pricePayment(startBalance, ratePercent, termMonths) : null;
-  const fixedAmortization = loanType === "sac" ? startBalance / termMonths : null;
-  const steps: LoanStep[] = [];
-  let scheduleBalance = startBalance;
-  let paidSoFar = 0;
-  for (let month = 1; month <= termMonths && paidSoFar < startBalance - 0.005; month++) {
-    // Aligned with the backend's own monthOfLoan convention (see
-    // debtLineAmountForMonth in projectionEngine.ts): loan-month 1 is the
-    // start date's own calendar month, not the month after — so an extra
-    // bill due in the same month the loan starts (like a closing-day upfront
-    // payment) fires on loan-month 1, matching the real projection exactly.
-    const targetMonth = localMonthDate(anchorDate, month - 1);
-    const interest = scheduleBalance * r;
-    const amort = fixedPayment != null ? fixedPayment - interest : fixedAmortization!;
-    const rawPayment = interest + amort;
-    scheduleBalance = Math.max(0, scheduleBalance - amort);
+  const historyMonths = new Set(d.balance_history.map((h) => h.month));
+  const projected: BalancePoint[] = d.projected_balance_schedule
+    .filter((s) => !historyMonths.has(s.month))
+    .map((s) => ({
+      date: `${s.month}-01`,
+      balance: s.principal_owed + s.interest_owed,
+      kind: "projected",
+    }));
 
-    const cappedPayment = Math.min(rawPayment, startBalance - paidSoFar);
-    if (cappedPayment <= 0.005) break;
-    const interestThisMonth = cappedPayment < rawPayment ? interest * (cappedPayment / rawPayment) : interest;
-    paidSoFar += cappedPayment;
-
-    let extraThisMonth = 0;
-    if (paidSoFar < startBalance - 0.005) {
-      const extra = extraBills.reduce((sum, b) => {
-        const info = {
-          cadence: b.cadence,
-          nextDueDate: b.next_due_date,
-          recurrenceStartDate: b.recurrence_start_date,
-          recurrenceEndDate: b.recurrence_end_date,
-        };
-        if (!billAppliesToMonth(info, targetMonth)) return sum;
-        return sum + monthlyEquivalentAmount({ cadence: b.cadence, expectedAmount: b.expected_amount }, undefined);
-      }, 0);
-      extraThisMonth = Math.min(extra, startBalance - paidSoFar);
-      paidSoFar += extraThisMonth;
-    }
-    steps.push({ balance: Math.max(0, startBalance - paidSoFar), interest: interestThisMonth });
-  }
-  return steps;
-}
-
-function debtBalanceSeries(
-  d: Debt,
-  payOffTx: DebtLinkedTransaction[],
-  today: string,
-  extraBills: Bill[] = []
-): BalancePoint[] {
-  const rate = d.interest_rate_monthly_percent;
-  const hasRate = rate != null && rate > 0 && d.principal > 0;
-
-  // Hasn't started yet — there's no "actual" portion at all, only whatever can
-  // be projected forward from the debt's own future start date: the loan's own
-  // schedule if it has one, else the planned-payment amortization loop.
-  if (d.start_date > today) {
-    if (d.status !== "active") return [];
-    const hasSchedule = hasRate && d.loan_type != null && d.target_payoff_date != null;
-    const r = hasRate ? rate! / 100 : 0;
-    const avg = hasSchedule ? null : plannedMonthlyPayment(d);
-    if (!hasSchedule && !(avg != null && avg > 0 && avg > d.principal * r)) return [];
-
-    const points: BalancePoint[] = [{ date: d.start_date, balance: d.principal, kind: "projected" }];
-    if (hasSchedule) {
-      let term = 0;
-      while (term < MAX_CHART_MONTHS && addMonthsIso(d.start_date, term + 1) <= d.target_payoff_date!) term++;
-      loanStepsWithExtras(d.principal, rate!, d.loan_type!, Math.max(1, term), d.start_date, extraBills).forEach(
-        (step, i) => points.push({ date: addMonthsIso(d.start_date, i + 1), balance: step.balance, kind: "projected" })
-      );
-    } else {
-      let balance = d.principal;
-      while (balance > 0 && points.length - 1 < MAX_CHART_MONTHS) {
-        balance = Math.max(0, balance * (1 + r) - avg!);
-        points.push({ date: addMonthsIso(d.start_date, points.length), balance, kind: "projected" });
-      }
-    }
-    return points;
+  // A debt that hasn't started yet has no history at all, and the schedule's
+  // first entry is already post-first-payment — without an explicit anchor
+  // at the full known principal, the chart would start partway paid down.
+  if (history.length === 0 && projected.length > 0) {
+    projected.unshift({ date: d.start_date, balance: d.principal, kind: "projected" });
   }
 
-  const payments = payOffTx.map((t) => ({ id: t.id, date: t.date, amount: Math.abs(t.amount) }));
-
-  let elapsed = 0;
-  while (elapsed < MAX_CHART_MONTHS && addMonthsIso(d.start_date, elapsed + 1) <= today) elapsed++;
-
-  // A debt marked paid off is settled, whatever its arithmetic remaining says.
-  const anchor = d.status === "paid_off" ? 0 : Math.max(0, d.remaining);
-  const points: BalancePoint[] = [];
-  for (let m = 0; m <= elapsed; m++) {
-    const date = addMonthsIso(d.start_date, m);
-    const balance = hasRate
-      ? Math.max(
-          0,
-          simulateAmortization(
-            d.principal,
-            rate!,
-            d.start_date,
-            payments.filter((p) => p.date <= date),
-            date
-          ).currentPayoffBalance
-        )
-      : Math.max(0, anchor + payments.filter((p) => p.date > date).reduce((sum, p) => sum + p.amount, 0));
-    points.push({ date, balance, kind: "actual" });
-  }
-
-  const anchorBalance = points[points.length - 1].balance;
-  if (d.status !== "active" || anchorBalance <= 0.005) return points;
-
-  const anchorDate = points[points.length - 1].date;
-  const hasSchedule = hasRate && d.loan_type != null && d.target_payoff_date != null;
-  let futureBalances: number[] = [];
-  if (hasSchedule) {
-    let term = 0;
-    while (term < MAX_CHART_MONTHS && addMonthsIso(anchorDate, term + 1) <= d.target_payoff_date!) term++;
-    futureBalances = loanStepsWithExtras(
-      anchorBalance,
-      rate!,
-      d.loan_type!,
-      Math.max(1, term),
-      anchorDate,
-      extraBills
-    ).map((step) => step.balance);
-  } else {
-    const avg = plannedMonthlyPayment(d) ?? recentAvgPayment(payOffTx);
-    const r = hasRate ? rate! / 100 : 0;
-    if (avg != null && avg > 0 && avg > anchorBalance * r) {
-      let balance = anchorBalance;
-      while (balance > 0 && futureBalances.length < MAX_CHART_MONTHS) {
-        balance = Math.max(0, balance * (1 + r) - avg);
-        futureBalances.push(balance);
-      }
-    }
-  }
-  futureBalances.forEach((balance, i) =>
-    points.push({ date: addMonthsIso(anchorDate, i + 1), balance, kind: "projected" })
-  );
-  return points;
+  return [...history, ...projected];
 }
 
 interface TrajectoryPoint {
@@ -1182,8 +1119,6 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
   const { t } = useTranslation("debts");
   const d = props.debt;
   const { payOffTx } = props;
-  const { data: bills } = useBills();
-  const extraBills = useMemo(() => (bills ?? []).filter((b) => b.debt_id === d.id), [bills, d.id]);
   // Only meaningful for something I owe. projected_balance_schedule's own
   // months are counted from the debt's own anchor (its start_date if that's
   // still in the future, otherwise today) — not from today — so for a
@@ -1223,7 +1158,7 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
     }
     if (isFuture && !hasSchedule && !hasPlannedPayment) return null;
 
-    const series = debtBalanceSeries(d, payOffTx, today, extraBills);
+    const series = debtBalanceSeries(d);
     if (series.length < 2) return null;
 
     const r = hasRate ? rate! / 100 : 0;
@@ -1265,21 +1200,27 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
         label,
         ifUnpaid: hasRate ? d.principal * (1 + r) ** i : null,
         actual: p.kind === "actual" ? p.balance : null,
-        projected: p.kind === "projected" || (hasProjection && i === lastActualIdx) ? p.balance : null,
+        projected:
+          p.kind === "projected" || (hasProjection && i === lastActualIdx) ? p.balance : null,
         cashBalance: cashBalanceByLabel.get(label) ?? null,
       };
     });
 
     // Hypothetical minus actual minus everything paid in = the compounding
     // dodged purely by keeping the balance low — not just the money put in.
+    // actualNow/totalPaid read straight off the debt's own server-computed
+    // fields (d.remaining is exactly currentPayoffBalance for a rate-bearing
+    // debt) rather than re-running simulateAmortization here; only
+    // ifUnpaidNow is a genuine "what if" with no backend equivalent to read.
     let avoided: { amount: number; ifUnpaidNow: number; actualNow: number } | null = null;
     if (hasRate && payOffTx.length > 0 && d.direction === "owed_by_me") {
-      const payments = payOffTx.map((t) => ({ id: t.id, date: t.date, amount: Math.abs(t.amount) }));
-      const sim = simulateAmortization(d.principal, rate!, d.start_date, payments, today);
-      const monthsNow = Math.max(0, (Date.parse(today) - Date.parse(d.start_date)) / (1000 * 60 * 60 * 24) / 30.44);
+      const monthsNow = Math.max(
+        0,
+        (Date.parse(today) - Date.parse(d.start_date)) / (1000 * 60 * 60 * 24) / 30.44
+      );
       const ifUnpaidNow = d.principal * (1 + r) ** monthsNow;
-      const actualNow = Math.max(0, sim.currentPayoffBalance);
-      const amount = ifUnpaidNow - actualNow - (sim.totalInterestPaid + sim.totalPrincipalPaid);
+      const actualNow = Math.max(0, d.remaining);
+      const amount = ifUnpaidNow - actualNow - d.total_paid;
       if (amount > 0.5) avoided = { amount, ifUnpaidNow, actualNow };
     }
 
@@ -1334,12 +1275,13 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
         hasRate && d.projected_remaining_interest != null
           ? {
               totalInterest: (d.interest_paid_so_far ?? 0) + d.projected_remaining_interest,
-              totalPaid: d.principal + (d.interest_paid_so_far ?? 0) + d.projected_remaining_interest,
+              totalPaid:
+                d.principal + (d.interest_paid_so_far ?? 0) + d.projected_remaining_interest,
               reachesPayoff: d.projected_finish_date != null,
             }
           : null,
     };
-  }, [d, payOffTx, extraBills, projections]);
+  }, [d, payOffTx, projections]);
 
   if (!chart) {
     if (d.status !== "active" || isFutureDebt(d)) return null;
@@ -1401,7 +1343,12 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
                 x={chart.canPayOffLabel}
                 stroke="var(--gold)"
                 strokeDasharray="4 4"
-                label={{ value: t("trajectoryChart.canPayOffHere"), position: "insideTopRight", fill: "var(--gold)", fontSize: 11 }}
+                label={{
+                  value: t("trajectoryChart.canPayOffHere"),
+                  position: "insideTopRight",
+                  fill: "var(--gold)",
+                  fontSize: 11,
+                }}
               />
             )}
             {chart.hasRate && (
@@ -1474,7 +1421,14 @@ function DebtTrajectoryChart(props: { debt: Debt; payOffTx: DebtLinkedTransactio
       </p>
       {chart.lifetimeTotals && (
         <div
-          style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--rule)" }}
+          style={{
+            display: "flex",
+            gap: 24,
+            flexWrap: "wrap",
+            marginTop: 10,
+            paddingTop: 10,
+            borderTop: "1px solid var(--rule)",
+          }}
         >
           <div>
             <div className="label muted" style={{ fontSize: 11 }}>
@@ -1534,33 +1488,13 @@ function DebtOverviewChart(props: { debts: Debt[] }) {
     )
   );
   const relevant = props.debts.filter((d) => !childIds.has(d.id) && d.start_date <= today);
-  const { data: bills } = useBills();
 
-  // Same query keys as useDebtTransactions, so this shares the cache with the
-  // per-debt detail view instead of refetching when a tile is opened.
-  const txQueries = useQueries({
-    queries: relevant.map((d) => ({
-      queryKey: ["debts", d.id, "transactions"],
-      queryFn: () => apiFetch<DebtLinkedTransaction[]>(`/api/debts/${d.id}/transactions`),
-    })),
-  });
-  const loaded = relevant.length > 0 && txQueries.every((q) => q.data !== undefined);
-  // useQueries returns a fresh array every render; this stamp only changes
-  // when a query actually delivers new data, so the memo below holds.
-  const txStamp = txQueries.map((q) => q.dataUpdatedAt).join("|");
-
+  // Each debt already carries its own balance_history/projected_balance_schedule
+  // (see debtBalanceSeries) — no per-debt transaction fetch needed here
+  // anymore now that the backend owns the balance computation.
   const chart = useMemo(() => {
-    if (!loaded) return null;
     const seriesByDebt = relevant
-      .map((d, i) => ({
-        debt: d,
-        series: debtBalanceSeries(
-          d,
-          (txQueries[i].data ?? []).filter((tx) => tx.role === "pay_off"),
-          today,
-          (bills ?? []).filter((b) => b.debt_id === d.id)
-        ),
-      }))
+      .map((d) => ({ debt: d, series: debtBalanceSeries(d) }))
       .filter((s) => s.series.length > 0);
     if (seriesByDebt.length === 0) return null;
 
@@ -1626,7 +1560,7 @@ function DebtOverviewChart(props: { debts: Debt[] }) {
       hasProjection,
       todayLabel: hasProjection ? points[lastActualIdx].label : null,
     };
-  }, [loaded, txStamp, props.debts, bills]);
+  }, [relevant, today]);
 
   if (!chart) return null;
 
@@ -1745,8 +1679,18 @@ function DebtBalanceScheduleChart(props: { debt: Debt }) {
             <XAxis dataKey="month" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
             <YAxis stroke="var(--text-muted)" tickFormatter={compactMoney} />
             <Tooltip content={<DebtBalanceScheduleTooltip />} />
-            <Bar dataKey="principal_owed" name={t("balanceScheduleChart.legendPrincipal")} stackId="owed" fill="var(--danger)" />
-            <Bar dataKey="interest_owed" name={t("balanceScheduleChart.legendInterest")} stackId="owed" fill="var(--gold)" />
+            <Bar
+              dataKey="principal_owed"
+              name={t("balanceScheduleChart.legendPrincipal")}
+              stackId="owed"
+              fill="var(--danger)"
+            />
+            <Bar
+              dataKey="interest_owed"
+              name={t("balanceScheduleChart.legendInterest")}
+              stackId="owed"
+              fill="var(--gold)"
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -1763,7 +1707,10 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
   // Loaded unconditionally (not just when expanded) so the interest rate
   // editor can compute a live preview as you type.
   const { data: linkedTx } = useDebtTransactions(props.debt.id);
-  const payOffTx = useMemo(() => (linkedTx ?? []).filter((tx) => tx.role === "pay_off"), [linkedTx]);
+  const payOffTx = useMemo(
+    () => (linkedTx ?? []).filter((tx) => tx.role === "pay_off"),
+    [linkedTx]
+  );
   const showInterestColumn = payOffTx.some((tx) => tx.interest != null && tx.interest > 0.005);
   const finishDate = props.debt.projected_finish_date;
   const {
@@ -1796,7 +1743,8 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
 
   const d = props.debt;
   const tone = d.direction === "owed_by_me" ? "negative" : "positive";
-  const directionLabel = d.direction === "owed_by_me" ? t("direction.owe") : t("direction.owedToMe");
+  const directionLabel =
+    d.direction === "owed_by_me" ? t("direction.owe") : t("direction.owedToMe");
 
   return (
     <div className="card">
@@ -1805,14 +1753,23 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
           {d.name}
           {d.counterparty && <span className="muted"> — {d.counterparty}</span>}
         </h3>
-        <span style={{ color: tone === "negative" ? "var(--danger)" : "var(--accent)", fontWeight: 600 }}>
+        <span
+          style={{
+            color: tone === "negative" ? "var(--danger)" : "var(--accent)",
+            fontWeight: 600,
+          }}
+        >
           {directionLabel}
         </span>
       </div>
 
       <div
         className="grid"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 16, marginTop: 12 }}
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+          gap: 16,
+          marginTop: 12,
+        }}
       >
         <StartDateEditor debt={d} />
         <PrincipalEditor debt={d} />
@@ -1857,7 +1814,7 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
 
       <PaymentPlanSection debt={d} />
 
-      <PayoffProjection debt={d} payOffTx={payOffTx} />
+      <PayoffProjection debt={d} />
 
       <DebtTrajectoryChart debt={d} payOffTx={payOffTx} />
 
@@ -1889,8 +1846,13 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
       >
         <MatchingRuleEditor debt={d} />
         <LinkedDebtsEditor debt={d} allDebts={props.allDebts} />
-        <button className="link-button" onClick={() => setExpanded((e) => !e)} style={{ alignSelf: "start" }}>
-          {expanded ? <FiChevronDown /> : <FiChevronRight />} {t("card.linkedTransactions", { count: d.transaction_count })}
+        <button
+          className="link-button"
+          onClick={() => setExpanded((e) => !e)}
+          style={{ alignSelf: "start" }}
+        >
+          {expanded ? <FiChevronDown /> : <FiChevronRight />}{" "}
+          {t("card.linkedTransactions", { count: d.transaction_count })}
         </button>
       </div>
 
@@ -1930,13 +1892,43 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
             <table style={{ marginTop: 12 }}>
               <thead>
                 <tr>
-                  <SortableTh label={t("common:table.date")} sortKey="date" activeKey={linkedSortKey} direction={linkedSortDirection} onSort={toggleLinkedSort} />
-                  <SortableTh label={t("common:table.description")} sortKey="description" activeKey={linkedSortKey} direction={linkedSortDirection} onSort={toggleLinkedSort} />
-                  <SortableTh label={t("common:table.amount")} sortKey="amount" activeKey={linkedSortKey} direction={linkedSortDirection} onSort={toggleLinkedSort} />
+                  <SortableTh
+                    label={t("common:table.date")}
+                    sortKey="date"
+                    activeKey={linkedSortKey}
+                    direction={linkedSortDirection}
+                    onSort={toggleLinkedSort}
+                  />
+                  <SortableTh
+                    label={t("common:table.description")}
+                    sortKey="description"
+                    activeKey={linkedSortKey}
+                    direction={linkedSortDirection}
+                    onSort={toggleLinkedSort}
+                  />
+                  <SortableTh
+                    label={t("common:table.amount")}
+                    sortKey="amount"
+                    activeKey={linkedSortKey}
+                    direction={linkedSortDirection}
+                    onSort={toggleLinkedSort}
+                  />
                   {showInterestColumn && (
-                    <SortableTh label={t("card.interestColumn")} sortKey="interest" activeKey={linkedSortKey} direction={linkedSortDirection} onSort={toggleLinkedSort} />
+                    <SortableTh
+                      label={t("card.interestColumn")}
+                      sortKey="interest"
+                      activeKey={linkedSortKey}
+                      direction={linkedSortDirection}
+                      onSort={toggleLinkedSort}
+                    />
                   )}
-                  <SortableTh label={t("card.roleColumn")} sortKey="role" activeKey={linkedSortKey} direction={linkedSortDirection} onSort={toggleLinkedSort} />
+                  <SortableTh
+                    label={t("card.roleColumn")}
+                    sortKey="role"
+                    activeKey={linkedSortKey}
+                    direction={linkedSortDirection}
+                    onSort={toggleLinkedSort}
+                  />
                   <th />
                 </tr>
               </thead>
@@ -1948,7 +1940,9 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
                     <td className="money">{formatMoney(tx.amount, tx.currency_code)}</td>
                     {showInterestColumn && (
                       <td className="money">
-                        {tx.interest != null && tx.interest > 0.005 ? formatMoney(tx.interest) : "—"}
+                        {tx.interest != null && tx.interest > 0.005
+                          ? formatMoney(tx.interest)
+                          : "—"}
                       </td>
                     )}
                     <td>{t(`roleShort.${tx.role}`)}</td>
@@ -2037,7 +2031,11 @@ export function DebtsPage() {
   if (selectedDebt) {
     return (
       <div className="grid" style={{ gap: 16 }}>
-        <button className="secondary" onClick={() => setSelectedDebtId(null)} style={{ alignSelf: "start" }}>
+        <button
+          className="secondary"
+          onClick={() => setSelectedDebtId(null)}
+          style={{ alignSelf: "start" }}
+        >
           <FiArrowLeft /> {t("page.backToAll")}
         </button>
         <DebtCard debt={selectedDebt} allDebts={debts ?? []} />
@@ -2052,7 +2050,10 @@ export function DebtsPage() {
       {active.length > 0 && (
         <div className="grid" style={{ gap: 16 }}>
           <h2>{t("page.active")}</h2>
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}
+          >
             {active.map((d) => (
               <DebtTile key={d.id} debt={d} onSelect={() => setSelectedDebtId(d.id)} />
             ))}
@@ -2066,7 +2067,10 @@ export function DebtsPage() {
           <p className="muted" style={{ margin: 0 }}>
             {t("page.futureNote")}
           </p>
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}
+          >
             {future.map((d) => (
               <DebtTile key={d.id} debt={d} onSelect={() => setSelectedDebtId(d.id)} />
             ))}
@@ -2080,104 +2084,126 @@ export function DebtsPage() {
         </button>
         {addOpen && (
           <div style={{ marginTop: 12 }}>
-        <p className="muted">
-          {t("page.addDebtDescription")}
-        </p>
-        <form onSubmit={submit} className="grid" style={{ gridTemplateColumns: "repeat(4, auto)", alignItems: "end", gap: 16 }}>
-          <label>
-            {t("page.name")}
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label>
-            {t("page.direction")}
-            <select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)}>
-              {directionOptions(t).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t("page.counterparty")}
-            <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} />
-          </label>
-          <label>
-            {t("page.principalMode")}
-            <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
-              <option value="fixed">{t("page.modeFixed")}</option>
-              <option value="split">{t("page.modeSplit")}</option>
-            </select>
-          </label>
-          {mode === "fixed" ? (
-            <label>
-              {t("page.principalAmount")}
-              <input
-                type="number"
-                step="0.01"
-                value={principalAmount}
-                onChange={(e) => setPrincipalAmount(e.target.value)}
+            <p className="muted">{t("page.addDebtDescription")}</p>
+            <form
+              onSubmit={submit}
+              className="grid"
+              style={{ gridTemplateColumns: "repeat(4, auto)", alignItems: "end", gap: 16 }}
+            >
+              <label>
+                {t("page.name")}
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                {t("page.direction")}
+                <select
+                  value={direction}
+                  onChange={(e) => setDirection(e.target.value as typeof direction)}
+                >
+                  {directionOptions(t).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("page.counterparty")}
+                <input
+                  type="text"
+                  value={counterparty}
+                  onChange={(e) => setCounterparty(e.target.value)}
+                />
+              </label>
+              <label>
+                {t("page.principalMode")}
+                <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+                  <option value="fixed">{t("page.modeFixed")}</option>
+                  <option value="split">{t("page.modeSplit")}</option>
+                </select>
+              </label>
+              {mode === "fixed" ? (
+                <label>
+                  {t("page.principalAmount")}
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={principalAmount}
+                    onChange={(e) => setPrincipalAmount(e.target.value)}
+                  />
+                </label>
+              ) : (
+                <label>
+                  {t("page.splitPercentage")}
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="100"
+                    value={splitPercentage}
+                    onChange={(e) => setSplitPercentage(e.target.value)}
+                  />
+                </label>
+              )}
+              <label>
+                {t("page.expectedTotal")}
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder={t("page.optional")}
+                  value={expectedTotalAmount}
+                  onChange={(e) => setExpectedTotalAmount(e.target.value)}
+                />
+              </label>
+              <label>
+                {t("page.startDate")}
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                {t("page.targetPayoffDate")}
+                <input
+                  type="date"
+                  value={targetPayoffDate}
+                  onChange={(e) => setTargetPayoffDate(e.target.value)}
+                />
+              </label>
+              <label>
+                {t("page.loanType")}
+                <select
+                  value={loanType}
+                  onChange={(e) => setLoanType(e.target.value as typeof loanType)}
+                >
+                  {loanTypeOptions(t).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit">
+                <FiPlus /> {t("page.submit")}
+              </button>
+            </form>
+            <label style={{ display: "block", marginTop: 16 }}>
+              {t("page.matchingRuleLabel")}
+              <textarea
+                value={matchingRule}
+                onChange={(e) => setMatchingRule(e.target.value)}
+                placeholder={t("matchingRule.placeholder")}
+                rows={2}
+                style={{ width: "100%", resize: "vertical" }}
               />
             </label>
-          ) : (
-            <label>
-              {t("page.splitPercentage")}
-              <input
-                type="number"
-                step="1"
-                min="1"
-                max="100"
-                value={splitPercentage}
-                onChange={(e) => setSplitPercentage(e.target.value)}
-              />
-            </label>
-          )}
-          <label>
-            {t("page.expectedTotal")}
-            <input
-              type="number"
-              step="0.01"
-              placeholder={t("page.optional")}
-              value={expectedTotalAmount}
-              onChange={(e) => setExpectedTotalAmount(e.target.value)}
-            />
-          </label>
-          <label>
-            {t("page.startDate")}
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-          </label>
-          <label>
-            {t("page.targetPayoffDate")}
-            <input
-              type="date"
-              value={targetPayoffDate}
-              onChange={(e) => setTargetPayoffDate(e.target.value)}
-            />
-          </label>
-          <label>
-            {t("page.loanType")}
-            <select value={loanType} onChange={(e) => setLoanType(e.target.value as typeof loanType)}>
-              {loanTypeOptions(t).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit">
-            <FiPlus /> {t("page.submit")}
-          </button>
-        </form>
-        <label style={{ display: "block", marginTop: 16 }}>
-          {t("page.matchingRuleLabel")}
-          <textarea
-            value={matchingRule}
-            onChange={(e) => setMatchingRule(e.target.value)}
-            placeholder={t("matchingRule.placeholder")}
-            rows={2}
-            style={{ width: "100%", resize: "vertical" }}
-          />
-        </label>
           </div>
         )}
       </div>
@@ -2185,7 +2211,10 @@ export function DebtsPage() {
       {paidOff.length > 0 && (
         <div className="grid" style={{ gap: 16 }}>
           <h2>{t("page.paidOffHeading")}</h2>
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}
+          >
             {paidOff.map((d) => (
               <DebtTile key={d.id} debt={d} onSelect={() => setSelectedDebtId(d.id)} />
             ))}

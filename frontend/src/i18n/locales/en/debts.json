@@ -66,15 +66,11 @@
   },
   "payoffProjection": {
     "label": "Projected payoff",
-    "shortfall": "At {{basis}} of {{amount}}/mo, this isn't even covering the interest — the balance will keep growing, not shrink.",
-    "basisPlanned": "the planned payment",
-    "basisAverage": "the recent average payment",
+    "shortfall": "At {{amount}}/mo, this isn't even covering the interest — the balance will keep growing, not shrink.",
     "months_one": "{{count}} month",
     "months_other": "{{count}} months",
     "approxDate": "(~{{date}})",
-    "basedOn": "Based on {{basis}} of {{amount}}/mo{{rate}}.",
-    "basedOnPlanned": "the planned payment from the linked bill",
-    "basedOnAverage": "your recent average payment",
+    "basedOn": "Based on {{amount}}/mo{{rate}}.",
     "atRate": " at {{rate}}% monthly interest"
   },
   "cadence": {
