@@ -11,7 +11,10 @@
     "cardSpendGoalUnset": "Not set",
     "syncNow": "Sync now",
     "edit": "Edit",
-    "remove": "Remove"
+    "remove": "Remove",
+    "testConnection": "Test",
+    "connectionOk": "Working",
+    "connectionFailed": "Failed"
   },
   "empty": "No one set up yet — add the first person below.",
   "addForm": {
@@ -31,6 +34,10 @@
     "pluggyItemIdsPlaceholder": "Comma-separated Item IDs for this person's connected bank(s)",
     "unchangedPlaceholder": "Leave blank to keep unchanged",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "testConnection": "Test connection",
+    "testingConnection": "Testing…",
+    "connectionOk": "Connected",
+    "connectionFailed": "Failed: {{error}}"
   }
 }

@@ -11,7 +11,10 @@
     "cardSpendGoalUnset": "Não definida",
     "syncNow": "Sincronizar agora",
     "edit": "Editar",
-    "remove": "Remover"
+    "remove": "Remover",
+    "testConnection": "Testar",
+    "connectionOk": "Funcionando",
+    "connectionFailed": "Falhou"
   },
   "empty": "Ninguém cadastrado ainda — adicione a primeira pessoa abaixo.",
   "addForm": {
@@ -31,6 +34,10 @@
     "pluggyItemIdsPlaceholder": "Item IDs separados por vírgula dos bancos conectados desta pessoa",
     "unchangedPlaceholder": "Deixe em branco para manter",
     "save": "Salvar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "testConnection": "Testar conexão",
+    "testingConnection": "Testando…",
+    "connectionOk": "Conectado",
+    "connectionFailed": "Falhou: {{error}}"
   }
 }

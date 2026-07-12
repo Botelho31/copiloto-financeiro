@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 import type { User } from "shared";
 import { db } from "../db";
+import { testPluggyCredentials } from "../pluggy/client";
 
 interface UserRow {
   id: number;
@@ -65,6 +66,41 @@ export function createUser(input: NewUserInput): User[] {
     input.pluggyItemIds ?? null
   );
   return listUsers();
+}
+
+export const TestPluggyConnectionBody = z.union([
+  z.object({ userId: z.number().int() }),
+  z.object({ pluggyClientId: z.string().min(1), pluggyClientSecret: z.string().min(1) }),
+]);
+export type TestPluggyConnectionInput = z.infer<typeof TestPluggyConnectionBody>;
+
+// Two shapes: a saved user (read their stored credentials, for the
+// "already added — is this still working" check) or a raw id/secret pair
+// (for the "test before you save" button on the add-person form, before
+// anything is persisted).
+export async function testPluggyConnection(
+  input: TestPluggyConnectionInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let clientId: string | null;
+  let clientSecret: string | null;
+  if ("userId" in input) {
+    const row = db
+      .query("SELECT pluggy_client_id, pluggy_client_secret FROM users WHERE id = ?")
+      .get(input.userId) as {
+      pluggy_client_id: string | null;
+      pluggy_client_secret: string | null;
+    } | null;
+    if (!row) return { ok: false, error: `User ${input.userId} not found` };
+    clientId = row.pluggy_client_id;
+    clientSecret = row.pluggy_client_secret;
+  } else {
+    clientId = input.pluggyClientId;
+    clientSecret = input.pluggyClientSecret;
+  }
+  if (!clientId || !clientSecret) {
+    return { ok: false, error: "No Pluggy credentials set" };
+  }
+  return testPluggyCredentials({ clientId, clientSecret });
 }
 
 export const UserUpdateBody = z.object({
@@ -165,6 +201,9 @@ export function deleteUser(id: number): User[] {
 
 export const usersRoutes = new Elysia({ prefix: "/api/users" })
   .get("/", () => listUsers())
+  .post("/test-pluggy", ({ body }) => testPluggyConnection(body), {
+    body: TestPluggyConnectionBody,
+  })
   .post(
     "/",
     ({ body, set }) => {

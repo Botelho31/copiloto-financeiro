@@ -95,6 +95,23 @@ async function getApiKey(credentials: PluggyCredentials): Promise<string> {
   return data.apiKey;
 }
 
+// A real /auth call is the cheapest way to know if a clientId/clientSecret
+// pair actually works — used by the "test connection" button on the Config
+// page, both for a not-yet-saved pair (before creating a person) and for an
+// already-saved one (a quick "is this still valid" check, since Pluggy
+// secrets can be rotated on their end without this app knowing).
+export async function testPluggyCredentials(
+  credentials: PluggyCredentials
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    apiKeyCache.delete(credentials.clientId); // a stale cached key would mask a since-revoked secret
+    await getApiKey(credentials);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 // Takes a path that already includes its query string (used directly for
 // following Pluggy's pre-encoded `next` pagination fragment as-is).
 async function pluggyGet<T>(pathWithQuery: string, credentials: PluggyCredentials): Promise<T> {

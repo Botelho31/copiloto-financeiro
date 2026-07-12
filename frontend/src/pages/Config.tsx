@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { FiCheck, FiEdit2, FiPlus, FiRefreshCw, FiTrash2 } from "react-icons/fi";
 import { CardSpendGoalField } from "../components/CardSpendGoalField";
 import { ColorSwatch } from "../components/ColorSwatch";
+import { PluggyConnectionCheck } from "../components/PluggyConnectionCheck";
 import { UserForm, type UserFormValues } from "../components/UserForm";
 import { useTriggerSync } from "../hooks/useSync";
 import {
@@ -91,13 +92,19 @@ export function ConfigPage() {
                     </span>
                   </td>
                   <td>
-                    {u.hasPluggyCredentials ? (
-                      <span className="badge">
-                        {t("table.pluggyConnected", { count: u.pluggyItemIds.length })}
-                      </span>
-                    ) : (
-                      <span className="muted">{t("table.pluggyNotConnected")}</span>
-                    )}
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      {u.hasPluggyCredentials ? (
+                        <span className="badge">
+                          {t("table.pluggyConnected", { count: u.pluggyItemIds.length })}
+                        </span>
+                      ) : (
+                        <span className="muted">{t("table.pluggyNotConnected")}</span>
+                      )}
+                      <PluggyConnectionCheck
+                        userId={u.id}
+                        hasCredentials={u.hasPluggyCredentials}
+                      />
+                    </span>
                   </td>
                   <td>
                     <CardSpendGoalField userId={u.id} />

@@ -15,6 +15,8 @@ export interface User {
   pluggyItemIds: string[];
 }
 
+export type PluggyConnectionTestResult = { ok: true } | { ok: false; error: string };
+
 export interface Account {
   id: string;
   name: string;

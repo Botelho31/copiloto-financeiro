@@ -1,8 +1,9 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FiX } from "react-icons/fi";
+import { FiCheck, FiX } from "react-icons/fi";
 import type { User } from "shared";
 import { DEFAULT_PERSON_COLORS } from "../config";
+import { useTestPluggyConnection } from "../hooks/useUsers";
 
 export interface UserFormValues {
   name: string;
@@ -26,6 +27,27 @@ export function UserForm(props: {
   const [pluggyClientId, setPluggyClientId] = useState("");
   const [pluggyClientSecret, setPluggyClientSecret] = useState("");
   const [pluggyItemIds, setPluggyItemIds] = useState(u?.pluggyItemIds.join(", ") ?? "");
+  const testConnection = useTestPluggyConnection();
+
+  // A freshly-typed pair (about to be saved) takes priority over testing
+  // what's already stored — matches the "test before you save" point of
+  // this button. Falls back to the saved credentials only when the fields
+  // are left blank (which means "keep existing" on an edit).
+  const canTestTyped = pluggyClientId.trim() !== "" && pluggyClientSecret.trim() !== "";
+  const canTestSaved = !canTestTyped && u?.hasPluggyCredentials;
+  const canTest = canTestTyped || canTestSaved;
+
+  function runTest() {
+    testConnection.reset();
+    if (canTestTyped) {
+      testConnection.mutate({
+        pluggyClientId: pluggyClientId.trim(),
+        pluggyClientSecret: pluggyClientSecret.trim(),
+      });
+    } else if (u) {
+      testConnection.mutate({ userId: u.id });
+    }
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -57,7 +79,10 @@ export function UserForm(props: {
           <input
             type="text"
             value={pluggyClientId}
-            onChange={(e) => setPluggyClientId(e.target.value)}
+            onChange={(e) => {
+              setPluggyClientId(e.target.value);
+              testConnection.reset();
+            }}
             placeholder={u?.hasPluggyCredentials ? t("form.unchangedPlaceholder") : ""}
           />
         </label>
@@ -66,10 +91,40 @@ export function UserForm(props: {
           <input
             type="password"
             value={pluggyClientSecret}
-            onChange={(e) => setPluggyClientSecret(e.target.value)}
+            onChange={(e) => {
+              setPluggyClientSecret(e.target.value);
+              testConnection.reset();
+            }}
             placeholder={u?.hasPluggyCredentials ? t("form.unchangedPlaceholder") : ""}
           />
         </label>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!canTest || testConnection.isPending}
+          onClick={runTest}
+        >
+          {testConnection.isPending ? t("form.testingConnection") : t("form.testConnection")}
+        </button>
+        {testConnection.data &&
+          (testConnection.data.ok ? (
+            <span
+              style={{
+                color: "var(--accent)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <FiCheck /> {t("form.connectionOk")}
+            </span>
+          ) : (
+            <span className="shortfall">
+              {t("form.connectionFailed", { error: testConnection.data.error })}
+            </span>
+          ))}
       </div>
       <label>
         {t("form.pluggyItemIds")}

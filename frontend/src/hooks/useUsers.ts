@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { User } from "shared";
+import type { PluggyConnectionTestResult, User } from "shared";
 import { apiFetch } from "../lib/api";
 import { invalidateKeys } from "../lib/queryInvalidation";
 
@@ -61,5 +61,20 @@ export function useDeleteUser() {
   return useMutation({
     mutationFn: (id: number) => apiFetch<User[]>(`/api/users/${id}`, { method: "DELETE" }),
     onSuccess: () => invalidatePersonScoped(qc),
+  });
+}
+
+// Either { userId } (test an already-saved person's stored credentials) or
+// { pluggyClientId, pluggyClientSecret } (test a not-yet-saved pair, e.g.
+// from the add-person form before submitting).
+export function useTestPluggyConnection() {
+  return useMutation({
+    mutationFn: (
+      input: { userId: number } | { pluggyClientId: string; pluggyClientSecret: string }
+    ) =>
+      apiFetch<PluggyConnectionTestResult>("/api/users/test-pluggy", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
   });
 }
