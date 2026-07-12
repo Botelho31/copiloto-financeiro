@@ -4,13 +4,13 @@ export function LoginPage(props: { error?: string }) {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Log in · Budget Tracker</title>
+        <title>Log in · Copiloto Financeiro</title>
         <link rel="stylesheet" href="/public/css/style.css" />
       </head>
       <body>
         <div class="auth-page">
           <form method="post" action="/login" class="auth-card">
-            <h1>Budget Tracker</h1>
+            <h1>Copiloto Financeiro</h1>
             {props.error && (
               <p class="error" safe>
                 {props.error}

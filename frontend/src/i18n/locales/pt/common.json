@@ -1,5 +1,5 @@
 {
-  "brand": "Controle Financeiro",
+  "brand": "Copiloto Financeiro",
   "nav": {
     "dashboard": "Painel",
     "transactions": "Transações",
@@ -33,6 +33,11 @@
     "total": "Total",
     "category": "Categoria",
     "tag": "Etiqueta"
+  },
+  "notifications": {
+    "title": "Notificações",
+    "empty": "Nenhuma notificação ainda.",
+    "markRead": "Marcar como lida"
   },
   "noTransactionsForFilters": "Nenhuma transação para agrupar com os filtros selecionados."
 }

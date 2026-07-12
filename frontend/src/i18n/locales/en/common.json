@@ -1,5 +1,5 @@
 {
-  "brand": "Budget Tracker",
+  "brand": "Copiloto Financeiro",
   "nav": {
     "dashboard": "Dashboard",
     "transactions": "Transactions",
@@ -33,6 +33,11 @@
     "total": "Total",
     "category": "Category",
     "tag": "Tag"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet.",
+    "markRead": "Mark as read"
   },
   "noTransactionsForFilters": "No transactions to group for the selected filters."
 }

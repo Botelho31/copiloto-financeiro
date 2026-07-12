@@ -1,10 +1,12 @@
-# Budget Tracker
+# Copiloto Financeiro
 
-Self-hosted personal budget tracker. Pulls bank transaction history daily from
-[Pluggy](https://docs.pluggy.ai/), stores it in SQLite, and answers: how much am I
-spending, will I be able to meet upcoming costs, and if not, what do I need to adjust.
-Supports a whole household — each person keeps their own bank connection and data, and
-debts can be explicitly shared between people.
+🇧🇷 [Leia em português](README.pt-BR.md)
+
+Self-hosted personal finance copilot, built for Brazil. Pulls bank transaction history
+daily from [Pluggy](https://docs.pluggy.ai/) (Open Finance Brasil), stores it in SQLite,
+and answers: how much am I spending, will I be able to meet upcoming costs, and if not,
+what do I need to adjust. Supports a whole household — each person keeps their own bank
+connection and data, and debts can be explicitly shared between people.
 
 A Bun-workspace monorepo: `backend/` is the Elysia server (API + auth + cron sync +
 migrations), `frontend/` is a Vite + React SPA, and `shared/` holds the TypeScript types
@@ -14,36 +16,47 @@ Read `CONTRIBUTING.md` first.
 
 ## Philosophy
 
-An open-source, fully local budget organizer — self-hosted end to end, your data never
-leaves your own server except to talk to Pluggy for the bank sync itself. Built around
-[Open Finance Brasil](https://www.bcb.gov.br/estabilidadefinanceira/openfinance) via
-Pluggy, so it's 100% functional with Brazilian banks out of the box, not a generic tool
-retrofitted for one region. Meant to be forked and adapted, not just deployed — the
-household model, categories, and rules are all yours to reshape for how your own
-finances actually work. An MCP server (`backend/src/mcp-server.ts`) is a first-class way
-to use the app, not an afterthought bolted onto the REST API — the same domain
-operations available over HTTP are available to Claude (or any MCP client), so "reconcile
-this month's debts" or "add category rules for these vendors" can be a conversation
-instead of a form.
+Built for a specific person: a Brazilian developer who already works with AI agents
+every day and wants to run their own (or their family's) finances the same way —
+spreadsheets stopped scaling, and a SaaS budgeting app you can't change to fit how your
+own money actually works isn't the answer either.
+
+**Built AI-agent-first, for Brazilians.** Every domain operation this app has —
+categorizing a transaction, reconciling a debt, checking next month's projection, adding
+a category rule — exists as an MCP tool (`backend/src/mcp-server.ts`) before it exists as
+a REST route with a form on top. Claude is the primary client this is built and tested
+against today, but the tools speak plain MCP, so any agent that can hold an MCP
+connection can drive the app the same way. The web UI isn't a second-class citizen —
+it's the same operations, the same backend functions, just reached by clicking instead
+of asking. And it's built on [Open Finance Brasil](https://www.bcb.gov.br/estabilidadefinanceira/openfinance)
+via Pluggy from day one, not a generic budgeting tool with a Brazilian bank integration
+bolted on — that's the whole foundation, not a feature.
 
 A few concrete principles that follow from that:
 
+- **Don't like what it's showing? Change it.** This ships with only the basics of
+  personal finance — accounts, categories, bills, debts, a cash-flow projection — and
+  deliberately isn't opinionated beyond that. It's not trying to anticipate every
+  household's workflow with a settings screen for each one (see the notification rules
+  above: env var + a function you edit, not a rules-builder UI). If something doesn't
+  match how your own money works, the expectation is you fork it and change the code,
+  not file a feature request and wait.
 - **The backend is the source of truth for every number.** Anything that looks like a
   calculation — a debt payoff date, a category breakdown, a net-worth figure — is
-  computed once, on the server, and shipped to the frontend as a finished value. The
-  frontend renders; it doesn't re-derive. This was violated a few times early on (see
-  `backend/API-ARCHITECTURE.md`'s fix log) and every time it caused the UI to quietly
-  disagree with itself across pages — and it's what keeps the MCP tools and the REST API
-  from ever disagreeing about what a number means, since they call the exact same
-  functions.
+  computed once, on the server, and shipped to the frontend (and to an agent, via MCP)
+  as a finished value. Neither one re-derives it. This was violated a few times early on
+  (see `backend/API-ARCHITECTURE.md`'s fix log) and every time it caused the UI to
+  quietly disagree with itself across pages — and it's exactly what keeps the MCP tools
+  and the REST API from ever disagreeing about what a number means, since they call the
+  exact same functions.
 - **Real data over fixtures, when it matters.** Pluggy's pagination and balance-sign
   quirks only ever surfaced when testing against a real bank connection — a hand-rolled
   fixture would have happily hidden the same bug. Automated tests still run against a
   real (if throwaway) SQLite database rather than a mocked ORM, for the same reason.
-- **Additive over rewritten.** New features (household member profiles, shared debts)
-  were built as extensions of the existing single-person model rather than a redesign —
-  a shared debt is still one row, now with an optional pointer to who it's shared with,
-  not a new subsystem.
+- **Additive over rewritten.** New features (household member profiles, shared debts,
+  notification rules) were built as extensions of the existing model rather than a
+  redesign — a shared debt is still one row, now with an optional pointer to who it's
+  shared with, not a new subsystem.
 - **No more layers than the problem needs.** The backend is routes + services, not
   routes + services + repositories — a third layer was considered and dropped because
   nothing in this codebase needed the extra indirection. Add structure when duplication
@@ -51,8 +64,9 @@ A few concrete principles that follow from that:
 - **Sized to be forked, not just used.** No feature flags, no multi-tenant auth, no
   premature abstraction for hypothetical future users of _this_ deployment — but the
   domain logic stays behind clean route/service boundaries specifically so someone
-  running their own fork can change categorization rules, add a new resource, or wire up
-  a new MCP tool without fighting the architecture to do it.
+  running their own fork can change categorization rules, add a new resource, wire up a
+  new MCP tool, or add a new notification provider without fighting the architecture to
+  do it.
 
 ## Setup
 
@@ -71,6 +85,10 @@ then paste in here per person.
    - `CRON_SCHEDULE` (default `0 6 * * *`) — when the daily sync runs.
    - `MIN_BUFFER` (default `0`) — balance floor below which a projected month is
      flagged as a shortfall.
+   - `LARGE_TRANSACTION_THRESHOLD` (default `500`) — notification rule: flag any newly
+     synced transaction at or above this amount (BRL).
+   - `PUSHOVER_APP_TOKEN` / `SMTP_HOST` + friends — only needed if you want push
+     notifications; see "Notifications" below.
    - `PORT` (default `3000`) / `DB_PATH` (default `./data/budget.sqlite`).
 2. Install dependencies (single lockfile, all three workspaces): `bun install`
 3. Run the dev servers: `bun run dev` runs backend + frontend together in one terminal
@@ -82,6 +100,24 @@ then paste in here per person.
    single-admin (one household, no signup). Once you're in, add each household member
    from `/config` — name, color, and their own Pluggy Client ID/Secret/Item IDs — and
    roll everyone up in the `/household` view.
+
+## Notifications
+
+After every sync, a small set of rules (`backend/src/services/notifications/rules.ts`)
+checks what changed — a transaction over `LARGE_TRANSACTION_THRESHOLD`, a projected
+shortfall next month — and, the first time each one fires, creates a notification and
+delivers it through whichever channels you've enabled for that person from `/config`:
+
+- **Pushover** — set `PUSHOVER_APP_TOKEN` (one app-level token for the whole
+  deployment, from [pushover.net](https://pushover.net)), then each person adds their
+  own Pushover user key from `/config`.
+- **Email** — set `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM` (one relay
+  for the whole deployment), then each person adds their own destination address.
+
+Both are tested from the same `/config` panel before you rely on them. Adding a new
+provider or rule is a code change (see the doc comments in
+`backend/src/services/notifications/`), not a UI-configurable system — this is meant to
+be forked and adjusted, not built as a general-purpose rules engine nobody needed yet.
 
 ## Development
 
@@ -105,8 +141,8 @@ docker compose up -d --build
 This builds the image, runs migrations automatically on boot, and persists the SQLite
 database at `./data/budget.sqlite` via a bind-mounted volume. On CasaOS, point the
 compose app / custom-install feature at this `docker-compose.yml`, and mount the volume
-under `/DATA/AppData/budget-tracker` per CasaOS convention (edit the `volumes:` path in
-`docker-compose.yml` accordingly).
+under `/DATA/AppData/copiloto-financeiro` per CasaOS convention (edit the `volumes:`
+path in `docker-compose.yml` accordingly).
 
 The container exposes port `3000` internally, mapped to `8080` on the host by default —
 adjust in `docker-compose.yml` if that conflicts with something else on your CasaOS box.
@@ -119,7 +155,7 @@ reached from your home server over WireGuard). It only needs a login (built in) 
 bind to a port Caddy can reach. Example snippet for your existing Caddyfile:
 
 ```
-budget.example.com {
+copiloto.example.com {
     reverse_proxy <wireguard-ip-of-this-box>:8080
 }
 ```

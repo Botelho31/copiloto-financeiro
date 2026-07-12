@@ -1,7 +1,7 @@
 services:
-  budget-tracker:
+  copiloto-financeiro:
     build: .
-    container_name: budget-tracker
+    container_name: copiloto-financeiro
     restart: unless-stopped
     ports:
       - "8080:3000"

@@ -14,7 +14,7 @@ A Bun workspace with three packages sharing a single lockfile.
 
 ```mermaid
 flowchart LR
-    subgraph repo["budget-tracker (bun workspaces)"]
+    subgraph repo["copiloto-financeiro (bun workspaces)"]
         shared["shared/<br>wire-format types +<br>amortization / bill-cadence math<br>(imported by both, zero deps)"]
         backend["backend/<br>Elysia server<br>API + auth + cron + migrations + MCP tool server"]
         frontend["frontend/<br>Vite + React SPA"]
