@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Transaction } from "shared";
+import type { PaginatedTransactions, Transaction } from "shared";
 import { apiFetch } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
 import { invalidateKeys } from "../lib/queryInvalidation";
@@ -24,12 +24,35 @@ function toQueryString(filters: TransactionFilters, userId: number | null): stri
   return qs ? `?${qs}` : "";
 }
 
-export function useTransactions(filters: TransactionFilters = {}) {
+export function useTransactions(filters: TransactionFilters = {}, opts?: { enabled?: boolean }) {
   const { activeUserId } = usePersonScope();
   return useQuery({
     queryKey: ["transactions", activeUserId, filters],
     queryFn: () =>
       apiFetch<Transaction[]>(`/api/transactions${toQueryString(filters, activeUserId)}`),
+    enabled: opts?.enabled,
+  });
+}
+
+// For a raw browse-everything table only — the one place that doesn't need
+// every row of the period in memory at once to be correct (unlike a
+// cash-flow total or a grouped-by-description count, which need the whole
+// period). See DEFAULT_TRANSACTIONS_PAGE_SIZE in config.ts for the page size.
+export function usePaginatedTransactions(
+  filters: TransactionFilters,
+  page: number,
+  pageSize: number
+) {
+  const { activeUserId } = usePersonScope();
+  return useQuery({
+    queryKey: ["transactions", activeUserId, filters, "page", page, pageSize],
+    queryFn: () => {
+      const qs = toQueryString(filters, activeUserId);
+      const pageParams = `page=${page}&pageSize=${pageSize}`;
+      return apiFetch<PaginatedTransactions>(
+        `/api/transactions${qs}${qs ? "&" : "?"}${pageParams}`
+      );
+    },
   });
 }
 

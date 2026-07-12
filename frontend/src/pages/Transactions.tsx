@@ -16,12 +16,14 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useSortableTable } from "../hooks/useSortableTable";
 import {
   useEarliestTransactionDate,
+  usePaginatedTransactions,
   useSearchTransactions,
   useTransactions,
   useUpdateTransactionCategory,
 } from "../hooks/useTransactions";
 import { formatDate, formatMoney } from "../lib/format";
 import { parseIsoDate, periodFor, periodToRange, type Period } from "../lib/period";
+import { TRANSACTIONS_PAGE_SIZE } from "../config";
 
 export function TransactionsPage() {
   const { t } = useTranslation(["transactions", "common"]);
@@ -29,13 +31,41 @@ export function TransactionsPage() {
   const [categoryId, setCategoryId] = useState<number | undefined>();
   const [accountId, setAccountId] = useState<string | undefined>();
   const [grouped, setGrouped] = useState(false);
+  const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const searchQuery = useDebouncedValue(searchInput);
 
   const { data: accounts } = useAccounts();
   const { data: categories } = useCategories();
   const { from, to } = periodToRange(period);
-  const { data: transactions, isLoading } = useTransactions({ from, to, categoryId, accountId });
+  const filters = { from, to, categoryId, accountId };
+
+  // Grouping by description needs every transaction in the period to count
+  // correctly, so it stays on the full (unpaginated) fetch; the raw table
+  // is pure browsing and is the only view that pages.
+  const { data: groupedTransactions, isLoading: isLoadingGrouped } = useTransactions(filters, {
+    enabled: grouped,
+  });
+  const { data: paginated, isLoading: isLoadingPage } = usePaginatedTransactions(
+    filters,
+    page,
+    TRANSACTIONS_PAGE_SIZE
+  );
+  const isLoading = grouped ? isLoadingGrouped : isLoadingPage;
+
+  function changePeriod(next: Period) {
+    setPeriod(next);
+    setPage(1);
+  }
+  function changeAccountId(next: string | undefined) {
+    setAccountId(next);
+    setPage(1);
+  }
+  function changeCategoryId(next: number | undefined) {
+    setCategoryId(next);
+    setPage(1);
+  }
+
   const { data: uncategorizedGroups } = useUncategorizedGroups();
   const { data: earliestTransactionDate } = useEarliestTransactionDate();
   const { data: searchResults, isFetching: isSearching } = useSearchTransactions(searchQuery);
@@ -51,7 +81,7 @@ export function TransactionsPage() {
       <div className="card">
         <h2>{t("title")}</h2>
         <div style={{ marginBottom: 16 }}>
-          <PeriodPicker value={period} onChange={setPeriod} allTimeStart={allTimeStart} />
+          <PeriodPicker value={period} onChange={changePeriod} allTimeStart={allTimeStart} />
         </div>
         <div
           className="grid"
@@ -65,7 +95,7 @@ export function TransactionsPage() {
             {t("filters.account")}
             <select
               value={accountId ?? ""}
-              onChange={(e) => setAccountId(e.target.value || undefined)}
+              onChange={(e) => changeAccountId(e.target.value || undefined)}
             >
               <option value="">{t("filters.allAccounts")}</option>
               {(accounts ?? []).map((a) => (
@@ -79,7 +109,9 @@ export function TransactionsPage() {
             {t("filters.category")}
             <select
               value={categoryId ?? ""}
-              onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+              onChange={(e) =>
+                changeCategoryId(e.target.value ? Number(e.target.value) : undefined)
+              }
             >
               <option value="">{t("filters.allCategories")}</option>
               {(categories ?? []).map((c) => (
@@ -92,22 +124,70 @@ export function TransactionsPage() {
         </div>
 
         <label style={{ flexDirection: "row", gap: 6, alignItems: "center", marginBottom: 16 }}>
-          <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={grouped}
+            onChange={(e) => {
+              setGrouped(e.target.checked);
+              setPage(1);
+            }}
+          />
           {t("filters.groupByDescription")}
         </label>
 
         {isLoading ? (
           <p className="muted">{t("loading")}</p>
         ) : grouped ? (
-          <GroupedTransactionList transactions={transactions ?? []} categories={categories ?? []} />
-        ) : (
-          <TransactionsTable
-            transactions={transactions ?? []}
+          <GroupedTransactionList
+            transactions={groupedTransactions ?? []}
             categories={categories ?? []}
-            onCategorize={(id, catId) =>
-              updateCategory.mutate({ id, categoryId: catId, createRule: true })
-            }
           />
+        ) : (
+          <>
+            <TransactionsTable
+              transactions={paginated?.items ?? []}
+              categories={categories ?? []}
+              onCategorize={(id, catId) =>
+                updateCategory.mutate({ id, categoryId: catId, createRule: true })
+              }
+            />
+            {paginated && paginated.total > paginated.pageSize && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: 12,
+                }}
+              >
+                <span className="muted">
+                  {t("pagination.showing", {
+                    from: (paginated.page - 1) * paginated.pageSize + 1,
+                    to: Math.min(paginated.page * paginated.pageSize, paginated.total),
+                    total: paginated.total,
+                  })}
+                </span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={paginated.page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    {t("pagination.prev")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={paginated.page * paginated.pageSize >= paginated.total}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    {t("pagination.next")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

@@ -5,6 +5,20 @@ import { db } from "../db";
 import { normalizeDescription } from "../jobs/recurringDetection";
 import { parseUserId } from "../lib/scope";
 
+// Only the raw, browse-everything transactions table on the frontend
+// (Transactions.tsx's ungrouped view) actually needs paging — every other
+// caller (Dashboard's cash-flow totals, the projection engine, grouped/
+// search views) needs the *whole* period's rows to compute a correct sum or
+// count, so pagination here is opt-in via `page`: omitted, the endpoint
+// keeps its existing bare-array response untouched.
+const DEFAULT_TRANSACTIONS_PAGE_SIZE = 50;
+const MAX_TRANSACTIONS_PAGE_SIZE = 200;
+// Safety net for an unbounded (no date range) list request — the frontend
+// never actually makes one, since every browsing view is period- or
+// page-scoped, but a direct API/MCP caller could.
+const UNBOUNDED_TRANSACTIONS_CAP = 500;
+const TRANSACTIONS_SEARCH_LIMIT = 1000;
+
 const UpdateTransactionCategoryBody = z.object({
   categoryId: z.number().int(),
   createRule: z.boolean().optional(),
@@ -40,7 +54,7 @@ export const transactionsRoutes = new Elysia({ prefix: "/api/transactions" })
          LEFT JOIN categories c ON c.id = t.category_id
          WHERE t.description LIKE ? ${userCondition}
          ORDER BY t.date DESC
-         LIMIT 1000`
+         LIMIT ${TRANSACTIONS_SEARCH_LIMIT}`
       )
       .all(`%${q}%`, ...(userId != null ? [userId] : [])) as Transaction[];
   })
@@ -74,12 +88,46 @@ export const transactionsRoutes = new Elysia({ prefix: "/api/transactions" })
       params.push(Number(query.tagId));
     }
 
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // Paging is opt-in via `page` — a raw browse-everything table (the only
+    // caller that doesn't need every row in memory at once) asks for a page;
+    // everything else (cash-flow totals, the projection engine, grouped
+    // views that need accurate per-description counts across the whole
+    // period) keeps getting the full, unpaginated result shape it always
+    // has.
+    if (query.page) {
+      const page = Math.max(1, Number(query.page));
+      const pageSize = Math.min(
+        MAX_TRANSACTIONS_PAGE_SIZE,
+        Math.max(1, Number(query.pageSize) || DEFAULT_TRANSACTIONS_PAGE_SIZE)
+      );
+      const total = (
+        db
+          .query(
+            `SELECT COUNT(*) as count FROM transactions t LEFT JOIN categories c ON c.id = t.category_id ${where}`
+          )
+          .get(...(params as [])) as { count: number }
+      ).count;
+      const items = db
+        .query(
+          `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.currency_code,
+                  t.category_id, c.name as category_name
+           FROM transactions t
+           LEFT JOIN categories c ON c.id = t.category_id
+           ${where}
+           ORDER BY t.date DESC
+           LIMIT ? OFFSET ?`
+        )
+        .all(...(params as []), pageSize, (page - 1) * pageSize) as Transaction[];
+      return { items, total, page, pageSize };
+    }
+
     // Only cap unbounded queries — a date-ranged query (a month, quarter,
     // year...) should return everything in that range, not get silently
     // truncated.
     const isBounded = Boolean(query.from || query.to);
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limit = isBounded ? "" : "LIMIT 500";
+    const limit = isBounded ? "" : `LIMIT ${UNBOUNDED_TRANSACTIONS_CAP}`;
     return db
       .query(
         `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.currency_code,

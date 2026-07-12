@@ -55,6 +55,13 @@ export interface Transaction {
   category_name: string | null;
 }
 
+export interface PaginatedTransactions {
+  items: Transaction[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface Category {
   id: number;
   name: string;

@@ -8,6 +8,11 @@
     "allCategories": "Todas as categorias",
     "groupByDescription": "Agrupar por descrição"
   },
+  "pagination": {
+    "showing": "Mostrando {{from}}–{{to}} de {{total}}",
+    "prev": "Anterior",
+    "next": "Próxima"
+  },
   "categorize": {
     "title": "Categorizar",
     "assignTo": "Atribuir a",

@@ -82,6 +82,13 @@ export const TOP_CATEGORY_COUNT = 6;
 // label slices at or above this share of the total.
 export const PIE_LABEL_MIN_PERCENT = 0.04;
 
+// The Transactions page's raw, ungrouped table is the one list in this app
+// that grows unbounded over years — everywhere else either needs its whole
+// result set to compute a correct total (cash-flow, grouped-by-description
+// counts) or is naturally small (accounts, bills, debts, goals). Must match
+// backend/src/routes/transactions.ts's DEFAULT_TRANSACTIONS_PAGE_SIZE.
+export const TRANSACTIONS_PAGE_SIZE = 50;
+
 // --- Review-mode anomaly detection --------------------------------------
 
 // Filters out noise from categories with barely any trailing history.
