@@ -1,14 +1,7 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import {
-  FiArrowLeft,
-  FiChevronDown,
-  FiChevronRight,
-  FiLink,
-  FiPlus,
-  FiTrash2,
-} from "react-icons/fi";
+import { FiArrowLeft, FiChevronDown, FiChevronRight, FiLink, FiTrash2 } from "react-icons/fi";
 import { MdLinkOff } from "react-icons/md";
 import {
   Area,
@@ -27,7 +20,6 @@ import {
 import type { Bill, Debt, DebtLinkedTransaction } from "shared";
 import { addMonthsIso, simulateAmortization } from "shared";
 import {
-  useCreateDebt,
   useDebtTransactions,
   useDebts,
   useDeleteDebt,
@@ -38,30 +30,20 @@ import {
   useUpdateDebt,
 } from "../hooks/useDebts";
 import { useBills, useUpdateBill } from "../hooks/useBills";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { useEditableField } from "../hooks/useEditableField";
 import { useProjections } from "../hooks/useProjections";
 import { useSearchTransactions } from "../hooks/useTransactions";
 import { useSortableTable } from "../hooks/useSortableTable";
+import { NewDebtForm } from "../components/NewDebtForm";
 import { SortableTh } from "../components/SortableTh";
-import { formatDate, formatMoney, formatMonthLabel } from "../lib/format";
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- used only via `typeof ... [number]` below
-const DIRECTION_VALUES = ["owed_by_me", "owed_to_me"] as const;
-function directionOptions(t: TFunction<"debts">) {
-  return [
-    { value: "owed_by_me" as const, label: t("directions.owedByMe") },
-    { value: "owed_to_me" as const, label: t("directions.owedToMe") },
-  ];
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- used only via `typeof ... [number]` below
-const LOAN_TYPE_VALUES = ["", "price", "sac"] as const;
-function loanTypeOptions(t: TFunction<"debts">) {
-  return [
-    { value: "" as const, label: t("loanTypeOptions.none") },
-    { value: "price" as const, label: t("loanTypeOptions.price") },
-    { value: "sac" as const, label: t("loanTypeOptions.sac") },
-  ];
-}
+import { formatDate, formatMoney, formatMonthLabel, moneyTooltip } from "../lib/format";
+import { loanTypeOptions } from "../lib/debtOptions";
+import {
+  DEBT_PLAN_PREVIEW_COUNT,
+  DEBT_PLAN_PREVIEW_HORIZON_MONTHS,
+  MAX_DEBT_CHART_MONTHS,
+} from "../config";
 
 // "PRICE"/"SAC" are standard Brazilian amortization-system names, identical
 // in Portuguese and English — not translated.
@@ -97,13 +79,8 @@ function ProgressBar(props: { percent: number; tone: "positive" | "negative" }) 
 function DebtLinker(props: { debtId: number; startDate: string; linkedIds: Set<string> }) {
   const { t } = useTranslation(["debts", "common"]);
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query);
   const [role, setRole] = useState<"borrow" | "lend" | "pay_off">("pay_off");
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => setDebouncedQuery(query), 250);
-    return () => clearTimeout(timeoutId);
-  }, [query]);
 
   const { data: rawResults, isFetching } = useSearchTransactions(debouncedQuery);
   const filteredResults = (rawResults ?? []).filter(
@@ -205,13 +182,15 @@ function DebtLinker(props: { debtId: number; startDate: string; linkedIds: Set<s
 function InterestRateEditor(props: { debt: Debt; payOffTx: DebtLinkedTransaction[] }) {
   const { t } = useTranslation("debts");
   const updateDebt = useUpdateDebt();
-  const [value, setValue] = useState(
-    () => props.debt.interest_rate_monthly_percent?.toString() ?? ""
+  const { value, setValue, save } = useEditableField(
+    props.debt.interest_rate_monthly_percent?.toString() ?? "",
+    (v) => {
+      const trimmed = v.trim();
+      const num = trimmed === "" ? null : Number(trimmed);
+      if (num === props.debt.interest_rate_monthly_percent) return;
+      updateDebt.mutate({ id: props.debt.id, input: { interestRateMonthlyPercent: num } });
+    }
   );
-
-  useEffect(() => {
-    setValue(props.debt.interest_rate_monthly_percent?.toString() ?? "");
-  }, [props.debt.interest_rate_monthly_percent]);
 
   const typedRate = value.trim() === "" ? null : Number(value.trim());
   const isDirty = typedRate !== props.debt.interest_rate_monthly_percent;
@@ -226,13 +205,6 @@ function InterestRateEditor(props: { debt: Debt; payOffTx: DebtLinkedTransaction
       props.payOffTx.map((tx) => ({ id: tx.id, date: tx.date, amount: Math.abs(tx.amount) }))
     );
   }, [typedRate, props.debt.principal, props.debt.start_date, props.payOffTx]);
-
-  function save() {
-    const trimmed = value.trim();
-    const num = trimmed === "" ? null : Number(trimmed);
-    if (num === props.debt.interest_rate_monthly_percent) return;
-    updateDebt.mutate({ id: props.debt.id, input: { interestRateMonthlyPercent: num } });
-  }
 
   return (
     <div>
@@ -303,16 +275,10 @@ function LoanTypeEditor(props: { debt: Debt }) {
 function StartDateEditor(props: { debt: Debt }) {
   const { t } = useTranslation("debts");
   const updateDebt = useUpdateDebt();
-  const [value, setValue] = useState(props.debt.start_date);
-
-  useEffect(() => {
-    setValue(props.debt.start_date);
-  }, [props.debt.start_date]);
-
-  function save() {
-    if (!value || value === props.debt.start_date) return;
-    updateDebt.mutate({ id: props.debt.id, input: { startDate: value } });
-  }
+  const { value, setValue, save } = useEditableField(props.debt.start_date, (v) => {
+    if (!v || v === props.debt.start_date) return;
+    updateDebt.mutate({ id: props.debt.id, input: { startDate: v } });
+  });
 
   return (
     <div>
@@ -340,11 +306,12 @@ function PrincipalEditor(props: { debt: Debt }) {
   const { t } = useTranslation("debts");
   const updateDebt = useUpdateDebt();
   const d = props.debt;
-  const [value, setValue] = useState(String(d.principal_amount ?? ""));
-
-  useEffect(() => {
-    setValue(String(d.principal_amount ?? ""));
-  }, [d.principal_amount]);
+  const { value, setValue, save } = useEditableField(String(d.principal_amount ?? ""), (v) => {
+    const trimmed = v.trim();
+    const num = trimmed === "" ? null : Number(trimmed);
+    if (num === d.principal_amount) return;
+    updateDebt.mutate({ id: d.id, input: { principalAmount: num } });
+  });
 
   if (d.split_percentage != null) {
     return (
@@ -353,13 +320,6 @@ function PrincipalEditor(props: { debt: Debt }) {
         <div className="money">{formatMoney(d.principal)}</div>
       </div>
     );
-  }
-
-  function save() {
-    const trimmed = value.trim();
-    const num = trimmed === "" ? null : Number(trimmed);
-    if (num === d.principal_amount) return;
-    updateDebt.mutate({ id: d.id, input: { principalAmount: num } });
   }
 
   return (
@@ -381,19 +341,13 @@ function PrincipalEditor(props: { debt: Debt }) {
 function MatchingRuleEditor(props: { debt: Debt }) {
   const { t } = useTranslation("debts");
   const updateDebt = useUpdateDebt();
-  const [value, setValue] = useState(props.debt.matching_rule ?? "");
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    setValue(props.debt.matching_rule ?? "");
-  }, [props.debt.matching_rule]);
-
-  function save() {
-    const trimmed = value.trim();
+  const { value, setValue, save } = useEditableField(props.debt.matching_rule ?? "", (v) => {
+    const trimmed = v.trim();
     const next = trimmed === "" ? null : trimmed;
     if (next === (props.debt.matching_rule ?? null)) return;
     updateDebt.mutate({ id: props.debt.id, input: { matchingRule: next } });
-  }
+  });
+  const [open, setOpen] = useState(false);
 
   return (
     <div>
@@ -677,12 +631,6 @@ function PayoffProjection(props: { debt: Debt }) {
   );
 }
 
-// 18 months so even a loan starting next year (e.g. the CAIXA mortgage in
-// 2027-07) still shows its upcoming payments; only the first few applicable
-// months are displayed.
-const PLAN_PREVIEW_HORIZON = 18;
-const PLAN_PREVIEW_COUNT = 6;
-
 function cadenceLabel(t: TFunction<"debts">, cadence: Bill["cadence"]): string {
   const labels: Record<Bill["cadence"], string> = {
     weekly: t("cadence.weekly"),
@@ -768,7 +716,7 @@ function PaymentPlanSection(props: { debt: Debt }) {
   const d = props.debt;
   const plan = d.payment_plan;
   const { data: bills } = useBills();
-  const { data: projections } = useProjections(PLAN_PREVIEW_HORIZON);
+  const { data: projections } = useProjections(DEBT_PLAN_PREVIEW_HORIZON_MONTHS);
   const updateDebt = useUpdateDebt();
   const updateBill = useUpdateBill();
 
@@ -807,7 +755,7 @@ function PaymentPlanSection(props: { debt: Debt }) {
       amount: m.bills.find((l) => l.kind === "debt" && l.id === -d.id)?.amount,
     }))
     .filter((p): p is { label: string; amount: number } => p.amount != null)
-    .slice(0, PLAN_PREVIEW_COUNT);
+    .slice(0, DEBT_PLAN_PREVIEW_COUNT);
 
   if (d.status !== "active") return null;
 
@@ -906,7 +854,7 @@ function PaymentPlanSection(props: { debt: Debt }) {
       {preview.length === 0 && plan.source !== "none" && projections && (
         <p className="muted" style={{ fontSize: "0.85em", marginTop: 8, marginBottom: 0 }}>
           {t("paymentPlan.noProjectedPayments", {
-            horizon: PLAN_PREVIEW_HORIZON,
+            horizon: DEBT_PLAN_PREVIEW_HORIZON_MONTHS,
             suffix: isFutureDebt(d)
               ? t("paymentPlan.noProjectedSuffix", { date: formatDate(d.start_date) })
               : "",
@@ -1036,8 +984,6 @@ function PaymentPlanSection(props: { debt: Debt }) {
   );
 }
 
-const MAX_CHART_MONTHS = 360; // 30 years of monthly points is plenty for a plot
-
 const chartMonthLabel = new Intl.DateTimeFormat("en-US", {
   month: "short",
   year: "2-digit",
@@ -1049,10 +995,6 @@ function compactMoney(value: number): string {
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (abs >= 1000) return `${Math.round(value / 1000)}k`;
   return String(Math.round(value));
-}
-
-function moneyTooltip(value: any): string {
-  return formatMoney(Number(value));
 }
 
 interface BalancePoint {
@@ -1507,7 +1449,8 @@ function DebtOverviewChart(props: { debts: Debt[] }) {
       return last > max ? last : max;
     }, today);
     let months = 0;
-    while (months < MAX_CHART_MONTHS && addMonthsIso(gridStart, months + 1) <= gridEnd) months++;
+    while (months < MAX_DEBT_CHART_MONTHS && addMonthsIso(gridStart, months + 1) <= gridEnd)
+      months++;
     const gridDates: string[] = [];
     for (let m = 0; m <= months; m++) gridDates.push(addMonthsIso(gridStart, m));
     if (gridDates.length < 2) return null;
@@ -1974,19 +1917,6 @@ function DebtCard(props: { debt: Debt; allDebts: Debt[] }) {
 export function DebtsPage() {
   const { t } = useTranslation("debts");
   const { data: debts } = useDebts();
-  const createDebt = useCreateDebt();
-
-  const [name, setName] = useState("");
-  const [direction, setDirection] = useState<(typeof DIRECTION_VALUES)[number]>("owed_by_me");
-  const [counterparty, setCounterparty] = useState("");
-  const [mode, setMode] = useState<"fixed" | "split">("fixed");
-  const [principalAmount, setPrincipalAmount] = useState("");
-  const [splitPercentage, setSplitPercentage] = useState("");
-  const [expectedTotalAmount, setExpectedTotalAmount] = useState("");
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [targetPayoffDate, setTargetPayoffDate] = useState("");
-  const [loanType, setLoanType] = useState<(typeof LOAN_TYPE_VALUES)[number]>("");
-  const [matchingRule, setMatchingRule] = useState("");
 
   const active = (debts ?? []).filter((d) => d.status === "active" && !isFutureDebt(d));
   const future = (debts ?? []).filter((d) => isFutureDebt(d));
@@ -1994,39 +1924,6 @@ export function DebtsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [selectedDebtId, setSelectedDebtId] = useState<number | null>(null);
   const selectedDebt = (debts ?? []).find((d) => d.id === selectedDebtId);
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!name) return;
-    if (mode === "fixed" && !principalAmount) return;
-    if (mode === "split" && !splitPercentage) return;
-    createDebt.mutate(
-      {
-        name,
-        direction,
-        counterparty: counterparty || undefined,
-        principalAmount: mode === "fixed" ? Number(principalAmount) : undefined,
-        splitPercentage: mode === "split" ? Number(splitPercentage) : undefined,
-        expectedTotalAmount: expectedTotalAmount ? Number(expectedTotalAmount) : undefined,
-        startDate,
-        targetPayoffDate: targetPayoffDate || undefined,
-        loanType: loanType || undefined,
-        matchingRule: matchingRule || undefined,
-      },
-      {
-        onSuccess: () => {
-          setName("");
-          setCounterparty("");
-          setPrincipalAmount("");
-          setSplitPercentage("");
-          setExpectedTotalAmount("");
-          setTargetPayoffDate("");
-          setLoanType("");
-          setMatchingRule("");
-        },
-      }
-    );
-  }
 
   if (selectedDebt) {
     return (
@@ -2085,125 +1982,7 @@ export function DebtsPage() {
         {addOpen && (
           <div style={{ marginTop: 12 }}>
             <p className="muted">{t("page.addDebtDescription")}</p>
-            <form
-              onSubmit={submit}
-              className="grid"
-              style={{ gridTemplateColumns: "repeat(4, auto)", alignItems: "end", gap: 16 }}
-            >
-              <label>
-                {t("page.name")}
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                {t("page.direction")}
-                <select
-                  value={direction}
-                  onChange={(e) => setDirection(e.target.value as typeof direction)}
-                >
-                  {directionOptions(t).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("page.counterparty")}
-                <input
-                  type="text"
-                  value={counterparty}
-                  onChange={(e) => setCounterparty(e.target.value)}
-                />
-              </label>
-              <label>
-                {t("page.principalMode")}
-                <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
-                  <option value="fixed">{t("page.modeFixed")}</option>
-                  <option value="split">{t("page.modeSplit")}</option>
-                </select>
-              </label>
-              {mode === "fixed" ? (
-                <label>
-                  {t("page.principalAmount")}
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={principalAmount}
-                    onChange={(e) => setPrincipalAmount(e.target.value)}
-                  />
-                </label>
-              ) : (
-                <label>
-                  {t("page.splitPercentage")}
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    max="100"
-                    value={splitPercentage}
-                    onChange={(e) => setSplitPercentage(e.target.value)}
-                  />
-                </label>
-              )}
-              <label>
-                {t("page.expectedTotal")}
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder={t("page.optional")}
-                  value={expectedTotalAmount}
-                  onChange={(e) => setExpectedTotalAmount(e.target.value)}
-                />
-              </label>
-              <label>
-                {t("page.startDate")}
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                {t("page.targetPayoffDate")}
-                <input
-                  type="date"
-                  value={targetPayoffDate}
-                  onChange={(e) => setTargetPayoffDate(e.target.value)}
-                />
-              </label>
-              <label>
-                {t("page.loanType")}
-                <select
-                  value={loanType}
-                  onChange={(e) => setLoanType(e.target.value as typeof loanType)}
-                >
-                  {loanTypeOptions(t).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit">
-                <FiPlus /> {t("page.submit")}
-              </button>
-            </form>
-            <label style={{ display: "block", marginTop: 16 }}>
-              {t("page.matchingRuleLabel")}
-              <textarea
-                value={matchingRule}
-                onChange={(e) => setMatchingRule(e.target.value)}
-                placeholder={t("matchingRule.placeholder")}
-                rows={2}
-                style={{ width: "100%", resize: "vertical" }}
-              />
-            </label>
+            <NewDebtForm />
           </div>
         )}
       </div>

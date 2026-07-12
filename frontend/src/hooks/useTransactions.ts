@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Transaction } from "shared";
 import { apiFetch } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
+import { invalidateKeys } from "../lib/queryInvalidation";
 
 export interface TransactionFilters {
   from?: string;
@@ -75,11 +76,12 @@ export function useUpdateTransactionCategory() {
         method: "PATCH",
         body: JSON.stringify({ categoryId, createRule }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["categories", "uncategorized-groups"] });
-      queryClient.invalidateQueries({ queryKey: ["categories", "rules"] });
-    },
+    onSuccess: () =>
+      invalidateKeys(queryClient, [
+        ["transactions"],
+        ["categories", "uncategorized-groups"],
+        ["categories", "rules"],
+      ]),
   });
 }
 
@@ -97,9 +99,7 @@ export function useBulkCategorizeTransactions() {
         method: "POST",
         body: JSON.stringify({ transactionIds, categoryId }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["categories", "uncategorized-groups"] });
-    },
+    onSuccess: () =>
+      invalidateKeys(queryClient, [["transactions"], ["categories", "uncategorized-groups"]]),
   });
 }

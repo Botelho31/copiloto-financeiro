@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AppSettings } from "shared";
 import { apiFetch, appendUserId } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
+import { invalidateKeys } from "../lib/queryInvalidation";
 
 // Household (no active person) has no single settings row — the backend
 // just returns { cardSpendGoal: null } for that case.
@@ -31,10 +32,7 @@ export function useUpdateUserSettings(userId: number) {
         method: "PATCH",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["settings", userId] });
-      qc.invalidateQueries({ queryKey: ["projections"] });
-    },
+    onSuccess: () => invalidateKeys(qc, [["settings", userId], ["projections"]]),
   });
 }
 
@@ -51,9 +49,6 @@ export function useUpdateSettings() {
         body: JSON.stringify(input),
       });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["settings"] });
-      qc.invalidateQueries({ queryKey: ["projections"] });
-    },
+    onSuccess: () => invalidateKeys(qc, [["settings"], ["projections"]]),
   });
 }

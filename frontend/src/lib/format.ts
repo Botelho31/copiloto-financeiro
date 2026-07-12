@@ -18,3 +18,9 @@ export function formatMonthLabel(label: string): string {
     new Date(year, month - 1, 1)
   );
 }
+
+// Recharts calls a Tooltip/Legend formatter with `any` — its own types are
+// loose at this boundary, matched here rather than fighting it.
+export function moneyTooltip(value: any): string {
+  return formatMoney(Number(value));
+}

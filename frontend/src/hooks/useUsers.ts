@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { User } from "shared";
 import { apiFetch } from "../lib/api";
+import { invalidateKeys } from "../lib/queryInvalidation";
 
 export function useUsers() {
   return useQuery({ queryKey: ["users"], queryFn: () => apiFetch<User[]>("/api/users") });
@@ -17,14 +18,16 @@ export interface NewUserInput {
 // A person's existence/credentials affect sync and every scoped view, not
 // just the people list — invalidate broadly.
 function invalidatePersonScoped(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ["users"] });
-  qc.invalidateQueries({ queryKey: ["accounts"] });
-  qc.invalidateQueries({ queryKey: ["transactions"] });
-  qc.invalidateQueries({ queryKey: ["bills"] });
-  qc.invalidateQueries({ queryKey: ["debts"] });
-  qc.invalidateQueries({ queryKey: ["goals"] });
-  qc.invalidateQueries({ queryKey: ["investments"] });
-  qc.invalidateQueries({ queryKey: ["projections"] });
+  invalidateKeys(qc, [
+    ["users"],
+    ["accounts"],
+    ["transactions"],
+    ["bills"],
+    ["debts"],
+    ["goals"],
+    ["investments"],
+    ["projections"],
+  ]);
 }
 
 export function useCreateUser() {

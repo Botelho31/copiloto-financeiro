@@ -1,14 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Debt, DebtLinkedTransaction } from "shared";
-import { apiFetch, appendUserId } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
+import { invalidateKeys } from "../lib/queryInvalidation";
+import { useUserScopedList } from "./useUserScopedList";
 
 export function useDebts() {
-  const { activeUserId } = usePersonScope();
-  return useQuery({
-    queryKey: ["debts", activeUserId],
-    queryFn: () => apiFetch<Debt[]>(appendUserId("/api/debts", activeUserId)),
-  });
+  return useUserScopedList<Debt>("debts", "/api/debts");
 }
 
 export function useDebtTransactions(debtId: number | undefined) {
@@ -78,12 +76,9 @@ export function useUpdateDebt() {
         overrideAutomaticSchedule: boolean;
       }>;
     }) => apiFetch<Debt[]>(`/api/debts/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["debts"] });
-      // A payment-plan change (linked bill, loan terms, rate) reshapes the
-      // projection's debt lines, not just the debt record itself.
-      qc.invalidateQueries({ queryKey: ["projections"] });
-    },
+    // A payment-plan change (linked bill, loan terms, rate) reshapes the
+    // projection's debt lines, not just the debt record itself.
+    onSuccess: () => invalidateKeys(qc, [["debts"], ["projections"]]),
   });
 }
 
@@ -111,10 +106,8 @@ export function useLinkTransactionsToDebt() {
         method: "POST",
         body: JSON.stringify({ transactionIds, role }),
       }),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["debts"] });
-      qc.invalidateQueries({ queryKey: ["debts", vars.debtId, "transactions"] });
-    },
+    onSuccess: (_data, vars) =>
+      invalidateKeys(qc, [["debts"], ["debts", vars.debtId, "transactions"]]),
   });
 }
 
@@ -126,10 +119,8 @@ export function useUnlinkTransactionsFromDebt() {
         method: "POST",
         body: JSON.stringify({ transactionIds }),
       }),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["debts"] });
-      qc.invalidateQueries({ queryKey: ["debts", vars.debtId, "transactions"] });
-    },
+    onSuccess: (_data, vars) =>
+      invalidateKeys(qc, [["debts"], ["debts", vars.debtId, "transactions"]]),
   });
 }
 

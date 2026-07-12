@@ -1,8 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { Granularity, Period } from "../lib/period";
 import { customPeriod, parseIsoDate, periodFor, shiftPeriod, toIsoDate } from "../lib/period";
-
-const ALL_GRANULARITIES: Granularity[] = ["month", "quarter", "semester", "year", "custom"];
+import { ALL_PERIOD_GRANULARITIES } from "../config";
 
 export function PeriodPicker(props: {
   value: Period;
@@ -26,7 +25,7 @@ export function PeriodPicker(props: {
     year: t("period.year"),
     custom: t("period.custom"),
   };
-  const granularities = props.granularities ?? ALL_GRANULARITIES;
+  const granularities = props.granularities ?? ALL_PERIOD_GRANULARITIES;
   const showNavigation = props.showNavigation ?? true;
   const showGranularityPicker = props.showGranularityPicker ?? true;
   const isCustom = props.value.granularity === "custom";

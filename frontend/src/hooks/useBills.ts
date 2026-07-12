@@ -1,15 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Bill } from "shared";
-import { apiFetch, appendUserId } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
+import { invalidateKeys } from "../lib/queryInvalidation";
+import { useUserScopedList } from "./useUserScopedList";
 
 export function useBills() {
-  const { activeUserId } = usePersonScope();
-  return useQuery({
-    queryKey: ["bills", activeUserId],
-    queryFn: () => apiFetch<Bill[]>(appendUserId("/api/bills", activeUserId)),
-  });
+  return useUserScopedList<Bill>("bills", "/api/bills");
 }
+
+// A bill linked to a debt reshapes that debt's payment plan, which in turn
+// reshapes the projection's debt lines — every mutation below invalidates
+// all three unconditionally rather than only when debtId is actually
+// touched, since amount/cadence/confirmed changes on an already-linked
+// bill matter too.
+const BILL_MUTATION_INVALIDATES = [["bills"], ["debts"], ["projections"]];
 
 export interface NewBillInput {
   name: string;
@@ -23,10 +28,6 @@ export interface NewBillInput {
   debtId?: number;
 }
 
-// A bill linked to a debt (debtId) reshapes that debt's payment plan, which
-// in turn reshapes the projection's debt lines — invalidate all three
-// unconditionally rather than only when debtId is actually touched, since
-// amount/cadence/confirmed changes on an already-linked bill matter too.
 export function useCreateBill() {
   const queryClient = useQueryClient();
   const { activeUserId } = usePersonScope();
@@ -40,11 +41,7 @@ export function useCreateBill() {
         body: JSON.stringify({ ...input, userId: activeUserId }),
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bills"] });
-      queryClient.invalidateQueries({ queryKey: ["debts"] });
-      queryClient.invalidateQueries({ queryKey: ["projections"] });
-    },
+    onSuccess: () => invalidateKeys(queryClient, BILL_MUTATION_INVALIDATES),
   });
 }
 
@@ -67,11 +64,7 @@ export function useUpdateBill() {
   return useMutation({
     mutationFn: ({ id, input }: { id: number; input: BillUpdateInput }) =>
       apiFetch<Bill[]>(`/api/bills/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bills"] });
-      queryClient.invalidateQueries({ queryKey: ["debts"] });
-      queryClient.invalidateQueries({ queryKey: ["projections"] });
-    },
+    onSuccess: () => invalidateKeys(queryClient, BILL_MUTATION_INVALIDATES),
   });
 }
 
@@ -79,10 +72,6 @@ export function useDeleteBill() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => apiFetch<Bill[]>(`/api/bills/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bills"] });
-      queryClient.invalidateQueries({ queryKey: ["debts"] });
-      queryClient.invalidateQueries({ queryKey: ["projections"] });
-    },
+    onSuccess: () => invalidateKeys(queryClient, BILL_MUTATION_INVALIDATES),
   });
 }

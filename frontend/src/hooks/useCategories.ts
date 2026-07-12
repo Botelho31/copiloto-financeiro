@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Category, CategoryRule, UncategorizedGroup } from "shared";
 import { apiFetch } from "../lib/api";
+import { invalidateKeys } from "../lib/queryInvalidation";
 
 export function useCategories() {
   return useQuery({
@@ -54,11 +55,12 @@ export function useBulkAssignCategory() {
         method: "POST",
         body: JSON.stringify({ key, categoryId }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["categories", "uncategorized-groups"] });
-      queryClient.invalidateQueries({ queryKey: ["categories", "rules"] });
-    },
+    onSuccess: () =>
+      invalidateKeys(queryClient, [
+        ["transactions"],
+        ["categories", "uncategorized-groups"],
+        ["categories", "rules"],
+      ]),
   });
 }
 

@@ -1,13 +1,5 @@
-import { Fragment, type FormEvent, useEffect, useState } from "react";
-import {
-  FiCheck,
-  FiChevronDown,
-  FiChevronRight,
-  FiEdit2,
-  FiPlus,
-  FiTrash2,
-  FiX,
-} from "react-icons/fi";
+import { Fragment, useEffect, useState } from "react";
+import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiTrash2, FiX } from "react-icons/fi";
 import { useTranslation } from "react-i18next";
 import {
   Bar,
@@ -25,50 +17,36 @@ import {
 import type { Debt, Goal, ProjectedMonth } from "shared";
 import { PeriodPicker } from "../components/PeriodPicker";
 import { SortableTh } from "../components/SortableTh";
+import { NewGoalForm } from "../components/NewGoalForm";
 import { SummaryCard } from "../components/SummaryCard";
+import { WhatIfBillTable } from "../components/WhatIfBillTable";
 import { useBills } from "../hooks/useBills";
 import { useDebts } from "../hooks/useDebts";
-import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/useGoals";
+import { useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/useGoals";
 import { useProjections, useWhatIfProjection } from "../hooks/useProjections";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { useSortableTable } from "../hooks/useSortableTable";
-import { formatMoney } from "../lib/format";
-import { periodFor, type Granularity, type Period } from "../lib/period";
-
-// Projections only make sense as a horizon length, not a date range to
-// browse — "custom" is excluded from the picker below, so that entry is
-// unreachable, but every Granularity key must be present for TS.
-const GRANULARITY_TO_HORIZON_MONTHS: Record<Granularity, number> = {
-  month: 1,
-  quarter: 3,
-  semester: 6,
-  year: 12,
-  custom: 6,
-};
-
-// Brazil's Selic rate as of the June 2026 Copom cut — a reasonable default
-// for idle-cash interest, fully editable below since real-world rates move.
-const DEFAULT_INTEREST_RATE_ANNUAL_PERCENT = 14.25;
-
-const PROJECTION_GRANULARITIES: Granularity[] = ["month", "quarter", "semester", "year"];
+import { formatMoney, moneyTooltip } from "../lib/format";
+import { periodFor, type Period } from "../lib/period";
+import {
+  DEBT_MARKER_COLOR,
+  DEFAULT_INTEREST_RATE_ANNUAL_PERCENT,
+  GOAL_MARKER_COLOR,
+  GRANULARITY_TO_HORIZON_MONTHS,
+  PROJECTION_GRANULARITIES,
+} from "../config";
 
 // One hue per KIND of thing across these charts: balance = --accent green,
 // interest = --gold (yield) — also used for the "debt paid off" star marker
 // on the balance chart, since it's an event on the SAME timeline as interest
 // accrual, not a fill competing with the shortfall reference line/dot (which
-// keeps --danger). DEBT_COLOR (--danger red, "red symbolizing debt" per
-// explicit direction) labels the tooltip's "X pays off" line. Goal targets
-// get a slate blue that isn't in the app's warm ledger palette elsewhere,
-// chosen specifically so it can't be confused with the green/red pair under
-// red-green colorblindness the way an earlier rose did. A goal's own
-// identity still comes from its name label on the marker, not the color
+// keeps --danger). DEBT_MARKER_COLOR (--danger red, "red symbolizing debt"
+// per explicit direction) labels the tooltip's "X pays off" line. Goal
+// targets get a slate blue that isn't in the app's warm ledger palette
+// elsewhere, chosen specifically so it can't be confused with the green/red
+// pair under red-green colorblindness the way an earlier rose did. A goal's
+// own identity still comes from its name label on the marker, not the color
 // slot alone.
-const DEBT_COLOR = "var(--danger)";
-const GOAL_COLOR = "#5f7fbf";
-
-function moneyTooltip(value: any): string {
-  return formatMoney(Number(value));
-}
 
 // A 5-point star's SVG path, centered at (cx, cy) — used both for the "debt
 // paid off" chip icon in the key strip and the marker on the balance line
@@ -146,7 +124,7 @@ function BalanceTooltip(props: {
       {finishing.length > 0 && (
         <p
           className="recharts-tooltip-item"
-          style={{ margin: "4px 0 0", color: DEBT_COLOR, fontWeight: 600 }}
+          style={{ margin: "4px 0 0", color: DEBT_MARKER_COLOR, fontWeight: 600 }}
         >
           {finishing.map((d) => t("balanceChart.tooltip.debtPaysOff", { name: d.name })).join(", ")}
         </p>
@@ -155,7 +133,7 @@ function BalanceTooltip(props: {
         <p
           key={g.id}
           className="recharts-tooltip-item"
-          style={{ margin: "4px 0 0", color: GOAL_COLOR, fontWeight: 600 }}
+          style={{ margin: "4px 0 0", color: GOAL_MARKER_COLOR, fontWeight: 600 }}
         >
           {t("balanceChart.tooltip.goal", {
             name: g.name,
@@ -540,12 +518,8 @@ export function ProjectionsPage() {
     },
     "by"
   );
-  const createGoal = useCreateGoal();
   const updateGoal = useUpdateGoal();
   const deleteGoal = useDeleteGoal();
-  const [goalName, setGoalName] = useState("");
-  const [goalAmount, setGoalAmount] = useState("");
-  const [goalDate, setGoalDate] = useState("");
   const [editingGoalId, setEditingGoalId] = useState<number | null>(null);
   const [editGoalName, setEditGoalName] = useState("");
   const [editGoalAmount, setEditGoalAmount] = useState("");
@@ -596,6 +570,14 @@ export function ProjectionsPage() {
     });
   }
 
+  function handleBillOverrideChange(billId: number, value: number | undefined) {
+    const next = { ...billAmounts };
+    if (value === undefined) delete next[billId];
+    else next[billId] = value;
+    setBillAmounts(next);
+    recompute(next, discretionaryDeltaPercent, interestRateAnnualPercent, cardSpendGoal);
+  }
+
   // cardSpendGoal is a persisted global setting now, not a per-view
   // what-if — it survives resets and period switches, never blanked here.
   function resetWhatIf() {
@@ -623,21 +605,6 @@ export function ProjectionsPage() {
     // line/label against the chart's edge instead of actually showing it.
     setHorizonOverride({ months: monthsUntil(latest.targetDate) + 1, name: latest.name });
     resetWhatIf();
-  }
-
-  function submitGoal(e: FormEvent) {
-    e.preventDefault();
-    if (!goalName || !goalAmount || !goalDate) return;
-    createGoal.mutate(
-      { name: goalName, targetAmount: Number(goalAmount), targetDate: goalDate },
-      {
-        onSuccess: () => {
-          setGoalName("");
-          setGoalAmount("");
-          setGoalDate("");
-        },
-      }
-    );
   }
 
   return (
@@ -795,7 +762,7 @@ export function ProjectionsPage() {
           {(goals ?? []).some((g) => g.on_track) && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <svg width="12" height="12" aria-hidden="true">
-                <circle cx="6" cy="6" r="4.5" fill={GOAL_COLOR} />
+                <circle cx="6" cy="6" r="4.5" fill={GOAL_MARKER_COLOR} />
               </svg>
               {t("balanceChart.legend.goalOnTrack")}
             </span>
@@ -803,7 +770,14 @@ export function ProjectionsPage() {
           {(goals ?? []).some((g) => !g.on_track) && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <svg width="12" height="12" aria-hidden="true">
-                <circle cx="6" cy="6" r="4" fill="none" stroke={GOAL_COLOR} strokeWidth="2" />
+                <circle
+                  cx="6"
+                  cy="6"
+                  r="4"
+                  fill="none"
+                  stroke={GOAL_MARKER_COLOR}
+                  strokeWidth="2"
+                />
               </svg>
               {t("balanceChart.legend.goalBehind")}
             </span>
@@ -916,7 +890,7 @@ export function ProjectionsPage() {
                           { x: months[0].label, y: g.target_amount },
                           { x: goalMonth, y: g.target_amount },
                         ]}
-                        stroke={GOAL_COLOR}
+                        stroke={GOAL_MARKER_COLOR}
                         strokeOpacity={0.45}
                         strokeDasharray="4 4"
                         ifOverflow="extendDomain"
@@ -930,15 +904,15 @@ export function ProjectionsPage() {
                             cx={p.cx}
                             cy={p.cy}
                             r={5}
-                            fill={g.on_track ? GOAL_COLOR : "var(--ink-raised)"}
-                            stroke={GOAL_COLOR}
+                            fill={g.on_track ? GOAL_MARKER_COLOR : "var(--ink-raised)"}
+                            stroke={GOAL_MARKER_COLOR}
                             strokeWidth={2}
                           />
                         )}
                         label={{
                           value: `${statusGlyph} ${g.name} · ${formatMoney(g.target_amount)}`,
                           position: "top",
-                          fill: GOAL_COLOR,
+                          fill: GOAL_MARKER_COLOR,
                           fontSize: 11,
                         }}
                       />
@@ -952,7 +926,7 @@ export function ProjectionsPage() {
                   <ReferenceLine
                     key={g.id}
                     y={g.target_amount}
-                    stroke={GOAL_COLOR}
+                    stroke={GOAL_MARKER_COLOR}
                     strokeOpacity={0.45}
                     strokeDasharray="4 4"
                     ifOverflow="extendDomain"
@@ -964,7 +938,7 @@ export function ProjectionsPage() {
                         month: goalMonth,
                       }),
                       position: "insideTopLeft" as const,
-                      fill: GOAL_COLOR,
+                      fill: GOAL_MARKER_COLOR,
                       fontSize: 11,
                     }}
                   />
@@ -1160,124 +1134,26 @@ export function ProjectionsPage() {
             marginTop: 16,
           }}
         >
-          <div>
-            <h3 style={{ marginTop: 0 }}>{t("whatIf.income.title")}</h3>
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh
-                    label={t("whatIf.table.bill")}
-                    sortKey="name"
-                    activeKey={incomeSortKey}
-                    direction={incomeSortDirection}
-                    onSort={toggleIncomeSort}
-                  />
-                  <SortableTh
-                    label={t("whatIf.table.expected")}
-                    sortKey="expected"
-                    activeKey={incomeSortKey}
-                    direction={incomeSortDirection}
-                    onSort={toggleIncomeSort}
-                  />
-                  <th title={t("whatIf.table.cardColumnTitle")}>{t("whatIf.table.card")}</th>
-                  <th>{t("whatIf.table.override")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedIncomeBills.map((b) => (
-                  <tr key={b.id}>
-                    <td>{b.name}</td>
-                    <td className="money" style={{ color: "var(--accent)" }}>
-                      +{formatMoney(b.expected_amount)}
-                    </td>
-                    <td>{b.is_card_expense ? <FiCheck /> : null}</td>
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder={String(b.expected_amount)}
-                        value={billAmounts[b.id] ?? ""}
-                        style={{ width: 110 }}
-                        disabled={b.is_card_expense}
-                        title={b.is_card_expense ? t("whatIf.table.cardDisabledTitle") : undefined}
-                        onChange={(e) => {
-                          const value = e.target.value ? Number(e.target.value) : undefined;
-                          const next = { ...billAmounts };
-                          if (value === undefined) delete next[b.id];
-                          else next[b.id] = value;
-                          setBillAmounts(next);
-                          recompute(
-                            next,
-                            discretionaryDeltaPercent,
-                            interestRateAnnualPercent,
-                            cardSpendGoal
-                          );
-                        }}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div>
-            <h3 style={{ marginTop: 0 }}>{t("whatIf.expenses.title")}</h3>
-            <table>
-              <thead>
-                <tr>
-                  <SortableTh
-                    label={t("whatIf.table.bill")}
-                    sortKey="name"
-                    activeKey={expenseSortKey}
-                    direction={expenseSortDirection}
-                    onSort={toggleExpenseSort}
-                  />
-                  <SortableTh
-                    label={t("whatIf.table.expected")}
-                    sortKey="expected"
-                    activeKey={expenseSortKey}
-                    direction={expenseSortDirection}
-                    onSort={toggleExpenseSort}
-                  />
-                  <th title={t("whatIf.table.cardColumnTitle")}>{t("whatIf.table.card")}</th>
-                  <th>{t("whatIf.table.override")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedExpenseBills.map((b) => (
-                  <tr key={b.id}>
-                    <td>{b.name}</td>
-                    <td className="money shortfall">-{formatMoney(b.expected_amount)}</td>
-                    <td>{b.is_card_expense ? <FiCheck /> : null}</td>
-                    <td>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder={String(b.expected_amount)}
-                        value={billAmounts[b.id] ?? ""}
-                        style={{ width: 110 }}
-                        disabled={b.is_card_expense}
-                        title={b.is_card_expense ? t("whatIf.table.cardDisabledTitle") : undefined}
-                        onChange={(e) => {
-                          const value = e.target.value ? Number(e.target.value) : undefined;
-                          const next = { ...billAmounts };
-                          if (value === undefined) delete next[b.id];
-                          else next[b.id] = value;
-                          setBillAmounts(next);
-                          recompute(
-                            next,
-                            discretionaryDeltaPercent,
-                            interestRateAnnualPercent,
-                            cardSpendGoal
-                          );
-                        }}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <WhatIfBillTable
+            title={t("whatIf.income.title")}
+            bills={sortedIncomeBills}
+            sign="+"
+            sortKey={incomeSortKey}
+            direction={incomeSortDirection}
+            onSort={toggleIncomeSort}
+            billAmounts={billAmounts}
+            onOverrideChange={handleBillOverrideChange}
+          />
+          <WhatIfBillTable
+            title={t("whatIf.expenses.title")}
+            bills={sortedExpenseBills}
+            sign="-"
+            sortKey={expenseSortKey}
+            direction={expenseSortDirection}
+            onSort={toggleExpenseSort}
+            billAmounts={billAmounts}
+            onOverrideChange={handleBillOverrideChange}
+          />
         </div>
       </div>
 
@@ -1412,43 +1288,7 @@ export function ProjectionsPage() {
           </tbody>
         </table>
 
-        <form
-          onSubmit={submitGoal}
-          className="grid"
-          style={{ gridTemplateColumns: "repeat(4, auto)", alignItems: "end", marginTop: 16 }}
-        >
-          <label>
-            {t("goals.form.name")}
-            <input
-              type="text"
-              value={goalName}
-              onChange={(e) => setGoalName(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            {t("goals.form.targetAmount")}
-            <input
-              type="number"
-              step="0.01"
-              value={goalAmount}
-              onChange={(e) => setGoalAmount(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            {t("goals.form.targetDate")}
-            <input
-              type="date"
-              value={goalDate}
-              onChange={(e) => setGoalDate(e.target.value)}
-              required
-            />
-          </label>
-          <button type="submit">
-            <FiPlus /> {t("goals.form.submit")}
-          </button>
-        </form>
+        <NewGoalForm />
       </div>
     </div>
   );

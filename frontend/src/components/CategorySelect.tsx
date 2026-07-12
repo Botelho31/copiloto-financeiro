@@ -1,21 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import type { Category } from "shared";
 import { useCreateCategory } from "../hooks/useCategories";
-
-function Swatch(props: { color: string }) {
-  return (
-    <span
-      style={{
-        width: 10,
-        height: 10,
-        borderRadius: "50%",
-        background: props.color,
-        display: "inline-block",
-        flexShrink: 0,
-      }}
-    />
-  );
-}
+import { useSearchCreatePopover } from "../hooks/useSearchCreatePopover";
+import { ColorSwatch } from "./ColorSwatch";
 
 export function CategorySelect(props: {
   categories: Category[];
@@ -23,38 +9,15 @@ export function CategorySelect(props: {
   onChange: (categoryId: number) => void;
   placeholder?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const createCategory = useCreateCategory();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { open, setOpen, search, setSearch, containerRef, filtered, exactMatch, close } =
+    useSearchCreatePopover<Category>(props.categories);
 
   const selected = props.categories.find((c) => c.id === props.value);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return props.categories;
-    return props.categories.filter((c) => c.name.toLowerCase().includes(q));
-  }, [props.categories, search]);
-
-  const exactMatch = props.categories.some(
-    (c) => c.name.toLowerCase() === search.trim().toLowerCase()
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
   function selectCategory(id: number) {
     props.onChange(id);
-    setOpen(false);
-    setSearch("");
+    close();
   }
 
   function handleCreate() {
@@ -92,7 +55,7 @@ export function CategorySelect(props: {
       >
         {selected ? (
           <>
-            <Swatch color={selected.color} />
+            <ColorSwatch color={selected.color} />
             {selected.name}
           </>
         ) : (
@@ -141,7 +104,7 @@ export function CategorySelect(props: {
                 cursor: "pointer",
               }}
             >
-              <Swatch color={c.color} />
+              <ColorSwatch color={c.color} />
               {c.name}
             </div>
           ))}

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SyncLogEntry } from "shared";
 import { apiFetch, appendUserId } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
+import { invalidateKeys } from "../lib/queryInvalidation";
 
 export function useSyncStatus() {
   const { activeUserId } = usePersonScope();
@@ -22,12 +23,13 @@ export function useTriggerSync() {
         method: "POST",
         body: JSON.stringify({ userId }),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["sync"] });
-      qc.invalidateQueries({ queryKey: ["accounts"] });
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["investments"] });
-      qc.invalidateQueries({ queryKey: ["projections"] });
-    },
+    onSuccess: () =>
+      invalidateKeys(qc, [
+        ["sync"],
+        ["accounts"],
+        ["transactions"],
+        ["investments"],
+        ["projections"],
+      ]),
   });
 }

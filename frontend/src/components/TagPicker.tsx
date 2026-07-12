@@ -1,35 +1,20 @@
-import { useEffect, useRef, useState } from "react";
 import type { Tag } from "shared";
+import { ColorSwatch } from "./ColorSwatch";
 import { useCreateTag, useTags } from "../hooks/useTags";
+import { useSearchCreatePopover } from "../hooks/useSearchCreatePopover";
 
 // A "+ Tag" action button + popover — unlike CategorySelect, this doesn't
 // display a persistent value (a group of transactions may already carry
 // mixed tags), it's a one-shot "apply this tag to everything here" action.
 export function TagPicker(props: { onPick: (tagId: number) => void }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const { data: tags } = useTags();
   const createTag = useCreateTag();
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const filtered = (tags ?? []).filter((t: Tag) =>
-    t.name.toLowerCase().includes(search.trim().toLowerCase())
-  );
-  const exactMatch = (tags ?? []).some((t) => t.name.toLowerCase() === search.trim().toLowerCase());
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  const { open, setOpen, search, setSearch, containerRef, filtered, exactMatch, close } =
+    useSearchCreatePopover<Tag>(tags ?? []);
 
   function pick(id: number) {
     props.onPick(id);
-    setOpen(false);
-    setSearch("");
+    close();
   }
 
   function handleCreate() {
@@ -92,15 +77,7 @@ export function TagPicker(props: { onPick: (tagId: number) => void }) {
                 cursor: "pointer",
               }}
             >
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  background: t.color,
-                  display: "inline-block",
-                }}
-              />
+              <ColorSwatch color={t.color} />
               {t.name}
             </div>
           ))}

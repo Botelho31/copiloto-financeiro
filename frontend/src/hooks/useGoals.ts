@@ -1,14 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Goal } from "shared";
-import { apiFetch, appendUserId } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
+import { useUserScopedList } from "./useUserScopedList";
 
 export function useGoals() {
-  const { activeUserId } = usePersonScope();
-  return useQuery({
-    queryKey: ["goals", activeUserId],
-    queryFn: () => apiFetch<Goal[]>(appendUserId("/api/goals", activeUserId)),
-  });
+  return useUserScopedList<Goal>("goals", "/api/goals");
 }
 
 export function useCreateGoal() {

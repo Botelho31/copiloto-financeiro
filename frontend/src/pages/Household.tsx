@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { ColorSwatch } from "../components/ColorSwatch";
 import { SummaryCard } from "../components/SummaryCard";
 import { SortableTh } from "../components/SortableTh";
 import { useAccounts } from "../hooks/useAccounts";
@@ -9,24 +10,8 @@ import { useSortableTable } from "../hooks/useSortableTable";
 import { useUsers } from "../hooks/useUsers";
 import { formatMoney, formatMonthLabel } from "../lib/format";
 import { computeNetWorth } from "../lib/netWorth";
+import { HOUSEHOLD_PROJECTION_HORIZON_MONTHS } from "../config";
 import type { Account, Investment, User } from "shared";
-
-const PROJECTION_HORIZON = 6;
-
-function Swatch(props: { color: string }) {
-  return (
-    <span
-      style={{
-        width: 10,
-        height: 10,
-        borderRadius: "50%",
-        background: props.color,
-        display: "inline-block",
-        flexShrink: 0,
-      }}
-    />
-  );
-}
 
 interface PersonBreakdown {
   user: User;
@@ -122,7 +107,7 @@ function PersonBreakdownTable(props: { rows: PersonBreakdown[] }) {
           <tr key={r.user.id}>
             <td>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <Swatch color={r.user.color} />
+                <ColorSwatch color={r.user.color} />
                 {r.user.name}
               </span>
             </td>
@@ -148,7 +133,7 @@ export function HouseholdPage() {
   const { data: accounts } = useAccounts();
   const { data: investments } = useInvestments();
   const { data: debts } = useDebts();
-  const { data: projections } = useProjections(PROJECTION_HORIZON);
+  const { data: projections } = useProjections(HOUSEHOLD_PROJECTION_HORIZON_MONTHS);
 
   const { bankBalance, cardBalance, netWorth } = computeNetWorth(accounts ?? [], investments ?? []);
 

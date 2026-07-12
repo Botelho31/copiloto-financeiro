@@ -1,8 +1,10 @@
-import { type FormEvent, type ReactNode, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FiCheck, FiEdit2, FiPlus, FiRefreshCw, FiTrash2, FiX } from "react-icons/fi";
+import { FiCheck, FiEdit2, FiPlus, FiRefreshCw, FiTrash2 } from "react-icons/fi";
+import { CardSpendGoalField } from "../components/CardSpendGoalField";
+import { ColorSwatch } from "../components/ColorSwatch";
+import { UserForm, type UserFormValues } from "../components/UserForm";
 import { useTriggerSync } from "../hooks/useSync";
-import { useUpdateUserSettings, useUserSettings } from "../hooks/useSettings";
 import {
   useCreateUser,
   useDeleteUser,
@@ -11,178 +13,7 @@ import {
   type NewUserInput,
   type UserUpdateInput,
 } from "../hooks/useUsers";
-import { formatMoney } from "../lib/format";
 import type { User } from "shared";
-
-const DEFAULT_COLORS = ["#5f7fbf", "#4c9a6a", "#c98a3e", "#9c5b4a", "#8c6a9c", "#5c8b99"];
-
-function Swatch(props: { color: string }) {
-  return (
-    <span
-      style={{
-        width: 12,
-        height: 12,
-        borderRadius: "50%",
-        background: props.color,
-        display: "inline-block",
-        flexShrink: 0,
-      }}
-    />
-  );
-}
-
-interface UserFormValues {
-  name: string;
-  color: string;
-  pluggyClientId: string;
-  pluggyClientSecret: string;
-  pluggyItemIds: string;
-}
-
-function UserForm(props: {
-  initial?: User;
-  submitLabel: ReactNode;
-  busy?: boolean;
-  onSubmit: (values: UserFormValues) => void;
-  onCancel?: () => void;
-}) {
-  const { t } = useTranslation("config");
-  const u = props.initial;
-  const [name, setName] = useState(u?.name ?? "");
-  const [color, setColor] = useState(u?.color ?? DEFAULT_COLORS[0]!);
-  const [pluggyClientId, setPluggyClientId] = useState("");
-  const [pluggyClientSecret, setPluggyClientSecret] = useState("");
-  const [pluggyItemIds, setPluggyItemIds] = useState(u?.pluggyItemIds.join(", ") ?? "");
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!name) return;
-    props.onSubmit({ name, color, pluggyClientId, pluggyClientSecret, pluggyItemIds });
-  }
-
-  return (
-    <form onSubmit={submit} className="grid" style={{ gap: 12 }}>
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}
-      >
-        <label>
-          {t("form.name")}
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label>
-          {t("form.color")}
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-        </label>
-      </div>
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}
-      >
-        <label>
-          {t("form.pluggyClientId")}
-          <input
-            type="text"
-            value={pluggyClientId}
-            onChange={(e) => setPluggyClientId(e.target.value)}
-            placeholder={u?.hasPluggyCredentials ? t("form.unchangedPlaceholder") : ""}
-          />
-        </label>
-        <label>
-          {t("form.pluggyClientSecret")}
-          <input
-            type="password"
-            value={pluggyClientSecret}
-            onChange={(e) => setPluggyClientSecret(e.target.value)}
-            placeholder={u?.hasPluggyCredentials ? t("form.unchangedPlaceholder") : ""}
-          />
-        </label>
-      </div>
-      <label>
-        {t("form.pluggyItemIds")}
-        <textarea
-          value={pluggyItemIds}
-          onChange={(e) => setPluggyItemIds(e.target.value)}
-          placeholder={t("form.pluggyItemIdsPlaceholder")}
-          rows={2}
-        />
-      </label>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button type="submit" disabled={props.busy}>
-          {props.submitLabel}
-        </button>
-        {props.onCancel && (
-          <button type="button" className="secondary" onClick={props.onCancel}>
-            <FiX /> {t("form.cancel")}
-          </button>
-        )}
-      </div>
-    </form>
-  );
-}
-
-function CardSpendGoalField(props: { userId: number }) {
-  const { t } = useTranslation("config");
-  const { data: settings } = useUserSettings(props.userId);
-  const updateSettings = useUpdateUserSettings(props.userId);
-  const [value, setValue] = useState("");
-  const [editing, setEditing] = useState(false);
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        className="link-button"
-        onClick={() => {
-          setValue(settings?.cardSpendGoal != null ? String(settings.cardSpendGoal) : "");
-          setEditing(true);
-        }}
-      >
-        {settings?.cardSpendGoal != null
-          ? t("table.cardSpendGoalValue", { amount: formatMoney(settings.cardSpendGoal) })
-          : t("table.cardSpendGoalUnset")}
-      </button>
-    );
-  }
-
-  return (
-    <form
-      style={{ display: "flex", gap: 6, alignItems: "center" }}
-      onSubmit={(e) => {
-        e.preventDefault();
-        updateSettings.mutate(
-          { cardSpendGoal: value === "" ? null : Number(value) },
-          { onSuccess: () => setEditing(false) }
-        );
-      }}
-    >
-      <input
-        type="number"
-        step="0.01"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        style={{ width: 110 }}
-        autoFocus
-      />
-      <button
-        type="submit"
-        className="icon"
-        disabled={updateSettings.isPending}
-        title={t("form.save")}
-      >
-        <FiCheck />
-      </button>
-      <button
-        type="button"
-        className="secondary icon"
-        onClick={() => setEditing(false)}
-        title={t("form.cancel")}
-      >
-        <FiX />
-      </button>
-    </form>
-  );
-}
 
 export function ConfigPage() {
   const { t } = useTranslation("config");
@@ -255,7 +86,7 @@ export function ConfigPage() {
                 <tr key={u.id}>
                   <td>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <Swatch color={u.color} />
+                      <ColorSwatch color={u.color} size={12} />
                       {u.name}
                     </span>
                   </td>
