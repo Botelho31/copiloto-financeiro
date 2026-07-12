@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiTrash2, FiX } from "react-icons/fi";
 import { useTranslation } from "react-i18next";
 import {
@@ -24,7 +24,7 @@ import { useBills } from "../hooks/useBills";
 import { useDebts } from "../hooks/useDebts";
 import { useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/useGoals";
 import { useProjections, useWhatIfProjection } from "../hooks/useProjections";
-import { useSettings, useUpdateSettings } from "../hooks/useSettings";
+import { useSettings } from "../hooks/useSettings";
 import { useSortableTable } from "../hooks/useSortableTable";
 import { formatMoney, moneyTooltip } from "../lib/format";
 import { periodFor, type Period } from "../lib/period";
@@ -396,7 +396,6 @@ export function ProjectionsPage() {
   const { data: bills } = useBills();
   const { data: debts } = useDebts();
   const { data: settings } = useSettings();
-  const updateSettings = useUpdateSettings();
   const whatIf = useWhatIfProjection();
 
   const [billAmounts, setBillAmounts] = useState<Record<number, number>>({});
@@ -404,17 +403,12 @@ export function ProjectionsPage() {
   const [interestRateAnnualPercent, setInterestRateAnnualPercent] = useState(
     DEFAULT_INTEREST_RATE_ANNUAL_PERCENT
   );
-  const [cardSpendGoal, setCardSpendGoal] = useState("");
-  const [cardSpendGoalTouched, setCardSpendGoalTouched] = useState(false);
-
-  // Prefill from the persisted global goal once it loads — but only until
-  // the user actually touches the field, so an in-progress edit is never
-  // clobbered by a background refetch.
-  useEffect(() => {
-    if (!cardSpendGoalTouched && settings?.cardSpendGoal != null) {
-      setCardSpendGoal(String(settings.cardSpendGoal));
-    }
-  }, [settings, cardSpendGoalTouched]);
+  // Read-only here — the card spend goal is edited from /config now (one
+  // canonical place to set it per person), not duplicated as an editable
+  // field on the planning page too. Still fed into recompute() below so
+  // other what-if scenario changes (discretionary %, interest rate) keep
+  // using the real persisted goal, not a blank default.
+  const cardSpendGoal = settings?.cardSpendGoal != null ? String(settings.cardSpendGoal) : "";
 
   const activeBills = (bills ?? []).filter((b) => b.confirmed && b.active);
   const incomeBills = activeBills.filter((b) => b.category_kind === "income");
@@ -1019,33 +1013,15 @@ export function ProjectionsPage() {
             value={formatMoney(result?.cardSpendActualAverage ?? 0)}
             tone="negative"
           />
-          <div className="summary-card">
-            <div className="label">{t("savingsChart.cardSpendGoal.label")}</div>
-            <input
-              type="number"
-              step="0.01"
-              placeholder={formatMoney(result?.cardSpendActualAverage ?? 0)}
-              value={cardSpendGoal}
-              onChange={(e) => {
-                const value = e.target.value;
-                setCardSpendGoalTouched(true);
-                setCardSpendGoal(value);
-                recompute(billAmounts, discretionaryDeltaPercent, interestRateAnnualPercent, value);
-              }}
-              onBlur={(e) => {
-                const value = e.target.value;
-                updateSettings.mutate({ cardSpendGoal: value === "" ? null : Number(value) });
-              }}
-              style={{ width: "100%", marginTop: 8 }}
-            />
-            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-              {cardSpendGoal === ""
+          <SummaryCard
+            label={t("savingsChart.cardSpendGoal.label")}
+            value={
+              cardSpendGoal === ""
                 ? t("savingsChart.cardSpendGoal.usingAverage")
-                : t("savingsChart.cardSpendGoal.saved", {
-                    amount: formatMoney(Number(cardSpendGoal)),
-                  })}
-            </div>
-          </div>
+                : formatMoney(Number(cardSpendGoal))
+            }
+            caption={t("savingsChart.cardSpendGoal.editHint")}
+          />
         </div>
         <div className="chart-container">
           <ResponsiveContainer width="100%" height="100%">

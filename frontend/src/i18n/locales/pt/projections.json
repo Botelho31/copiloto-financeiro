@@ -81,8 +81,8 @@
     },
     "cardSpendGoal": {
       "label": "Meta mensal de gasto no cartão",
-      "usingAverage": "Usando a média dos últimos 3 meses — digite um valor para definir uma meta fixa (também exibida no Painel)",
-      "saved": "Salvo como sua meta fixa: {{amount}}/mês"
+      "usingAverage": "Usando a média dos últimos 3 meses (sem meta definida)",
+      "editHint": "Definir em /config"
     },
     "netSavingsLabel": "Economia líquida",
     "breakdownToggle": "Detalhamento mensal"

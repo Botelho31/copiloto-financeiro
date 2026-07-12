@@ -81,8 +81,8 @@
     },
     "cardSpendGoal": {
       "label": "Monthly card spending goal",
-      "usingAverage": "Using the 3-month average — type a number to set a standing goal (shown on the Dashboard too)",
-      "saved": "Saved as your standing goal: {{amount}}/mo"
+      "usingAverage": "Using the 3-month average (no goal set)",
+      "editHint": "Set from /config"
     },
     "netSavingsLabel": "Net savings",
     "breakdownToggle": "Monthly breakdown"

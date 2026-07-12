@@ -56,6 +56,11 @@ A few concrete principles that follow from that:
 
 ## Setup
 
+This app only _reads_ from Pluggy — it doesn't handle connecting your bank accounts
+itself. Use [meu-pluggy](https://github.com/pluggyai/meu-pluggy) (Pluggy's own reference
+app, built on their Connect widget) to link each bank account and get the Item ID(s) you
+then paste in here per person.
+
 1. Copy `.env.example` to `.env`. The only value you actually need to set is
    `SESSION_SECRET` (any long random string, e.g. `openssl rand -hex 32`) — everything
    else in there is optional:
