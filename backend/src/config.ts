@@ -21,4 +21,21 @@ export const config = {
   port: Number(process.env.PORT ?? "3000"),
   dbPath: process.env.DB_PATH ?? "./data/budget.sqlite",
   sessionSecret: required("SESSION_SECRET"),
+
+  // Notification rule thresholds — app-wide, since a per-person override
+  // isn't worth the complexity yet (add one if it's ever actually needed).
+  largeTransactionThreshold: Number(process.env.LARGE_TRANSACTION_THRESHOLD ?? "500"),
+
+  // Pushover: one application-level token for the whole deployment (from
+  // pushover.net), paired with each person's own user key stored in
+  // notification_providers.
+  pushoverAppToken: process.env.PUSHOVER_APP_TOKEN,
+
+  // Email: one SMTP relay for the whole deployment, paired with each
+  // person's own destination address stored in notification_providers.
+  smtpHost: process.env.SMTP_HOST,
+  smtpPort: Number(process.env.SMTP_PORT ?? "587"),
+  smtpUser: process.env.SMTP_USER,
+  smtpPass: process.env.SMTP_PASS,
+  smtpFrom: process.env.SMTP_FROM,
 };

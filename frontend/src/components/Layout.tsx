@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
+import { NotificationBell } from "./NotificationBell";
 import { useUsers } from "../hooks/useUsers";
 import { logout } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
@@ -84,6 +85,7 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <PersonSwitcher />
+        <NotificationBell />
         <LanguageSwitcher />
         <form
           className="logout-form"

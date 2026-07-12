@@ -359,3 +359,32 @@ export interface SyncLogEntry {
   transactions_upserted: number;
   error: string | null;
 }
+
+export type NotificationSeverity = "info" | "warning" | "critical";
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  rule_key: string;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  data: Record<string, unknown> | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+// "pushover" and "email" are the only handlers implemented today, but the
+// column (and this type) are a free-form string on purpose — a new provider
+// is a new handler registered in services/notifications/providers, not a
+// schema or type change.
+export interface NotificationProviderConfig {
+  id: number;
+  user_id: number;
+  provider: string;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+}
+
+export type ProviderTestResult = { ok: true } | { ok: false; error: string };

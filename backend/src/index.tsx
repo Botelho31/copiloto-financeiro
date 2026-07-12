@@ -13,6 +13,7 @@ import { categoriesRoutes } from "./routes/categories";
 import { debtsRoutes } from "./routes/debts";
 import { goalsRoutes } from "./routes/goals";
 import { investmentsRoutes } from "./routes/investments";
+import { notificationsRoutes } from "./routes/notifications";
 import { projectionsRoutes } from "./routes/projections";
 import { settingsRoutes } from "./routes/settings";
 import { syncRoutes } from "./routes/sync";
@@ -47,6 +48,7 @@ const app = new Elysia()
   .use(debtsRoutes)
   .use(goalsRoutes)
   .use(investmentsRoutes)
+  .use(notificationsRoutes)
   .use(projectionsRoutes)
   .use(settingsRoutes)
   .use(syncRoutes)

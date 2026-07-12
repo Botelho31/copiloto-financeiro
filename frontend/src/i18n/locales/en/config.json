@@ -39,5 +39,12 @@
     "testingConnection": "Testing…",
     "connectionOk": "Connected",
     "connectionFailed": "Failed: {{error}}"
+  },
+  "notifications": {
+    "description": "Sent when a sync rule fires (a large transaction, a projected shortfall) — pick where this person hears about it.",
+    "pushover": "Pushover",
+    "pushoverPlaceholder": "Pushover user key",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com"
   }
 }

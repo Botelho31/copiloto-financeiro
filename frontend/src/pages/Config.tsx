@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FiCheck, FiEdit2, FiPlus, FiRefreshCw, FiTrash2 } from "react-icons/fi";
+import {
+  FiBell,
+  FiCheck,
+  FiChevronDown,
+  FiEdit2,
+  FiPlus,
+  FiRefreshCw,
+  FiTrash2,
+} from "react-icons/fi";
 import { CardSpendGoalField } from "../components/CardSpendGoalField";
 import { ColorSwatch } from "../components/ColorSwatch";
+import { NotificationProviders } from "../components/NotificationProviders";
 import { PluggyConnectionCheck } from "../components/PluggyConnectionCheck";
 import { UserForm, type UserFormValues } from "../components/UserForm";
 import { useTriggerSync } from "../hooks/useSync";
@@ -25,6 +34,7 @@ export function ConfigPage() {
   const triggerSync = useTriggerSync();
 
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [notifExpandedId, setNotifExpandedId] = useState<number | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,62 +94,86 @@ export function ConfigPage() {
                 );
               }
               return (
-                <tr key={u.id}>
-                  <td>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <ColorSwatch color={u.color} size={12} />
-                      {u.name}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      {u.hasPluggyCredentials ? (
-                        <span className="badge">
-                          {t("table.pluggyConnected", { count: u.pluggyItemIds.length })}
-                        </span>
-                      ) : (
-                        <span className="muted">{t("table.pluggyNotConnected")}</span>
-                      )}
-                      <PluggyConnectionCheck
-                        userId={u.id}
-                        hasCredentials={u.hasPluggyCredentials}
-                      />
-                    </span>
-                  </td>
-                  <td>
-                    <CardSpendGoalField userId={u.id} />
-                  </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button
-                      className="secondary icon"
-                      title={t("table.syncNow")}
-                      disabled={!u.hasPluggyCredentials || triggerSync.isPending}
-                      onClick={() => triggerSync.mutate(u.id)}
-                    >
-                      <FiRefreshCw />
-                    </button>{" "}
-                    <button
-                      className="secondary icon"
-                      title={t("table.edit")}
-                      onClick={() => setEditingId(u.id)}
-                    >
-                      <FiEdit2 />
-                    </button>{" "}
-                    <button
-                      className="danger icon"
-                      title={t("table.remove")}
-                      onClick={() => {
-                        setError(null);
-                        deleteUser.mutate(u.id, {
-                          onError: (err) =>
-                            setError(err instanceof Error ? err.message : String(err)),
-                        });
-                      }}
-                    >
-                      <FiTrash2 />
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={u.id}>
+                  <tr>
+                    <td>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <ColorSwatch color={u.color} size={12} />
+                        {u.name}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        {u.hasPluggyCredentials ? (
+                          <span className="badge">
+                            {t("table.pluggyConnected", { count: u.pluggyItemIds.length })}
+                          </span>
+                        ) : (
+                          <span className="muted">{t("table.pluggyNotConnected")}</span>
+                        )}
+                        <PluggyConnectionCheck
+                          userId={u.id}
+                          hasCredentials={u.hasPluggyCredentials}
+                        />
+                      </span>
+                    </td>
+                    <td>
+                      <CardSpendGoalField userId={u.id} />
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button
+                        className="secondary icon"
+                        title={t("table.syncNow")}
+                        disabled={!u.hasPluggyCredentials || triggerSync.isPending}
+                        onClick={() => triggerSync.mutate(u.id)}
+                      >
+                        <FiRefreshCw />
+                      </button>{" "}
+                      <button
+                        className="secondary icon"
+                        title={t("notifications.title")}
+                        onClick={() => setNotifExpandedId(notifExpandedId === u.id ? null : u.id)}
+                      >
+                        <FiBell />
+                      </button>{" "}
+                      <button
+                        className="secondary icon"
+                        title={t("table.edit")}
+                        onClick={() => setEditingId(u.id)}
+                      >
+                        <FiEdit2 />
+                      </button>{" "}
+                      <button
+                        className="danger icon"
+                        title={t("table.remove")}
+                        onClick={() => {
+                          setError(null);
+                          deleteUser.mutate(u.id, {
+                            onError: (err) =>
+                              setError(err instanceof Error ? err.message : String(err)),
+                          });
+                        }}
+                      >
+                        <FiTrash2 />
+                      </button>
+                    </td>
+                  </tr>
+                  {notifExpandedId === u.id && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: "16px 12px", background: "var(--ink)" }}>
+                        <button
+                          type="button"
+                          className="link-button"
+                          style={{ marginBottom: 8 }}
+                          onClick={() => setNotifExpandedId(null)}
+                        >
+                          <FiChevronDown /> {t("notifications.title")}: {u.name}
+                        </button>
+                        <NotificationProviders userId={u.id} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>

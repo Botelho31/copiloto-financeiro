@@ -135,13 +135,16 @@ function upsertTransaction(
   return !existing;
 }
 
-export async function runSync(user: SyncUser): Promise<{ transactionsUpserted: number }> {
+export async function runSync(
+  user: SyncUser
+): Promise<{ transactionsUpserted: number; newTransactionIds: string[] }> {
   const logId = Number(
     db.query("INSERT INTO sync_log (status, user_id) VALUES ('running', ?)").run(user.id)
       .lastInsertRowid
   );
 
   let transactionsUpserted = 0;
+  const newTransactionIds: string[] = [];
   const uncategorizedId = getUncategorizedId();
   const credentials: PluggyCredentials = {
     clientId: user.pluggyClientId,
@@ -157,7 +160,10 @@ export async function runSync(user: SyncUser): Promise<{ transactionsUpserted: n
         upsertAccount(account, user.id);
         const transactions = await fetchTransactions(account.id, credentials);
         for (const tx of transactions) {
-          if (upsertTransaction(tx, uncategorizedId, user.id)) transactionsUpserted += 1;
+          if (upsertTransaction(tx, uncategorizedId, user.id)) {
+            transactionsUpserted += 1;
+            newTransactionIds.push(tx.id);
+          }
         }
       }
 
@@ -173,7 +179,7 @@ export async function runSync(user: SyncUser): Promise<{ transactionsUpserted: n
       "UPDATE sync_log SET finished_at = datetime('now'), status = 'success', transactions_upserted = ? WHERE id = ?"
     ).run(transactionsUpserted, logId);
 
-    return { transactionsUpserted };
+    return { transactionsUpserted, newTransactionIds };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     db.query(

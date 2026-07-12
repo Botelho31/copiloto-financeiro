@@ -2,6 +2,7 @@ import { Cron } from "croner";
 import { config } from "../config";
 import { db } from "../db";
 import { runSync, type SyncUser } from "../pluggy/sync";
+import { evaluateAndDispatch } from "../services/notifications/dispatch";
 import { detectRecurringBills } from "./recurringDetection";
 import { detectSelfTransfers } from "./transferDetection";
 
@@ -48,7 +49,7 @@ export async function triggerSync(reason: string, userId?: number): Promise<{ st
     const users = usersWithPluggyCredentials().filter((u) => userId == null || u.id === userId);
     for (const user of users) {
       try {
-        const { transactionsUpserted } = await runSync(user);
+        const { transactionsUpserted, newTransactionIds } = await runSync(user);
         console.log(
           `[sync] done (${reason}) for user ${user.id}: ${transactionsUpserted} transactions upserted`
         );
@@ -61,6 +62,23 @@ export async function triggerSync(reason: string, userId?: number): Promise<{ st
         const transferPairs = detectSelfTransfers(user.id);
         if (transferPairs > 0) {
           console.log(`[sync] detected ${transferPairs} self-transfer pair(s) for user ${user.id}`);
+        }
+        // Isolated from the outer catch on purpose — a broken rule or a
+        // provider outage is a notification-delivery problem, not a sync
+        // failure, and shouldn't get logged/treated as one (the sync itself
+        // already succeeded by this point).
+        try {
+          const notificationsCreated = await evaluateAndDispatch({
+            userId: user.id,
+            newTransactionIds,
+          });
+          if (notificationsCreated > 0) {
+            console.log(
+              `[sync] created ${notificationsCreated} notification(s) for user ${user.id}`
+            );
+          }
+        } catch (error) {
+          console.error(`[sync] notification dispatch failed for user ${user.id}:`, error);
         }
       } catch (error) {
         console.error(`[sync] failed (${reason}) for user ${user.id}:`, error);
