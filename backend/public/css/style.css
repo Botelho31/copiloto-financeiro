@@ -285,6 +285,33 @@ button.icon {
   padding: 7px;
 }
 
+/* Same look as button.secondary.icon, but for an actual <a> (the settings
+   nav link) — button's element-scoped rules above don't match an anchor. */
+a.secondary.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 7px;
+  color: var(--text-muted);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+a.secondary.icon:hover {
+  background: var(--ink-raised-hover);
+  border-color: var(--text-muted);
+  color: var(--paper);
+}
+
+a.secondary.icon.active {
+  color: var(--paper);
+  border-color: var(--accent);
+}
+
 /* A collapsible section's header — reads as a heading, acts as a button. */
 button.disclosure {
   background: none;
@@ -450,6 +477,59 @@ td.money,
 .grid {
   display: grid;
   gap: 16px;
+}
+
+/* /config's side-tab shell — narrow sticky nav on the left, content on the
+   right, mirroring the topbar's active-link underline convention. */
+.config-shell {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.config-shell > nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 180px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 88px;
+}
+
+.config-shell > nav a {
+  padding: 8px 12px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+
+.config-shell > nav a:hover {
+  background: var(--ink-raised-hover);
+  color: var(--paper);
+}
+
+.config-shell > nav a.active {
+  background: var(--ink-raised);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.config-shell > .config-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .config-shell {
+    flex-direction: column;
+  }
+
+  .config-shell > nav {
+    flex-direction: row;
+    width: 100%;
+    position: static;
+    overflow-x: auto;
+  }
 }
 
 .shortfall {

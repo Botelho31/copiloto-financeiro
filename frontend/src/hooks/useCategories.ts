@@ -30,6 +30,41 @@ export function useCreateCategory() {
   });
 }
 
+export interface CategoryUpdateInput {
+  name?: string;
+  color?: string;
+  excludesFromCashflow?: boolean;
+}
+
+export function useUpdateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number; input: CategoryUpdateInput }) =>
+      apiFetch<Category[]>(`/api/categories/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["categories"] }),
+  });
+}
+
+// Reassigns the category's transactions/bills onto Uncategorized server-side
+// (see routes/categories.ts::deleteCategory) — invalidate broadly since this
+// silently changes transaction data, not just the category list.
+export function useDeleteCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<Category[]>(`/api/categories/${id}`, { method: "DELETE" }),
+    onSuccess: () =>
+      invalidateKeys(queryClient, [
+        ["categories"],
+        ["transactions"],
+        ["bills"],
+        ["categories", "uncategorized-groups"],
+      ]),
+  });
+}
+
 export function useCategoryRules() {
   return useQuery({
     queryKey: ["categories", "rules"],

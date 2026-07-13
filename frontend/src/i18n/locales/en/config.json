@@ -1,4 +1,10 @@
 {
+  "tabs": {
+    "people": "People",
+    "notifications": "Notifications",
+    "categories": "Categories",
+    "appSettings": "App Settings"
+  },
   "title": "People",
   "subtitle": "Each person has their own accounts, transactions, bills, debts and goals — Pluggy credentials live here per person, not in .env.",
   "table": {
@@ -41,10 +47,58 @@
     "connectionFailed": "Failed: {{error}}"
   },
   "notifications": {
+    "title": "Notifications",
     "description": "Sent when a sync rule fires (a large transaction, a projected shortfall) — pick where this person hears about it.",
+    "empty": "No providers added yet.",
+    "addProvider": "Add provider",
+    "selectProvider": "Select a provider…",
     "pushover": "Pushover",
     "pushoverPlaceholder": "Pushover user key",
     "email": "Email",
     "emailPlaceholder": "you@example.com"
+  },
+  "categories": {
+    "title": "Categories",
+    "subtitle": "Shared across the whole household — renaming or recoloring here updates it everywhere.",
+    "kind": "Kind",
+    "income": "Income",
+    "expense": "Expense",
+    "protected": "Uncategorized can't be deleted — it's the default fallback",
+    "addForm": {
+      "title": "Add a category",
+      "submit": "Add category"
+    }
+  },
+  "appSettings": {
+    "language": "Interface language",
+    "saved": "Saved",
+    "sync": {
+      "title": "Sync",
+      "subtitle": "Cron schedule for the daily sync, and thresholds used by notification rules and cash-flow projections.",
+      "cronSchedule": "Cron schedule",
+      "minBuffer": "Minimum balance buffer",
+      "largeTransactionThreshold": "Large transaction threshold"
+    },
+    "pushover": {
+      "title": "Pushover",
+      "subtitle": "One app-level token for the whole deployment, from pushover.net/apps/build. Each person adds their own user key from the Notifications tab.",
+      "appToken": "App token"
+    },
+    "smtp": {
+      "title": "Email (SMTP)",
+      "subtitle": "One relay for the whole deployment. Each person adds their own destination address from the Notifications tab.",
+      "host": "Host",
+      "port": "Port",
+      "user": "User",
+      "pass": "Password",
+      "from": "From address"
+    }
+  },
+  "profile": {
+    "back": "Back to People",
+    "subtitle": "Edit this person's details, Pluggy connection, and card spend goal.",
+    "notFound": "Person not found.",
+    "cardSpendGoal": "Card spend goal",
+    "dangerZone": "Actions"
   }
 }

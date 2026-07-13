@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { FiLogOut, FiSettings } from "react-icons/fi";
 import { Link, useLocation } from "react-router-dom";
 import { NotificationBell } from "./NotificationBell";
-import { useUsers } from "../hooks/useUsers";
+import { PersonSwitcher } from "./PersonSwitcher";
 import { logout } from "../lib/api";
-import { usePersonScope } from "../lib/personScope";
 
 function useNavLinks() {
   const { t } = useTranslation();
@@ -14,54 +14,7 @@ function useNavLinks() {
     { to: "/bills", label: t("nav.bills") },
     { to: "/debts", label: t("nav.debts") },
     { to: "/projections", label: t("nav.projections") },
-    { to: "/household", label: t("nav.household") },
-    { to: "/config", label: t("nav.config") },
   ];
-}
-
-function PersonSwitcher() {
-  const { t } = useTranslation();
-  const { data: users } = useUsers();
-  const { activeUserId, setActiveUserId } = usePersonScope();
-
-  return (
-    <select
-      aria-label={t("nav.person")}
-      value={activeUserId ?? "household"}
-      onChange={(e) =>
-        setActiveUserId(e.target.value === "household" ? null : Number(e.target.value))
-      }
-    >
-      <option value="household">{t("nav.household")}</option>
-      {(users ?? []).map((u) => (
-        <option key={u.id} value={u.id}>
-          {u.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function LanguageSwitcher() {
-  const { i18n, t } = useTranslation();
-  return (
-    <div className="toggle-group" aria-label={t("language.en") + " / " + t("language.pt")}>
-      <button
-        type="button"
-        className={i18n.resolvedLanguage === "pt" ? "active" : undefined}
-        onClick={() => void i18n.changeLanguage("pt")}
-      >
-        PT
-      </button>
-      <button
-        type="button"
-        className={i18n.resolvedLanguage === "en" ? "active" : undefined}
-        onClick={() => void i18n.changeLanguage("en")}
-      >
-        EN
-      </button>
-    </div>
-  );
 }
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -86,7 +39,13 @@ export function Layout({ children }: { children: ReactNode }) {
         </nav>
         <PersonSwitcher />
         <NotificationBell />
-        <LanguageSwitcher />
+        <Link
+          to="/config"
+          className={"secondary icon" + (location.pathname.startsWith("/config") ? " active" : "")}
+          title={t("nav.config")}
+        >
+          <FiSettings />
+        </Link>
         <form
           className="logout-form"
           onSubmit={(e) => {
@@ -94,8 +53,8 @@ export function Layout({ children }: { children: ReactNode }) {
             void logout();
           }}
         >
-          <button type="submit" className="link-button">
-            {t("logout")}
+          <button type="submit" className="secondary icon" title={t("logout")}>
+            <FiLogOut />
           </button>
         </form>
       </header>

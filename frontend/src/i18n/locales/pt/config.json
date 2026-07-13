@@ -1,4 +1,10 @@
 {
+  "tabs": {
+    "people": "Pessoas",
+    "notifications": "Notificações",
+    "categories": "Categorias",
+    "appSettings": "Configurações do App"
+  },
   "title": "Pessoas",
   "subtitle": "Cada pessoa tem suas próprias contas, transações, contas a pagar, dívidas e metas — as credenciais do Pluggy ficam aqui por pessoa, não no .env.",
   "table": {
@@ -41,10 +47,58 @@
     "connectionFailed": "Falhou: {{error}}"
   },
   "notifications": {
+    "title": "Notificações",
     "description": "Enviado quando uma regra de sincronização dispara (uma transação grande, um déficit projetado) — escolha por onde essa pessoa fica sabendo.",
+    "empty": "Nenhum provedor adicionado ainda.",
+    "addProvider": "Adicionar provedor",
+    "selectProvider": "Selecione um provedor…",
     "pushover": "Pushover",
     "pushoverPlaceholder": "Chave de usuário do Pushover",
     "email": "Email",
     "emailPlaceholder": "voce@exemplo.com"
+  },
+  "categories": {
+    "title": "Categorias",
+    "subtitle": "Compartilhadas por toda a família — renomear ou recolorir aqui atualiza em todo lugar.",
+    "kind": "Tipo",
+    "income": "Receita",
+    "expense": "Despesa",
+    "protected": "Uncategorized não pode ser excluída — é o destino padrão",
+    "addForm": {
+      "title": "Adicionar categoria",
+      "submit": "Adicionar categoria"
+    }
+  },
+  "appSettings": {
+    "language": "Idioma da interface",
+    "saved": "Salvo",
+    "sync": {
+      "title": "Sincronização",
+      "subtitle": "Horário do cron para a sincronização diária, e limites usados pelas regras de notificação e projeções de fluxo de caixa.",
+      "cronSchedule": "Horário do cron",
+      "minBuffer": "Buffer mínimo de saldo",
+      "largeTransactionThreshold": "Limite de transação grande"
+    },
+    "pushover": {
+      "title": "Pushover",
+      "subtitle": "Um token de app para toda a instância, obtido em pushover.net/apps/build. Cada pessoa adiciona sua própria chave de usuário na aba Notificações.",
+      "appToken": "Token do app"
+    },
+    "smtp": {
+      "title": "Email (SMTP)",
+      "subtitle": "Um relay para toda a instância. Cada pessoa adiciona seu próprio endereço de destino na aba Notificações.",
+      "host": "Host",
+      "port": "Porta",
+      "user": "Usuário",
+      "pass": "Senha",
+      "from": "Endereço de origem"
+    }
+  },
+  "profile": {
+    "back": "Voltar para Pessoas",
+    "subtitle": "Edite os dados desta pessoa, a conexão com o Pluggy e a meta de gasto no cartão.",
+    "notFound": "Pessoa não encontrada.",
+    "cardSpendGoal": "Meta de gasto no cartão",
+    "dangerZone": "Ações"
   }
 }
