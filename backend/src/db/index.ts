@@ -41,21 +41,3 @@ function runMigrations() {
 }
 
 runMigrations();
-
-// One-time bootstrap: copy the old single-tenant .env Pluggy credentials onto
-// the seeded "Me" user (id=1, see 021_users.sql) the first time they're
-// missing from the DB, so an existing deployment doesn't lose its connection
-// when upgrading to multi-user. No-ops once the user row has credentials.
-function bootstrapDefaultUserCredentials() {
-  if (!config.pluggyClientId || !config.pluggyClientSecret) return;
-  const row = db.query("SELECT pluggy_client_id FROM users WHERE id = 1").get() as {
-    pluggy_client_id: string | null;
-  } | null;
-  if (!row || row.pluggy_client_id) return;
-  db.query(
-    "UPDATE users SET pluggy_client_id = ?, pluggy_client_secret = ?, pluggy_item_ids = ? WHERE id = 1"
-  ).run(config.pluggyClientId, config.pluggyClientSecret, config.pluggyItemIds.join(","));
-  console.log("[db] bootstrapped default user's Pluggy credentials from .env");
-}
-
-bootstrapDefaultUserCredentials();

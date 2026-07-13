@@ -7,7 +7,9 @@ import { authRoutes } from "./auth/routes";
 import { config } from "./config";
 import "./db";
 import { startDailySync } from "./jobs/dailySync";
+import { seedAppConfigFromEnv } from "./services/appConfig";
 import { accountsRoutes } from "./routes/accounts";
+import { appConfigRoutes } from "./routes/appConfig";
 import { billsRoutes } from "./routes/bills";
 import { categoriesRoutes } from "./routes/categories";
 import { debtsRoutes } from "./routes/debts";
@@ -34,6 +36,7 @@ async function serveFile(path: string, set: { status?: unknown }) {
   return file;
 }
 
+seedAppConfigFromEnv(process.env);
 startDailySync();
 
 const app = new Elysia()
@@ -43,6 +46,7 @@ const app = new Elysia()
   .use(authGuard)
   .use(authRoutes)
   .use(accountsRoutes)
+  .use(appConfigRoutes)
   .use(billsRoutes)
   .use(categoriesRoutes)
   .use(debtsRoutes)

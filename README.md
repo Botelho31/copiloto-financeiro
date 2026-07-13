@@ -24,12 +24,11 @@ your money works, fork it and change the code instead of waiting for a setting.
 This app only _reads_ from Pluggy — use [meu-pluggy](https://github.com/pluggyai/meu-pluggy)
 to actually connect a bank account and get an Item ID.
 
-1. Copy `.env.example` to `.env`. Only `SESSION_SECRET` is required — everything else
-   (Pluggy bootstrap credentials, cron schedule, notification thresholds/providers) is
-   optional and documented inline.
+1. Copy `.env.example` to `.env` and set `SESSION_SECRET` (see the file for how).
 2. `bun install`
 3. `bun run dev` (backend + frontend together) — open the printed URL's `/setup` to
-   create the admin account, then add household members from `/config`.
+   create the admin account, then add household members and everything else (Pluggy
+   credentials, cron schedule, notification providers) from `/config`.
 
 ## Development
 
@@ -41,7 +40,8 @@ to actually connect a bank account and get an Item ID.
 
 After each sync, rules in `backend/src/services/notifications/rules.ts` (large
 transaction, projected shortfall) can notify a person via Pushover and/or email —
-enable and test each from `/config`. Env vars for both are in `.env.example`.
+configure the app-wide Pushover token / SMTP relay and enable each person's own
+destination from `/config`.
 
 ## Deploying
 

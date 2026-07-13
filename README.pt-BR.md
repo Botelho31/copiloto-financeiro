@@ -27,12 +27,12 @@ vez de esperar por uma configuração.
 Este app só _lê_ do Pluggy — use o [meu-pluggy](https://github.com/pluggyai/meu-pluggy)
 pra de fato conectar uma conta bancária e pegar um Item ID.
 
-1. Copie `.env.example` para `.env`. Só `SESSION_SECRET` é obrigatório — o resto
-   (credenciais de bootstrap do Pluggy, horário do cron, limites/provedores de
-   notificação) é opcional e vem documentado no próprio arquivo.
+1. Copie `.env.example` para `.env` e defina `SESSION_SECRET` (veja como no próprio
+   arquivo).
 2. `bun install`
 3. `bun run dev` (backend + frontend juntos) — acesse `/setup` na URL impressa pra
-   criar a conta de administrador, depois adicione a família em `/config`.
+   criar a conta de administrador, depois adicione a família e configure o resto
+   (credenciais do Pluggy, horário do cron, provedores de notificação) em `/config`.
 
 ## Desenvolvimento
 
@@ -44,8 +44,8 @@ pra de fato conectar uma conta bancária e pegar um Item ID.
 
 Depois de cada sincronização, regras em `backend/src/services/notifications/rules.ts`
 (transação grande, déficit projetado) podem notificar uma pessoa via Pushover e/ou
-email — habilite e teste cada uma em `/config`. As variáveis de ambiente dos dois estão
-no `.env.example`.
+email — configure o token do Pushover / relay SMTP da instância e o destino de cada
+pessoa em `/config`.
 
 ## Deploy
 

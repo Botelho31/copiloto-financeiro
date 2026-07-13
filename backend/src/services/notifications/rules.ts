@@ -1,6 +1,6 @@
 import type { NotificationSeverity } from "shared";
-import { config } from "../../config";
 import { db } from "../../db";
+import { getAppConfig } from "../appConfig";
 import { computeProjection } from "../projectionEngine";
 
 export interface NotificationDraft {
@@ -53,9 +53,10 @@ export const largeTransactionRule: NotificationRule = {
       )
       .all(...ctx.newTransactionIds, ctx.userId) as NewTransactionRow[];
 
+    const { largeTransactionThreshold } = getAppConfig();
     const drafts: NotificationDraft[] = [];
     for (const tx of rows) {
-      if (Math.abs(tx.amount) < config.largeTransactionThreshold) continue;
+      if (Math.abs(tx.amount) < largeTransactionThreshold) continue;
       drafts.push({
         ruleKey: "large_transaction",
         severity: "warning",

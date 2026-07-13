@@ -1,7 +1,7 @@
 import type { BillOverride, ProjectedMonth, ProjectionResult } from "shared";
 import { billAppliesToMonth, monthlyEquivalentAmount, pricePayment } from "shared";
-import { config } from "../config";
 import { db } from "../db";
+import { getAppConfig } from "./appConfig";
 import { listDebts } from "./debts";
 import { getSettings } from "../routes/settings";
 
@@ -510,6 +510,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
   // balance yet to point to.
   const currentCardOwed = currentCardBalance(userId);
 
+  const { minBuffer } = getAppConfig();
   let balance = startingBalance;
   const months: ProjectedMonth[] = [];
   const now = new Date();
@@ -615,7 +616,7 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
       label: `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, "0")}`,
       net,
       balance,
-      shortfall: balance < config.minBuffer,
+      shortfall: balance < minBuffer,
       bills: billLines,
       cardExpenseBills: cardExpenseLines,
     });

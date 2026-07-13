@@ -1,4 +1,4 @@
-import { config } from "../../../config";
+import { getAppConfig } from "../../appConfig";
 import type { DeliveryResult, NotificationPayload, ProviderHandler } from "./types";
 
 // Plain fetch, no SDK — Pushover's API is one form-encoded POST, matching
@@ -7,8 +7,9 @@ import type { DeliveryResult, NotificationPayload, ProviderHandler } from "./typ
 export const pushoverProvider: ProviderHandler = {
   key: "pushover",
   async send(userConfig, notification: NotificationPayload): Promise<DeliveryResult> {
-    if (!config.pushoverAppToken) {
-      return { ok: false, error: "PUSHOVER_APP_TOKEN is not configured on the server" };
+    const { pushoverAppToken } = getAppConfig();
+    if (!pushoverAppToken) {
+      return { ok: false, error: "Pushover app token is not configured (see /config)" };
     }
     const userKey = typeof userConfig.userKey === "string" ? userConfig.userKey : "";
     if (!userKey) {
@@ -19,7 +20,7 @@ export const pushoverProvider: ProviderHandler = {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        token: config.pushoverAppToken,
+        token: pushoverAppToken,
         user: userKey,
         title: notification.title,
         message: notification.body,

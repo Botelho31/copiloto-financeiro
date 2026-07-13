@@ -17,6 +17,22 @@ export interface User {
 
 export type PluggyConnectionTestResult = { ok: true } | { ok: false; error: string };
 
+// Global (not per-person) settings that used to live in .env — see
+// backend/src/services/appConfig.ts. Secrets are never serialized raw, only
+// as a hasXxx flag (same convention as User.hasPluggyCredentials); a blank
+// string on update means "leave unchanged."
+export interface AppConfig {
+  cronSchedule: string;
+  minBuffer: number;
+  largeTransactionThreshold: number;
+  hasPushoverAppToken: boolean;
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpUser: string | null;
+  smtpFrom: string | null;
+  hasSmtpPass: boolean;
+}
+
 export interface Account {
   id: string;
   name: string;

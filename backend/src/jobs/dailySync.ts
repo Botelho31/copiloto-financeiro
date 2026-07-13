@@ -1,12 +1,13 @@
 import { Cron } from "croner";
-import { config } from "../config";
 import { db } from "../db";
 import { runSync, type SyncUser } from "../pluggy/sync";
+import { getAppConfig } from "../services/appConfig";
 import { evaluateAndDispatch } from "../services/notifications/dispatch";
 import { detectRecurringBills } from "./recurringDetection";
 import { detectSelfTransfers } from "./transferDetection";
 
 let isRunning = false;
+let cronJob: Cron | null = null;
 
 interface UserRow {
   id: number;
@@ -100,7 +101,7 @@ function isStale(userId: number): boolean {
 }
 
 export function startDailySync(): void {
-  new Cron(config.cronSchedule, () => {
+  cronJob = new Cron(getAppConfig().cronSchedule, () => {
     void triggerSync("cron");
   });
 
@@ -108,4 +109,13 @@ export function startDailySync(): void {
   if (anyStale) {
     void triggerSync("startup catch-up");
   }
+}
+
+// Called after App Settings updates cronSchedule so the new schedule takes
+// effect immediately, without a process restart.
+export function rescheduleCron(): void {
+  cronJob?.stop();
+  cronJob = new Cron(getAppConfig().cronSchedule, () => {
+    void triggerSync("cron");
+  });
 }

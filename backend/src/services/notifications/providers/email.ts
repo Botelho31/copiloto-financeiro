@@ -1,20 +1,19 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import { config } from "../../../config";
+import { getAppConfig } from "../../appConfig";
 import type { DeliveryResult, NotificationPayload, ProviderHandler } from "./types";
 
-let transporter: Transporter | null = null;
-
+// Not cached across calls (unlike before) since the SMTP settings can now
+// change at runtime from App Settings — a stale cached transporter would
+// keep using the old host/credentials until a restart.
 function getTransporter(): Transporter {
-  if (!transporter) {
-    if (!config.smtpHost) throw new Error("SMTP_HOST is not configured on the server");
-    transporter = nodemailer.createTransport({
-      host: config.smtpHost,
-      port: config.smtpPort,
-      secure: config.smtpPort === 465,
-      auth: config.smtpUser ? { user: config.smtpUser, pass: config.smtpPass } : undefined,
-    });
-  }
-  return transporter;
+  const { smtpHost, smtpPort, smtpUser, smtpPass } = getAppConfig();
+  if (!smtpHost) throw new Error("SMTP host is not configured (see /config)");
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: smtpUser ? { user: smtpUser, pass: smtpPass ?? undefined } : undefined,
+  });
 }
 
 export const emailProvider: ProviderHandler = {
@@ -25,8 +24,9 @@ export const emailProvider: ProviderHandler = {
       return { ok: false, error: "Missing email address" };
     }
     try {
-      const from = config.smtpFrom ?? config.smtpUser;
-      if (!from) return { ok: false, error: "SMTP_FROM (or SMTP_USER) is not configured" };
+      const { smtpFrom, smtpUser } = getAppConfig();
+      const from = smtpFrom ?? smtpUser;
+      if (!from) return { ok: false, error: "SMTP from address is not configured (see /config)" };
       await getTransporter().sendMail({
         from,
         to,

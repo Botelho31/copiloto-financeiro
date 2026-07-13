@@ -143,6 +143,40 @@ export function updateCategory(id: number, input: CategoryUpdateInput): Category
   return listCategories();
 }
 
+// "Uncategorized" is the fallback every sync/detection job reassigns onto
+// (see categorization.ts, transferDetection.ts) — it can't be removed.
+// Deleting any other category reassigns its transactions/bills onto
+// Uncategorized and drops its rules/child links rather than blocking the
+// delete, so removing a category from the taxonomy never leaves orphaned data.
+export function deleteCategory(id: number): Category[] {
+  const category = db.query("SELECT id, name FROM categories WHERE id = ?").get(id) as {
+    id: number;
+    name: string;
+  } | null;
+  if (!category) throw new Error(`Category ${id} not found`);
+  if (category.name === "Uncategorized") {
+    throw new Error("the Uncategorized category can't be deleted");
+  }
+
+  const uncategorizedId = (
+    db.query("SELECT id FROM categories WHERE name = 'Uncategorized'").get() as { id: number }
+  ).id;
+
+  db.query("UPDATE transactions SET category_id = ? WHERE category_id = ?").run(
+    uncategorizedId,
+    id
+  );
+  db.query("UPDATE recurring_bills SET category_id = ? WHERE category_id = ?").run(
+    uncategorizedId,
+    id
+  );
+  db.query("UPDATE categories SET parent_id = NULL WHERE parent_id = ?").run(id);
+  db.query("DELETE FROM category_rules WHERE category_id = ?").run(id);
+  db.query("DELETE FROM categories WHERE id = ?").run(id);
+
+  return listCategories();
+}
+
 const NewCategoryBody = z.object({
   name: z.string().min(1),
   kind: z.string().optional(),
@@ -185,6 +219,14 @@ export const categoriesRoutes = new Elysia({ prefix: "/api/categories" })
     },
     { body: CategoryUpdateBody }
   )
+  .delete("/:id", ({ params, set }) => {
+    try {
+      return deleteCategory(Number(params.id));
+    } catch (error) {
+      set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  })
   .get("/rules", () => listRules())
   .get("/uncategorized-groups", ({ query }) => {
     const days = query.days ? Number(query.days) : DEFAULT_LOOKBACK_DAYS;

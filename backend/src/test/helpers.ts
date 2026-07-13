@@ -6,6 +6,7 @@ import { db } from "../db";
 // parent order since shared_with_user_id keeps an inline REFERENCES users(id)
 // and PRAGMA foreign_keys is ON.
 const DATA_TABLES = [
+  "app_config",
   "notification_deliveries",
   "notifications",
   "notification_providers",
