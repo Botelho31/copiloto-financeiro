@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FiPlus, FiTrash2 } from "react-icons/fi";
 import type { Category } from "shared";
+import { Dropdown } from "../components/Dropdown";
 import {
   useCategories,
   useCreateCategory,
@@ -51,15 +52,17 @@ function CategoryRow(props: { category: Category }) {
       <td className="muted">
         {props.category.kind === "income" ? t("categories.income") : t("categories.expense")}
       </td>
-      <td style={{ whiteSpace: "nowrap" }}>
-        <button
-          className="danger icon"
-          title={isProtected ? t("categories.protected") : t("table.remove")}
-          disabled={isProtected || deleteCategory.isPending}
-          onClick={() => deleteCategory.mutate(props.category.id)}
-        >
-          <FiTrash2 />
-        </button>
+      <td style={{ textAlign: "right" }}>
+        <span className="row-actions">
+          <button
+            className="danger icon"
+            title={isProtected ? t("categories.protected") : t("table.remove")}
+            disabled={isProtected || deleteCategory.isPending}
+            onClick={() => deleteCategory.mutate(props.category.id)}
+          >
+            <FiTrash2 />
+          </button>
+        </span>
       </td>
     </tr>
   );
@@ -80,46 +83,59 @@ export function ConfigCategories() {
   }
 
   return (
-    <div className="grid" style={{ gap: 24 }}>
-      <div className="card">
-        <h2>{t("categories.title")}</h2>
-        <p className="muted">{t("categories.subtitle")}</p>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 40 }} />
-              <th>{t("table.name")}</th>
-              <th>{t("categories.kind")}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {(categories ?? []).map((c) => (
-              <CategoryRow key={c.id} category={c} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <form className="card grid" style={{ gap: 12 }} onSubmit={submit}>
-        <h2>{t("categories.addForm.title")}</h2>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <label style={{ flex: 1, minWidth: 180 }}>
-            {t("table.name")}
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-          </label>
-          <label style={{ minWidth: 140 }}>
-            {t("categories.kind")}
-            <select value={kind} onChange={(e) => setKind(e.target.value as "income" | "expense")}>
-              <option value="expense">{t("categories.expense")}</option>
-              <option value="income">{t("categories.income")}</option>
-            </select>
-          </label>
-          <button type="submit" disabled={!name.trim() || createCategory.isPending}>
-            <FiPlus /> {t("categories.addForm.submit")}
-          </button>
+    <div>
+      <header className="config-header">
+        <div>
+          <h2>{t("categories.title")}</h2>
+          <p className="muted">{t("categories.subtitle")}</p>
         </div>
-      </form>
+      </header>
+
+      <div className="grid" style={{ gap: 24 }}>
+        <div className="card">
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }} />
+                <th>{t("table.name")}</th>
+                <th>{t("categories.kind")}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {(categories ?? []).map((c) => (
+                <CategoryRow key={c.id} category={c} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <form className="card grid" style={{ gap: 12 }} onSubmit={submit}>
+          <h2>{t("categories.addForm.title")}</h2>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label style={{ flex: 1, minWidth: 180 }}>
+              {t("table.name")}
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+            <label style={{ minWidth: 140 }}>
+              {t("categories.kind")}
+              <Dropdown
+                value={kind}
+                onChange={setKind}
+                placeholder={t("categories.kind")}
+                ariaLabel={t("categories.kind")}
+                options={[
+                  { value: "expense", label: t("categories.expense") },
+                  { value: "income", label: t("categories.income") },
+                ]}
+              />
+            </label>
+            <button type="submit" disabled={!name.trim() || createCategory.isPending}>
+              <FiPlus /> {t("categories.addForm.submit")}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

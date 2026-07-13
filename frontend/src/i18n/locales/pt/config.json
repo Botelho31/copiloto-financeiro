@@ -22,7 +22,7 @@
     "connectionOk": "Funcionando",
     "connectionFailed": "Falhou"
   },
-  "empty": "Ninguém cadastrado ainda — adicione a primeira pessoa abaixo.",
+  "empty": "Ninguém cadastrado ainda — use \"Adicionar pessoa\" para cadastrar a primeira.",
   "addForm": {
     "title": "Adicionar pessoa",
     "subtitle": "O nome é obrigatório; os campos do Pluggy podem ser preenchidos depois.",
@@ -51,11 +51,14 @@
     "description": "Enviado quando uma regra de sincronização dispara (uma transação grande, um déficit projetado) — escolha por onde essa pessoa fica sabendo.",
     "empty": "Nenhum provedor adicionado ainda.",
     "addProvider": "Adicionar provedor",
-    "selectProvider": "Selecione um provedor…",
     "pushover": "Pushover",
     "pushoverPlaceholder": "Chave de usuário do Pushover",
     "email": "Email",
     "emailPlaceholder": "voce@exemplo.com"
+  },
+  "providerSetup": {
+    "title": "Configuração dos provedores",
+    "subtitle": "Credenciais únicas, para toda a instância, que cada provedor precisa para conseguir enviar algo — defina uma vez aqui, depois cada pessoa acima só adiciona o próprio destino."
   },
   "categories": {
     "title": "Categorias",
@@ -70,23 +73,27 @@
     }
   },
   "appSettings": {
+    "subtitle": "Preferências de toda a família — idioma, horário de sincronização e limites de alerta.",
     "language": "Idioma da interface",
     "saved": "Salvo",
     "sync": {
       "title": "Sincronização",
       "subtitle": "Horário do cron para a sincronização diária, e limites usados pelas regras de notificação e projeções de fluxo de caixa.",
       "cronSchedule": "Horário do cron",
-      "minBuffer": "Buffer mínimo de saldo",
-      "largeTransactionThreshold": "Limite de transação grande"
+      "cronScheduleHint": "Expressão cron padrão de 5 campos (minuto hora dia mês dia-da-semana) — o padrão roda todo dia às 6h.",
+      "minBuffer": "Limite de alerta de saldo baixo",
+      "minBufferHint": "Um mês projetado com saldo abaixo deste valor é marcado como déficit, na página de Projeções e na notificação de déficit projetado.",
+      "largeTransactionThreshold": "Limite de transação grande",
+      "largeTransactionThresholdHint": "Uma transação recém-sincronizada igual ou acima deste valor (em BRL) dispara uma notificação de transação grande."
     },
     "pushover": {
       "title": "Pushover",
-      "subtitle": "Um token de app para toda a instância, obtido em pushover.net/apps/build. Cada pessoa adiciona sua própria chave de usuário na aba Notificações.",
+      "subtitle": "Um token de app para toda a instância, obtido em pushover.net/apps/build.",
       "appToken": "Token do app"
     },
     "smtp": {
       "title": "Email (SMTP)",
-      "subtitle": "Um relay para toda a instância. Cada pessoa adiciona seu próprio endereço de destino na aba Notificações.",
+      "subtitle": "Um relay para toda a instância.",
       "host": "Host",
       "port": "Porta",
       "user": "Usuário",

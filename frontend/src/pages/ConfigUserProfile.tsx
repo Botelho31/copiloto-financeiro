@@ -41,101 +41,114 @@ export function ConfigUserProfile() {
   const existing = !isNew ? (users ?? []).find((u) => u.id === Number(id)) : undefined;
 
   return (
-    <div className="grid" style={{ gap: 24 }}>
+    <div>
       <button
         type="button"
         className="link-button"
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          width: "fit-content",
+          marginBottom: 16,
+        }}
         onClick={() => navigate("/config")}
       >
         <FiArrowLeft /> {t("profile.back")}
       </button>
 
-      <div className="card">
-        <h2>{isNew ? t("addForm.title") : existing?.name}</h2>
-        <p className="muted">{isNew ? t("addForm.subtitle") : t("profile.subtitle")}</p>
-        {error && (
-          <p className="shortfall" style={{ marginBottom: 12 }}>
-            {error}
-          </p>
+      <header className="config-header">
+        <div>
+          <h2>{isNew ? t("addForm.title") : (existing?.name ?? "")}</h2>
+          <p className="muted">{isNew ? t("addForm.subtitle") : t("profile.subtitle")}</p>
+        </div>
+      </header>
+
+      {error && (
+        <p className="error" style={{ marginBottom: 12 }}>
+          {error}
+        </p>
+      )}
+
+      <div className="grid" style={{ gap: 24 }}>
+        <div className="card">
+          {!isNew && !existing ? (
+            <p className="muted">{t("profile.notFound")}</p>
+          ) : (
+            <UserForm
+              initial={existing}
+              submitLabel={
+                isNew ? (
+                  <>
+                    <FiPlus /> {t("addForm.submit")}
+                  </>
+                ) : (
+                  <>
+                    <FiCheck /> {t("editForm.submit")}
+                  </>
+                )
+              }
+              busy={isNew ? createUser.isPending : updateUser.isPending}
+              onSubmit={(values) => {
+                setError(null);
+                if (isNew) {
+                  const input: NewUserInput = {
+                    name: values.name,
+                    color: values.color,
+                    pluggyClientId: values.pluggyClientId || undefined,
+                    pluggyClientSecret: values.pluggyClientSecret || undefined,
+                    pluggyItemIds: values.pluggyItemIds || undefined,
+                  };
+                  createUser.mutate(input, {
+                    onSuccess: () => navigate("/config"),
+                    onError: (err) => setError(err instanceof Error ? err.message : String(err)),
+                  });
+                } else if (existing) {
+                  updateUser.mutate(
+                    { id: existing.id, input: buildUpdateInput(values, existing) },
+                    { onError: (err) => setError(err instanceof Error ? err.message : String(err)) }
+                  );
+                }
+              }}
+            />
+          )}
+        </div>
+
+        {!isNew && existing && (
+          <div className="card">
+            <h2>{t("profile.cardSpendGoal")}</h2>
+            <CardSpendGoalField userId={existing.id} />
+          </div>
         )}
 
-        {!isNew && !existing ? (
-          <p className="muted">{t("profile.notFound")}</p>
-        ) : (
-          <UserForm
-            initial={existing}
-            submitLabel={
-              isNew ? (
-                <>
-                  <FiPlus /> {t("addForm.submit")}
-                </>
-              ) : (
-                <>
-                  <FiCheck /> {t("editForm.submit")}
-                </>
-              )
-            }
-            busy={isNew ? createUser.isPending : updateUser.isPending}
-            onSubmit={(values) => {
-              setError(null);
-              if (isNew) {
-                const input: NewUserInput = {
-                  name: values.name,
-                  color: values.color,
-                  pluggyClientId: values.pluggyClientId || undefined,
-                  pluggyClientSecret: values.pluggyClientSecret || undefined,
-                  pluggyItemIds: values.pluggyItemIds || undefined,
-                };
-                createUser.mutate(input, {
-                  onSuccess: () => navigate("/config"),
-                  onError: (err) => setError(err instanceof Error ? err.message : String(err)),
-                });
-              } else if (existing) {
-                updateUser.mutate(
-                  { id: existing.id, input: buildUpdateInput(values, existing) },
-                  { onError: (err) => setError(err instanceof Error ? err.message : String(err)) }
-                );
-              }
-            }}
-          />
+        {!isNew && existing && (
+          <div className="card">
+            <h2>{t("profile.dangerZone")}</h2>
+            <div className="form-actions">
+              <button
+                className="secondary"
+                disabled={!existing.hasPluggyCredentials || triggerSync.isPending}
+                onClick={() => triggerSync.mutate(existing.id)}
+              >
+                <FiRefreshCw /> {t("table.syncNow")}
+              </button>
+              <button
+                className="danger"
+                disabled={deleteUser.isPending}
+                onClick={() => {
+                  setError(null);
+                  deleteUser.mutate(existing.id, {
+                    onSuccess: () => navigate("/config"),
+                    onError: (err) => setError(err instanceof Error ? err.message : String(err)),
+                  });
+                }}
+              >
+                <FiTrash2 /> {t("table.remove")}
+              </button>
+            </div>
+          </div>
         )}
       </div>
-
-      {!isNew && existing && (
-        <div className="card">
-          <h2>{t("profile.cardSpendGoal")}</h2>
-          <CardSpendGoalField userId={existing.id} />
-        </div>
-      )}
-
-      {!isNew && existing && (
-        <div className="card">
-          <h2>{t("profile.dangerZone")}</h2>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              className="secondary"
-              disabled={!existing.hasPluggyCredentials || triggerSync.isPending}
-              onClick={() => triggerSync.mutate(existing.id)}
-            >
-              <FiRefreshCw /> {t("table.syncNow")}
-            </button>
-            <button
-              className="danger"
-              disabled={deleteUser.isPending}
-              onClick={() => {
-                setError(null);
-                deleteUser.mutate(existing.id, {
-                  onSuccess: () => navigate("/config"),
-                  onError: (err) => setError(err instanceof Error ? err.message : String(err)),
-                });
-              }}
-            >
-              <FiTrash2 /> {t("table.remove")}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -22,7 +22,7 @@
     "connectionOk": "Working",
     "connectionFailed": "Failed"
   },
-  "empty": "No one set up yet — add the first person below.",
+  "empty": "No one set up yet — use \"Add person\" to add the first one.",
   "addForm": {
     "title": "Add a person",
     "subtitle": "Name is required; Pluggy fields can be filled in later.",
@@ -51,11 +51,14 @@
     "description": "Sent when a sync rule fires (a large transaction, a projected shortfall) — pick where this person hears about it.",
     "empty": "No providers added yet.",
     "addProvider": "Add provider",
-    "selectProvider": "Select a provider…",
     "pushover": "Pushover",
     "pushoverPlaceholder": "Pushover user key",
     "email": "Email",
     "emailPlaceholder": "you@example.com"
+  },
+  "providerSetup": {
+    "title": "Provider setup",
+    "subtitle": "One-time, app-wide credentials each provider needs to actually deliver anything — set once here, then each person above just adds their own destination."
   },
   "categories": {
     "title": "Categories",
@@ -70,23 +73,27 @@
     }
   },
   "appSettings": {
+    "subtitle": "Preferences for the whole household — language, sync schedule, and alert thresholds.",
     "language": "Interface language",
     "saved": "Saved",
     "sync": {
       "title": "Sync",
       "subtitle": "Cron schedule for the daily sync, and thresholds used by notification rules and cash-flow projections.",
       "cronSchedule": "Cron schedule",
-      "minBuffer": "Minimum balance buffer",
-      "largeTransactionThreshold": "Large transaction threshold"
+      "cronScheduleHint": "Standard 5-field cron expression (minute hour day month weekday) — the default runs daily at 6am.",
+      "minBuffer": "Low-balance alert threshold",
+      "minBufferHint": "A projected month with a balance below this amount is flagged as a shortfall, on the Projections page and in the projected-shortfall notification.",
+      "largeTransactionThreshold": "Large transaction threshold",
+      "largeTransactionThresholdHint": "A newly synced transaction at or above this amount (in BRL) triggers a large-transaction notification."
     },
     "pushover": {
       "title": "Pushover",
-      "subtitle": "One app-level token for the whole deployment, from pushover.net/apps/build. Each person adds their own user key from the Notifications tab.",
+      "subtitle": "One app-level token for the whole deployment, from pushover.net/apps/build.",
       "appToken": "App token"
     },
     "smtp": {
       "title": "Email (SMTP)",
-      "subtitle": "One relay for the whole deployment. Each person adds their own destination address from the Notifications tab.",
+      "subtitle": "One relay for the whole deployment.",
       "host": "Host",
       "port": "Port",
       "user": "User",

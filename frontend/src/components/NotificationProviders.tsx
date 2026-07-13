@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FiCheck, FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import { FiCheck, FiTrash2, FiX } from "react-icons/fi";
 import type { NotificationProviderConfig } from "shared";
+import { Dropdown } from "./Dropdown";
 import { useEditableField } from "../hooks/useEditableField";
 import {
   type TestProviderInput,
@@ -75,7 +76,7 @@ function ProviderRow(props: {
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div className="field-row">
       <span className="label muted" style={{ minWidth: 70 }}>
         {t(meta.labelKey)}
       </span>
@@ -116,16 +117,11 @@ function ProviderRow(props: {
       </button>
       {test.data &&
         (test.data.ok ? (
-          <span
-            style={{ color: "var(--accent)", display: "inline-flex", alignItems: "center", gap: 4 }}
-          >
+          <span className="status-ok">
             <FiCheck /> {t("form.connectionOk")}
           </span>
         ) : (
-          <span
-            className="shortfall"
-            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-          >
+          <span className="status-error">
             <FiX /> {test.data.error}
           </span>
         ))}
@@ -140,7 +136,6 @@ export function NotificationProviders(props: { userId: number }) {
   // saved yet — union'd with whatever's already configured below, so a type
   // only ever shows a row once it's either saved or deliberately added.
   const [pendingTypes, setPendingTypes] = useState<ProviderKey[]>([]);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   const configuredKeys = new Set((providers ?? []).map((p) => p.provider));
   const visibleKeys = PROVIDER_KEYS.filter(
@@ -160,40 +155,19 @@ export function NotificationProviders(props: { userId: number }) {
           onRemoved={() => setPendingTypes((prev) => prev.filter((k) => k !== key))}
         />
       ))}
-      {availableToAdd.length > 0 &&
-        (pickerOpen ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <select
-              defaultValue=""
-              autoFocus
-              onChange={(e) => {
-                setPendingTypes((prev) => [...prev, e.target.value as ProviderKey]);
-                setPickerOpen(false);
-              }}
-            >
-              <option value="" disabled>
-                {t("notifications.selectProvider")}
-              </option>
-              {availableToAdd.map((k) => (
-                <option key={k} value={k}>
-                  {t(PROVIDER_TYPES[k].labelKey)}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="secondary" onClick={() => setPickerOpen(false)}>
-              {t("form.cancel")}
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="secondary"
-            style={{ width: "fit-content" }}
-            onClick={() => setPickerOpen(true)}
-          >
-            <FiPlus /> {t("notifications.addProvider")}
-          </button>
-        ))}
+      {availableToAdd.length > 0 && (
+        <div style={{ maxWidth: 220 }}>
+          <Dropdown
+            value=""
+            placeholder={t("notifications.addProvider")}
+            onChange={(k) => setPendingTypes((prev) => [...prev, k])}
+            options={availableToAdd.map((k) => ({
+              value: k,
+              label: t(PROVIDER_TYPES[k].labelKey),
+            }))}
+          />
+        </div>
+      )}
     </div>
   );
 }

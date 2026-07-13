@@ -312,6 +312,26 @@ a.secondary.icon.active {
   border-color: var(--accent);
 }
 
+/* A link that reads as the primary button — for navigations that start an
+   action (e.g. "Add person" leading to the new-person form). */
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 7px 13px;
+  color: var(--ink);
+  font-weight: 600;
+  transition: background 120ms ease;
+}
+
+a.button:hover {
+  background: color-mix(in srgb, var(--accent) 85%, var(--paper));
+}
+
 /* A collapsible section's header — reads as a heading, acts as a button. */
 button.disclosure {
   background: none;
@@ -371,6 +391,53 @@ button.disclosure svg {
   outline-offset: -2px;
 }
 
+/* Custom dropdown (components/Dropdown) — trigger is a button.secondary;
+   these style the floating option list. */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  margin-top: 4px;
+  background: var(--ink-raised);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.dropdown-menu button:hover {
+  background: var(--ink-raised-hover);
+  color: var(--paper);
+}
+
+.dropdown-menu button.selected {
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.dropdown-menu button:focus-visible {
+  outline-offset: -2px;
+}
+
 .muted {
   color: var(--text-muted);
   font-size: 14px;
@@ -381,6 +448,58 @@ button.disclosure svg {
   color: var(--danger);
   font-size: 14px;
   margin: 0;
+}
+
+/* Shared form vocabulary — one grid for field groups, one row for actions,
+   one voice for hints and inline save/test feedback, so every settings form
+   lays out and reports back the same way. */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.status-ok,
+.status-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.status-ok {
+  color: var(--accent);
+}
+
+.status-error {
+  color: var(--danger);
+}
+
+/* Icon-button clusters at the end of a table row. */
+.row-actions {
+  display: inline-flex;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 table {
@@ -465,6 +584,23 @@ td.money,
   margin-top: -8px;
 }
 
+/* Heading + lede grouped at the top of (or between sections inside) a form
+   card — same scale as .card > h2, for when the heading can't be a direct
+   child because it sits inside the form's own grid. */
+.card-intro h2,
+.card-intro h3 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.card-intro h3 {
+  font-size: 16px;
+}
+
+.card-intro p.muted {
+  margin-top: 4px;
+}
+
 .card p.muted {
   line-height: 1.55;
   max-width: 78ch;
@@ -480,7 +616,9 @@ td.money,
 }
 
 /* /config's side-tab shell — narrow sticky nav on the left, content on the
-   right, mirroring the topbar's active-link underline convention. */
+   right. The nav hangs its tabs on a vertical rule, like the margin rule on
+   ledger paper; the active tab pins onto it with a ledger-green tick — the
+   same accent-edge language as the topbar underline and the verdict tiles. */
 .config-shell {
   display: flex;
   gap: 32px;
@@ -495,11 +633,14 @@ td.money,
   flex-shrink: 0;
   position: sticky;
   top: 88px;
+  border-left: 1px solid var(--rule);
 }
 
 .config-shell > nav a {
-  padding: 8px 12px;
-  border-radius: 3px;
+  padding: 8px 14px;
+  margin-left: -1px; /* the tab's edge sits on the rule, covering it when active */
+  border-left: 2px solid transparent;
+  border-radius: 0 3px 3px 0;
   color: var(--text-muted);
 }
 
@@ -509,6 +650,7 @@ td.money,
 }
 
 .config-shell > nav a.active {
+  border-left-color: var(--accent);
   background: var(--ink-raised);
   color: var(--paper);
   font-weight: 600;
@@ -517,6 +659,28 @@ td.money,
 .config-shell > .config-content {
   flex: 1;
   min-width: 0;
+}
+
+/* Every config tab (and the person profile page) opens with the same header:
+   serif title, one muted lede, and optionally one action on the right. */
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.config-header h2 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.config-header p.muted {
+  margin-top: 6px;
+  max-width: 64ch;
+  line-height: 1.55;
 }
 
 @media (max-width: 720px) {
@@ -529,6 +693,23 @@ td.money,
     width: 100%;
     position: static;
     overflow-x: auto;
+    gap: 4px;
+    border-left: none;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .config-shell > nav a {
+    margin-left: 0;
+    margin-bottom: -1px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 3px 3px 0 0;
+    white-space: nowrap;
+  }
+
+  .config-shell > nav a.active {
+    border-bottom-color: var(--accent);
+    background: none;
   }
 }
 

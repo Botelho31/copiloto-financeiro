@@ -57,10 +57,7 @@ export function UserForm(props: {
 
   return (
     <form onSubmit={submit} className="grid" style={{ gap: 12 }}>
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}
-      >
+      <div className="form-grid">
         <label>
           {t("form.name")}
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -70,10 +67,7 @@ export function UserForm(props: {
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
         </label>
       </div>
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}
-      >
+      <div className="form-grid">
         <label>
           {t("form.pluggyClientId")}
           <input
@@ -99,7 +93,7 @@ export function UserForm(props: {
           />
         </label>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <div className="field-row">
         <button
           type="button"
           className="secondary"
@@ -110,18 +104,11 @@ export function UserForm(props: {
         </button>
         {testConnection.data &&
           (testConnection.data.ok ? (
-            <span
-              style={{
-                color: "var(--accent)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
+            <span className="status-ok">
               <FiCheck /> {t("form.connectionOk")}
             </span>
           ) : (
-            <span className="shortfall">
+            <span className="status-error">
               {t("form.connectionFailed", { error: testConnection.data.error })}
             </span>
           ))}
