@@ -63,4 +63,31 @@ describe("migrations", () => {
     expect(schema.sql).toContain("user_id");
     expect(schema.sql).toContain("PRIMARY KEY (user_id, key)");
   });
+
+  // Checked against the migration's own SQL rather than live DB state, same
+  // reasoning as the "Me" user test above — notification_rule_settings is in
+  // DATA_TABLES now, so another test file's resetDb() elsewhere in this same
+  // shared-DB run would wipe out the seeded row before this test ever saw it.
+  test("moves large_transaction_threshold out of app_config into notification_rule_settings", async () => {
+    const sql = await Bun.file(
+      new URL("./migrations/026_notification_rule_settings.sql", import.meta.url)
+    ).text();
+    expect(sql).toContain("DELETE FROM app_config WHERE key = 'large_transaction_threshold'");
+    expect(sql).toContain("json_object('largeTransactionThreshold'");
+    expect(sql).toContain(
+      "INSERT INTO notification_rule_settings (rule_key, user_id, enabled, metadata)"
+    );
+    expect(sql).toContain("SELECT 'large_transaction', NULL, 1,");
+  });
+
+  test("notification_rule_settings allows at most one household row and one row per person, per rule", () => {
+    const schema = db
+      .query(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'notification_rule_settings'"
+      )
+      .all() as { sql: string }[];
+    const indexSql = schema.map((r) => r.sql).join("\n");
+    expect(indexSql).toContain("WHERE user_id IS NULL");
+    expect(indexSql).toContain("WHERE user_id IS NOT NULL");
+  });
 });

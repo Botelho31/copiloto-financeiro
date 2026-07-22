@@ -24,7 +24,6 @@ export type PluggyConnectionTestResult = { ok: true } | { ok: false; error: stri
 export interface AppConfig {
   cronSchedule: string;
   minBuffer: number;
-  largeTransactionThreshold: number;
   hasPushoverAppToken: boolean;
   smtpHost: string | null;
   smtpPort: number;
@@ -404,3 +403,16 @@ export interface NotificationProviderConfig {
 }
 
 export type ProviderTestResult = { ok: true } | { ok: false; error: string };
+
+// One row per (rule, scope) that's actually been saved (services/
+// notifications/rules) — userId null is the household default, a specific
+// id is that person's own override, which wins over the household default
+// for their own sync. metadata's shape is rule-specific (e.g.
+// large_transaction's threshold), validated against that rule's own zod
+// schema in the backend.
+export interface NotificationRuleSettings {
+  key: string;
+  userId: number | null;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+}

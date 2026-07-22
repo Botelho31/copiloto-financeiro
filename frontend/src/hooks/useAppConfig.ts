@@ -14,7 +14,6 @@ export function useAppConfig() {
 export interface AppConfigUpdateInput {
   cronSchedule?: string;
   minBuffer?: number;
-  largeTransactionThreshold?: number;
   pushoverAppToken?: string;
   smtpHost?: string;
   smtpPort?: number;

@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Notification, NotificationProviderConfig, ProviderTestResult } from "shared";
+import type {
+  Notification,
+  NotificationProviderConfig,
+  NotificationRuleSettings,
+  ProviderTestResult,
+} from "shared";
 import { apiFetch, appendUserId } from "../lib/api";
 import { usePersonScope } from "../lib/personScope";
 
@@ -39,7 +44,13 @@ export function useNotificationProviders(userId: number | null) {
 
 export type UpsertProviderInput =
   | { userId: number; provider: "pushover"; config: { userKey: string }; enabled?: boolean }
-  | { userId: number; provider: "email"; config: { address: string }; enabled?: boolean };
+  | { userId: number; provider: "email"; config: { address: string }; enabled?: boolean }
+  | {
+      userId: number;
+      provider: "callmebot";
+      config: { phone: string; apikey: string };
+      enabled?: boolean;
+    };
 
 export function useUpsertNotificationProvider() {
   const qc = useQueryClient();
@@ -65,7 +76,8 @@ export function useDeleteNotificationProvider() {
 export type TestProviderInput =
   | { providerId: number }
   | { provider: "pushover"; config: { userKey: string } }
-  | { provider: "email"; config: { address: string } };
+  | { provider: "email"; config: { address: string } }
+  | { provider: "callmebot"; config: { phone: string; apikey: string } };
 
 export function useTestNotificationProvider() {
   return useMutation({
@@ -74,5 +86,53 @@ export function useTestNotificationProvider() {
         method: "POST",
         body: JSON.stringify(input),
       }),
+  });
+}
+
+// Every saved row at once — household defaults (userId: null) and any
+// per-person overrides — so the settings UI can render both without a
+// round-trip per person.
+export function useNotificationRules() {
+  return useQuery({
+    queryKey: ["notification-rules"],
+    queryFn: () => apiFetch<NotificationRuleSettings[]>("/api/notifications/rules"),
+  });
+}
+
+export interface UpdateRuleInput {
+  key: string;
+  // null = the household default; a specific id = that person's own override.
+  userId: number | null;
+  input: { enabled?: boolean; metadata?: Record<string, unknown> };
+}
+
+export function useUpdateNotificationRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, userId, input }: UpdateRuleInput) =>
+      apiFetch<NotificationRuleSettings>(appendUserId(`/api/notifications/rules/${key}`, userId), {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notification-rules"] }),
+  });
+}
+
+export interface DeleteRuleOverrideInput {
+  key: string;
+  userId: number | null;
+}
+
+// Removes the row for one exact scope — a person's override falls back to
+// the household default (or schema defaults); the household row itself
+// falls back straight to schema defaults.
+export function useDeleteRuleOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, userId }: DeleteRuleOverrideInput) =>
+      apiFetch<{ ok: true }>(appendUserId(`/api/notifications/rules/${key}`, userId), {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notification-rules"] }),
   });
 }

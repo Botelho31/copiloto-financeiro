@@ -10,7 +10,6 @@ describe("getAppConfig", () => {
     expect(getAppConfig()).toMatchObject({
       cronSchedule: "0 6 * * *",
       minBuffer: 0,
-      largeTransactionThreshold: 500,
       pushoverAppToken: null,
       smtpHost: null,
       smtpPort: 587,

@@ -10,6 +10,7 @@ const DATA_TABLES = [
   "notification_deliveries",
   "notifications",
   "notification_providers",
+  "notification_rule_settings",
   "transaction_tags",
   "debt_transactions",
   "debt_links",

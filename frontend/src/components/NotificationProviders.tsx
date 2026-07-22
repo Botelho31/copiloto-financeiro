@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FiCheck, FiTrash2, FiX } from "react-icons/fi";
 import type { NotificationProviderConfig } from "shared";
 import { Dropdown } from "./Dropdown";
-import { useEditableField } from "../hooks/useEditableField";
 import {
   type TestProviderInput,
   type UpsertProviderInput,
@@ -13,39 +12,70 @@ import {
   useUpsertNotificationProvider,
 } from "../hooks/useNotifications";
 
-// One entry per backend provider (services/notifications/providers) — adding
-// a new provider type is: one more entry here (frontend) plus a handler +
-// registry entry (backend), nothing else changes.
+// One entry per backend provider (services/notifications/providers) —
+// adding a new provider type is: one more entry here (frontend) plus a
+// handler + registry entry (backend), nothing else changes. `fields`
+// describes each config key this provider needs (most need just one, e.g.
+// Pushover's user key — CallMeBot needs two: phone + apikey).
 const PROVIDER_TYPES = {
   pushover: {
     provider: "pushover",
-    fieldKey: "userKey",
     labelKey: "notifications.pushover",
-    placeholderKey: "notifications.pushoverPlaceholder",
-    inputType: "text",
+    fields: [
+      { key: "userKey", placeholderKey: "notifications.pushoverPlaceholder", inputType: "text" },
+    ],
   },
   email: {
     provider: "email",
-    fieldKey: "address",
     labelKey: "notifications.email",
-    placeholderKey: "notifications.emailPlaceholder",
-    inputType: "email",
+    fields: [
+      { key: "address", placeholderKey: "notifications.emailPlaceholder", inputType: "email" },
+    ],
+  },
+  callmebot: {
+    provider: "callmebot",
+    labelKey: "notifications.callmebot",
+    fields: [
+      { key: "phone", placeholderKey: "notifications.callmebotPhonePlaceholder", inputType: "tel" },
+      {
+        key: "apikey",
+        placeholderKey: "notifications.callmebotApikeyPlaceholder",
+        inputType: "text",
+      },
+    ],
   },
 } as const;
 
 type ProviderKey = keyof typeof PROVIDER_TYPES;
 const PROVIDER_KEYS = Object.keys(PROVIDER_TYPES) as ProviderKey[];
 
-function buildUpsertInput(userId: number, key: ProviderKey, value: string): UpsertProviderInput {
-  return key === "pushover"
-    ? { userId, provider: "pushover", config: { userKey: value } }
-    : { userId, provider: "email", config: { address: value } };
+function buildUpsertInput(
+  userId: number,
+  key: ProviderKey,
+  config: Record<string, string>
+): UpsertProviderInput {
+  if (key === "pushover")
+    return { userId, provider: "pushover", config: { userKey: config.userKey! } };
+  if (key === "email") return { userId, provider: "email", config: { address: config.address! } };
+  return {
+    userId,
+    provider: "callmebot",
+    config: { phone: config.phone!, apikey: config.apikey! },
+  };
 }
 
-function buildTestInput(key: ProviderKey, value: string): TestProviderInput {
-  return key === "pushover"
-    ? { provider: "pushover", config: { userKey: value } }
-    : { provider: "email", config: { address: value } };
+function buildTestInput(key: ProviderKey, config: Record<string, string>): TestProviderInput {
+  if (key === "pushover") return { provider: "pushover", config: { userKey: config.userKey! } };
+  if (key === "email") return { provider: "email", config: { address: config.address! } };
+  return { provider: "callmebot", config: { phone: config.phone!, apikey: config.apikey! } };
+}
+
+function savedFieldValues(
+  providerKey: ProviderKey,
+  existing: NotificationProviderConfig | undefined
+): Record<string, string> {
+  const fields = PROVIDER_TYPES[providerKey].fields;
+  return Object.fromEntries(fields.map((f) => [f.key, String(existing?.config[f.key] ?? "")]));
 }
 
 function ProviderRow(props: {
@@ -60,12 +90,21 @@ function ProviderRow(props: {
   const test = useTestNotificationProvider();
   const meta = PROVIDER_TYPES[props.providerKey];
 
-  const savedValue = (props.existing?.config[meta.fieldKey] as string | undefined) ?? "";
-  const { value, setValue, save } = useEditableField(savedValue, (v) => {
-    const trimmed = v.trim();
-    if (!trimmed || trimmed === savedValue) return;
+  const saved = savedFieldValues(props.providerKey, props.existing);
+  const [values, setValues] = useState(saved);
+  useEffect(
+    () => setValues(savedFieldValues(props.providerKey, props.existing)),
+    [props.providerKey, props.existing]
+  );
+
+  const trimmed = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()]));
+  const isComplete = meta.fields.every((f) => trimmed[f.key]);
+  const isDirty = JSON.stringify(trimmed) !== JSON.stringify(saved);
+
+  function save() {
+    if (!isComplete || !isDirty) return;
     upsert.mutate(buildUpsertInput(props.userId, props.providerKey, trimmed));
-  });
+  }
 
   function handleRemove() {
     if (props.existing) {
@@ -80,27 +119,30 @@ function ProviderRow(props: {
       <span className="label muted" style={{ minWidth: 70 }}>
         {t(meta.labelKey)}
       </span>
-      <input
-        type={meta.inputType}
-        value={value}
-        onChange={(e) => {
-          setValue(e.target.value);
-          test.reset();
-        }}
-        onBlur={save}
-        placeholder={t(meta.placeholderKey)}
-        style={{ width: 220 }}
-        autoFocus={!props.existing}
-      />
+      {meta.fields.map((field, i) => (
+        <input
+          key={field.key}
+          type={field.inputType}
+          value={values[field.key] ?? ""}
+          onChange={(e) => {
+            setValues((v) => ({ ...v, [field.key]: e.target.value }));
+            test.reset();
+          }}
+          onBlur={save}
+          placeholder={t(field.placeholderKey)}
+          style={{ width: meta.fields.length > 1 ? 150 : 220 }}
+          autoFocus={i === 0 && !props.existing}
+        />
+      ))}
       <button
         type="button"
         className="secondary"
-        disabled={!value.trim() || test.isPending}
+        disabled={!isComplete || test.isPending}
         onClick={() =>
           test.mutate(
-            props.existing && savedValue === value.trim()
+            props.existing && !isDirty
               ? { providerId: props.existing.id }
-              : buildTestInput(props.providerKey, value.trim())
+              : buildTestInput(props.providerKey, trimmed)
           )
         }
       >

@@ -11,14 +11,12 @@ export function ConfigAppSettings() {
 
   const [cronSchedule, setCronSchedule] = useState("");
   const [minBuffer, setMinBuffer] = useState("");
-  const [largeTransactionThreshold, setLargeTransactionThreshold] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!appConfig) return;
     setCronSchedule(appConfig.cronSchedule);
     setMinBuffer(String(appConfig.minBuffer));
-    setLargeTransactionThreshold(String(appConfig.largeTransactionThreshold));
   }, [appConfig]);
 
   function submit(e: FormEvent) {
@@ -26,7 +24,6 @@ export function ConfigAppSettings() {
     const input: AppConfigUpdateInput = {
       cronSchedule,
       minBuffer: Number(minBuffer),
-      largeTransactionThreshold: Number(largeTransactionThreshold),
     };
     setSaved(false);
     updateAppConfig.mutate(input, { onSuccess: () => setSaved(true) });
@@ -72,16 +69,6 @@ export function ConfigAppSettings() {
                 onChange={(e) => setMinBuffer(e.target.value)}
               />
               <span className="hint">{t("appSettings.sync.minBufferHint")}</span>
-            </label>
-            <label>
-              {t("appSettings.sync.largeTransactionThreshold")}
-              <input
-                type="number"
-                step="0.01"
-                value={largeTransactionThreshold}
-                onChange={(e) => setLargeTransactionThreshold(e.target.value)}
-              />
-              <span className="hint">{t("appSettings.sync.largeTransactionThresholdHint")}</span>
             </label>
           </div>
 

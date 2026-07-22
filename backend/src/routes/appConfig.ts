@@ -11,7 +11,6 @@ export function getPublicAppConfig(): AppConfig {
   return {
     cronSchedule: full.cronSchedule,
     minBuffer: full.minBuffer,
-    largeTransactionThreshold: full.largeTransactionThreshold,
     hasPushoverAppToken: full.pushoverAppToken != null,
     smtpHost: full.smtpHost,
     smtpPort: full.smtpPort,
@@ -24,7 +23,6 @@ export function getPublicAppConfig(): AppConfig {
 export const AppConfigUpdateBody = z.object({
   cronSchedule: z.string().min(1).optional(),
   minBuffer: z.number().optional(),
-  largeTransactionThreshold: z.number().optional(),
   pushoverAppToken: z.string().optional(),
   smtpHost: z.string().optional(),
   smtpPort: z.number().optional(),

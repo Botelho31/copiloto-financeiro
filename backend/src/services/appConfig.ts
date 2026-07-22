@@ -6,7 +6,6 @@ import { db } from "../db";
 export interface AppConfigValues {
   cronSchedule: string;
   minBuffer: number;
-  largeTransactionThreshold: number;
   pushoverAppToken: string | null;
   smtpHost: string | null;
   smtpPort: number;
@@ -18,7 +17,6 @@ export interface AppConfigValues {
 const DEFAULTS: AppConfigValues = {
   cronSchedule: "0 6 * * *",
   minBuffer: 0,
-  largeTransactionThreshold: 500,
   pushoverAppToken: null,
   smtpHost: null,
   smtpPort: 587,
@@ -31,7 +29,6 @@ const DEFAULTS: AppConfigValues = {
 const FIELD_TO_KEY: Record<keyof AppConfigValues, string> = {
   cronSchedule: "cron_schedule",
   minBuffer: "min_buffer",
-  largeTransactionThreshold: "large_transaction_threshold",
   pushoverAppToken: "pushover_app_token",
   smtpHost: "smtp_host",
   smtpPort: "smtp_port",
@@ -40,11 +37,7 @@ const FIELD_TO_KEY: Record<keyof AppConfigValues, string> = {
   smtpFrom: "smtp_from",
 };
 
-const NUMERIC_FIELDS = new Set<keyof AppConfigValues>([
-  "minBuffer",
-  "largeTransactionThreshold",
-  "smtpPort",
-]);
+const NUMERIC_FIELDS = new Set<keyof AppConfigValues>(["minBuffer", "smtpPort"]);
 
 export function getAppConfig(): AppConfigValues {
   const rows = db.query("SELECT key, value FROM app_config").all() as {
@@ -92,8 +85,6 @@ export function seedAppConfigFromEnv(env: NodeJS.ProcessEnv): void {
   const fromEnv: Partial<AppConfigValues> = {
     cronSchedule: env.CRON_SCHEDULE,
     minBuffer: env.MIN_BUFFER != null ? Number(env.MIN_BUFFER) : undefined,
-    largeTransactionThreshold:
-      env.LARGE_TRANSACTION_THRESHOLD != null ? Number(env.LARGE_TRANSACTION_THRESHOLD) : undefined,
     pushoverAppToken: env.PUSHOVER_APP_TOKEN,
     smtpHost: env.SMTP_HOST,
     smtpPort: env.SMTP_PORT != null ? Number(env.SMTP_PORT) : undefined,

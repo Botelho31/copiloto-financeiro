@@ -1,9 +1,15 @@
 import { Elysia } from "elysia";
 import { z } from "zod";
-import type { Notification, NotificationProviderConfig, ProviderTestResult } from "shared";
+import type {
+  Notification,
+  NotificationProviderConfig,
+  NotificationRuleSettings,
+  ProviderTestResult,
+} from "shared";
 import { db } from "../db";
 import { parseUserId } from "../lib/scope";
 import { PROVIDER_HANDLERS } from "../services/notifications/providers";
+import { deleteRuleRow, listRuleRows, upsertRuleSettings } from "../services/notifications/rules";
 
 interface NotificationRow {
   id: number;
@@ -84,6 +90,7 @@ export function listNotificationProviders(userId: number): NotificationProviderC
 const ProviderConfigSchemas = {
   pushover: z.object({ userKey: z.string().min(1) }),
   email: z.object({ address: z.string().email() }),
+  callmebot: z.object({ phone: z.string().min(1), apikey: z.string().min(1) }),
 } as const;
 
 export const UpsertProviderBody = z.union([
@@ -97,6 +104,12 @@ export const UpsertProviderBody = z.union([
     userId: z.number().int(),
     provider: z.literal("email"),
     config: ProviderConfigSchemas.email,
+    enabled: z.boolean().optional(),
+  }),
+  z.object({
+    userId: z.number().int(),
+    provider: z.literal("callmebot"),
+    config: ProviderConfigSchemas.callmebot,
     enabled: z.boolean().optional(),
   }),
 ]);
@@ -128,6 +141,7 @@ export const TestProviderBody = z.union([
   z.object({ providerId: z.number().int() }),
   z.object({ provider: z.literal("pushover"), config: ProviderConfigSchemas.pushover }),
   z.object({ provider: z.literal("email"), config: ProviderConfigSchemas.email }),
+  z.object({ provider: z.literal("callmebot"), config: ProviderConfigSchemas.callmebot }),
 ]);
 export type TestProviderInput = z.infer<typeof TestProviderBody>;
 
@@ -157,6 +171,27 @@ export async function testNotificationProvider(
   return result.ok ? { ok: true } : { ok: false, error: result.error ?? "Unknown error" };
 }
 
+// Every row that actually exists — household defaults (userId: null) and
+// any per-person overrides — so the settings UI can render both at once
+// without a round-trip per person.
+export function listRuleSettings(): NotificationRuleSettings[] {
+  return listRuleRows();
+}
+
+export const UpdateRuleSettingsBody = z.object({
+  enabled: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+export type UpdateRuleSettingsInput = z.infer<typeof UpdateRuleSettingsBody>;
+
+export function updateRuleSettingsForKey(
+  ruleKey: string,
+  userId: number | null,
+  input: UpdateRuleSettingsInput
+): NotificationRuleSettings {
+  return upsertRuleSettings(ruleKey, userId, input);
+}
+
 export const notificationsRoutes = new Elysia({ prefix: "/api/notifications" })
   .get("/", ({ query }) => listNotifications(parseUserId(query), query.unreadOnly === "true"))
   .post("/:id/read", ({ params }) => {
@@ -180,4 +215,26 @@ export const notificationsRoutes = new Elysia({ prefix: "/api/notifications" })
   })
   .post("/providers/test", ({ body }) => testNotificationProvider(body), {
     body: TestProviderBody,
+  })
+  .get("/rules", () => listRuleSettings())
+  .patch(
+    "/rules/:key",
+    ({ params, query, body, set }) => {
+      try {
+        return updateRuleSettingsForKey(params.key, parseUserId(query), body);
+      } catch (e) {
+        set.status = 400;
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+    { body: UpdateRuleSettingsBody }
+  )
+  .delete("/rules/:key", ({ params, query, set }) => {
+    try {
+      deleteRuleRow(params.key, parseUserId(query));
+      return { ok: true };
+    } catch (e) {
+      set.status = 400;
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
   });

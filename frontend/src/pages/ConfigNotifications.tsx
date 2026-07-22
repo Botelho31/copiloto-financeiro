@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ColorSwatch } from "../components/ColorSwatch";
 import { NotificationProviders } from "../components/NotificationProviders";
+import {
+  NotificationRuleDefaults,
+  NotificationRuleOverrides,
+} from "../components/NotificationRules";
 import { ProviderSetup } from "../components/ProviderSetup";
 import { useUsers } from "../hooks/useUsers";
 
@@ -24,12 +28,16 @@ export function ConfigNotifications() {
       </header>
 
       <div className="grid" style={{ gap: 24 }}>
-        <div className="card">
-          {(users ?? []).length === 0 ? (
+        <NotificationRuleDefaults />
+
+        {(users ?? []).length === 0 ? (
+          <div className="card">
             <p className="muted">{t("empty")}</p>
-          ) : (
-            <>
-              <div className="toggle-group" style={{ marginBottom: 16 }}>
+          </div>
+        ) : (
+          <>
+            <div className="card">
+              <div className="toggle-group">
                 {(users ?? []).map((u) => (
                   <button
                     key={u.id}
@@ -43,10 +51,29 @@ export function ConfigNotifications() {
                   </button>
                 ))}
               </div>
-              {selectedId != null && <NotificationProviders userId={selectedId} />}
-            </>
-          )}
-        </div>
+            </div>
+
+            {selectedId != null && (
+              <>
+                <div className="card">
+                  <h2>{t("notifications.rules.perPersonTitle")}</h2>
+                  <p className="muted">{t("notifications.rules.perPersonSubtitle")}</p>
+                  <div style={{ marginTop: 16 }}>
+                    <NotificationRuleOverrides userId={selectedId} />
+                  </div>
+                </div>
+
+                <div className="card">
+                  <h2>{t("notifications.destinationsTitle")}</h2>
+                  <p className="muted">{t("notifications.destinationsSubtitle")}</p>
+                  <div style={{ marginTop: 16 }}>
+                    <NotificationProviders userId={selectedId} />
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
 
         <ProviderSetup />
       </div>
