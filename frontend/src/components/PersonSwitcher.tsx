@@ -32,6 +32,10 @@ export function PersonSwitcher() {
     setOpen(false);
   }
 
+  // With a single person, Household and "that person" are the same set —
+  // a toggle with only one meaningful choice is just clutter.
+  if ((users ?? []).length <= 1) return null;
+
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
       <button
