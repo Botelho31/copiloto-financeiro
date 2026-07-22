@@ -3,7 +3,7 @@
     "people": "People",
     "notifications": "Notifications",
     "categories": "Categories",
-    "appSettings": "App Settings"
+    "appSettings": "General"
   },
   "title": "People",
   "subtitle": "Each person has their own accounts, transactions, bills, debts and goals — Pluggy credentials live here per person, not in .env.",
@@ -49,12 +49,38 @@
   "notifications": {
     "title": "Notifications",
     "description": "Sent when a sync rule fires (a large transaction, a projected shortfall) — pick where this person hears about it.",
+    "destinationsTitle": "Delivery",
+    "destinationsSubtitle": "Where this person hears about it.",
     "empty": "No providers added yet.",
     "addProvider": "Add provider",
     "pushover": "Pushover",
     "pushoverPlaceholder": "Pushover user key",
     "email": "Email",
-    "emailPlaceholder": "you@example.com"
+    "emailPlaceholder": "you@example.com",
+    "callmebot": "CallMeBot (WhatsApp)",
+    "callmebotPhonePlaceholder": "Phone with country code, e.g. 15551234567",
+    "callmebotApikeyPlaceholder": "API key",
+    "rules": {
+      "title": "Notification rules",
+      "subtitle": "Household defaults — anyone without their own override gets these.",
+      "perPersonTitle": "Overrides for this person",
+      "perPersonSubtitle": "Only affects this person — everyone else keeps using the household default above.",
+      "usingHouseholdDefault": "Using the household default",
+      "on": "on",
+      "off": "off",
+      "customize": "Customize for this person",
+      "removeOverride": "Remove override",
+      "largeTransaction": {
+        "label": "Large transaction",
+        "description": "Fires when a newly synced transaction is at or above the threshold.",
+        "threshold": "Threshold (BRL)",
+        "thresholdHint": "A transaction at or above this amount triggers this notification."
+      },
+      "projectedShortfall": {
+        "label": "Projected shortfall",
+        "description": "Fires when next month's cash-flow projection goes negative."
+      }
+    }
   },
   "providerSetup": {
     "title": "Provider setup",
@@ -72,6 +98,18 @@
       "submit": "Add category"
     }
   },
+  "categoryRules": {
+    "title": "Category rules",
+    "description": "Auto-applied to every new transaction at sync time, matched in insertion order against the normalized description. Created whenever you (or the assistant, via MCP) categorize a group or reclassify a pattern — or add one yourself below. Adding a rule here only affects future transactions; it doesn't retroactively reclassify existing ones.",
+    "matchText": "Match text",
+    "matchTextPlaceholder": "e.g. netflix",
+    "categoryPlaceholder": "Choose category…",
+    "addRule": "Add rule",
+    "searchPlaceholder": "Search rules by match text or category…",
+    "noResultsForSearch": "No rules match your search.",
+    "noRules": "No rules yet.",
+    "deleteTitle": "Delete"
+  },
   "appSettings": {
     "subtitle": "Preferences for the whole household — language, sync schedule, and alert thresholds.",
     "language": "Interface language",
@@ -82,9 +120,7 @@
       "cronSchedule": "Cron schedule",
       "cronScheduleHint": "Standard 5-field cron expression (minute hour day month weekday) — the default runs daily at 6am.",
       "minBuffer": "Low-balance alert threshold",
-      "minBufferHint": "A projected month with a balance below this amount is flagged as a shortfall, on the Projections page and in the projected-shortfall notification.",
-      "largeTransactionThreshold": "Large transaction threshold",
-      "largeTransactionThresholdHint": "A newly synced transaction at or above this amount (in BRL) triggers a large-transaction notification."
+      "minBufferHint": "A projected month with a balance below this amount is flagged as a shortfall, on the Projections page and in the projected-shortfall notification."
     },
     "pushover": {
       "title": "Pushover",

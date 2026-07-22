@@ -18,18 +18,6 @@
     "assignTo": "Assign to",
     "choosePlaceholder": "Choose category…"
   },
-  "rules": {
-    "title": "Category rules",
-    "description": "Auto-applied to every new transaction at sync time, matched in insertion order against the normalized description. Created whenever you (or the assistant, via MCP) categorize a group or reclassify a pattern — or add one yourself below. Adding a rule here only affects future transactions; it doesn't retroactively reclassify existing ones.",
-    "matchText": "Match text",
-    "matchTextPlaceholder": "e.g. netflix",
-    "categoryPlaceholder": "Choose category…",
-    "addRule": "Add rule",
-    "searchPlaceholder": "Search rules by match text or category…",
-    "noResultsForSearch": "No rules match your search.",
-    "noRules": "No rules yet.",
-    "deleteTitle": "Delete"
-  },
   "search": {
     "title": "Search & categorize",
     "description": "Search across all transactions, any period — a fast way to label a vendor everywhere at once.",

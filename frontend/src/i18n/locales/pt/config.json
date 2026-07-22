@@ -3,7 +3,7 @@
     "people": "Pessoas",
     "notifications": "Notificações",
     "categories": "Categorias",
-    "appSettings": "Configurações do App"
+    "appSettings": "Geral"
   },
   "title": "Pessoas",
   "subtitle": "Cada pessoa tem suas próprias contas, transações, contas a pagar, dívidas e metas — as credenciais do Pluggy ficam aqui por pessoa, não no .env.",
@@ -49,12 +49,38 @@
   "notifications": {
     "title": "Notificações",
     "description": "Enviado quando uma regra de sincronização dispara (uma transação grande, um déficit projetado) — escolha por onde essa pessoa fica sabendo.",
+    "destinationsTitle": "Envio",
+    "destinationsSubtitle": "Por onde essa pessoa fica sabendo.",
     "empty": "Nenhum provedor adicionado ainda.",
     "addProvider": "Adicionar provedor",
     "pushover": "Pushover",
     "pushoverPlaceholder": "Chave de usuário do Pushover",
     "email": "Email",
-    "emailPlaceholder": "voce@exemplo.com"
+    "emailPlaceholder": "voce@exemplo.com",
+    "callmebot": "CallMeBot (WhatsApp)",
+    "callmebotPhonePlaceholder": "Telefone com código do país, ex.: 5511999999999",
+    "callmebotApikeyPlaceholder": "Chave de API",
+    "rules": {
+      "title": "Regras de notificação",
+      "subtitle": "Padrões da família — quem não tiver personalização própria usa estes.",
+      "perPersonTitle": "Personalizações desta pessoa",
+      "perPersonSubtitle": "Afeta só esta pessoa — todo o resto continua usando o padrão da família acima.",
+      "usingHouseholdDefault": "Usando o padrão da família",
+      "on": "ativado",
+      "off": "desativado",
+      "customize": "Personalizar para esta pessoa",
+      "removeOverride": "Remover personalização",
+      "largeTransaction": {
+        "label": "Transação grande",
+        "description": "Dispara quando uma transação recém-sincronizada é igual ou acima do limite.",
+        "threshold": "Limite (BRL)",
+        "thresholdHint": "Uma transação igual ou acima deste valor dispara esta notificação."
+      },
+      "projectedShortfall": {
+        "label": "Déficit projetado",
+        "description": "Dispara quando a projeção de fluxo de caixa do próximo mês fica negativa."
+      }
+    }
   },
   "providerSetup": {
     "title": "Configuração dos provedores",
@@ -72,6 +98,18 @@
       "submit": "Adicionar categoria"
     }
   },
+  "categoryRules": {
+    "title": "Regras de categorização",
+    "description": "Aplicada automaticamente a cada nova transação na sincronização, comparando em ordem de inserção com a descrição normalizada. Criada sempre que você (ou o assistente, via MCP) categoriza um grupo ou reclassifica um padrão — ou adiciona uma regra manualmente abaixo. Adicionar uma regra aqui afeta só as transações futuras; não reclassifica retroativamente as que já existem.",
+    "matchText": "Texto de correspondência",
+    "matchTextPlaceholder": "ex.: netflix",
+    "categoryPlaceholder": "Escolher categoria…",
+    "addRule": "Adicionar regra",
+    "searchPlaceholder": "Buscar regras por texto ou categoria…",
+    "noResultsForSearch": "Nenhuma regra corresponde à sua busca.",
+    "noRules": "Nenhuma regra ainda.",
+    "deleteTitle": "Excluir"
+  },
   "appSettings": {
     "subtitle": "Preferências de toda a família — idioma, horário de sincronização e limites de alerta.",
     "language": "Idioma da interface",
@@ -82,9 +120,7 @@
       "cronSchedule": "Horário do cron",
       "cronScheduleHint": "Expressão cron padrão de 5 campos (minuto hora dia mês dia-da-semana) — o padrão roda todo dia às 6h.",
       "minBuffer": "Limite de alerta de saldo baixo",
-      "minBufferHint": "Um mês projetado com saldo abaixo deste valor é marcado como déficit, na página de Projeções e na notificação de déficit projetado.",
-      "largeTransactionThreshold": "Limite de transação grande",
-      "largeTransactionThresholdHint": "Uma transação recém-sincronizada igual ou acima deste valor (em BRL) dispara uma notificação de transação grande."
+      "minBufferHint": "Um mês projetado com saldo abaixo deste valor é marcado como déficit, na página de Projeções e na notificação de déficit projetado."
     },
     "pushover": {
       "title": "Pushover",
