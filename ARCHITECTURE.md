@@ -322,26 +322,24 @@ repo's `.claude/` setup call these tools rather than hitting HTTP.
 
 ```mermaid
 flowchart LR
-    subgraph Home["Home server (CasaOS)"]
-        subgraph Container["Docker container :3000 -> host :8080"]
+    subgraph Server["Your server"]
+        subgraph Container["Docker container :3000 -> host port"]
             App["bun run start<br>(Elysia + built SPA)"]
         end
         Volume[("./data bind mount<br>budget.sqlite")]
         App --- Volume
     end
 
-    subgraph Cloud["Oracle Cloud box"]
-        Caddy["Caddy<br>reverse_proxy + TLS termination"]
-    end
+    ReverseProxy["Reverse proxy<br>TLS termination"]
 
-    Internet(("Internet")) -->|"HTTPS"| Caddy
-    Caddy -->|"WireGuard tunnel"| Home
-    Home -->|"outbound only"| PluggyAPI["Pluggy API"]
+    Internet(("Internet")) -->|"HTTPS"| ReverseProxy
+    ReverseProxy --> Server
+    Server -->|"outbound only"| PluggyAPI["Pluggy API"]
 ```
 
 Single `Dockerfile` builds the whole monorepo (`bun install --frozen-lockfile` →
 `bun run build`) into one image; `docker-compose.yml` runs it with the SQLite file on a
-bind-mounted volume so data survives container rebuilds. The app itself is never
-directly internet-facing — it sits behind a Caddy reverse proxy reached over WireGuard,
-and relies on its own login + rate limiting as defense-in-depth rather than DDoS/exposure
-hardening.
+bind-mounted volume so data survives container rebuilds. The app itself is never meant
+to be directly internet-facing — put it behind whatever reverse proxy you already run,
+and it relies on its own login + rate limiting as defense-in-depth rather than
+DDoS/exposure hardening.
