@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Category, Transaction } from "shared";
-import { CategoryRulesPanel } from "../components/CategoryRulesPanel";
 import { CategorySelect } from "../components/CategorySelect";
 import { GroupedTransactionList } from "../components/GroupedTransactionList";
 import { PeriodPicker } from "../components/PeriodPicker";
@@ -201,8 +200,6 @@ export function TransactionsPage() {
           />
         </div>
       )}
-
-      <CategoryRulesPanel categories={categories ?? []} />
 
       <div className="card">
         <h2>{t("search.title")}</h2>

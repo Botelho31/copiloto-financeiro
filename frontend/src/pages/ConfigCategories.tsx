@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FiPlus, FiTrash2 } from "react-icons/fi";
 import type { Category } from "shared";
+import { CategoryRulesPanel } from "../components/CategoryRulesPanel";
 import { Dropdown } from "../components/Dropdown";
 import {
   useCategories,
@@ -135,6 +136,8 @@ export function ConfigCategories() {
             </button>
           </div>
         </form>
+
+        <CategoryRulesPanel categories={categories ?? []} />
       </div>
     </div>
   );

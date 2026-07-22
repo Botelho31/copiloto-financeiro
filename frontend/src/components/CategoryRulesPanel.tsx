@@ -12,7 +12,7 @@ import {
 import { useSortableTable } from "../hooks/useSortableTable";
 
 export function CategoryRulesPanel(props: { categories: Category[] }) {
-  const { t } = useTranslation(["transactions", "common"]);
+  const { t } = useTranslation(["config", "common"]);
   const { data: rules } = useCategoryRules();
   const deleteRule = useDeleteCategoryRule();
   const createRule = useCreateCategoryRule();
@@ -45,7 +45,7 @@ export function CategoryRulesPanel(props: { categories: Category[] }) {
   return (
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>{t("rules.title")}</h2>
+        <h2 style={{ margin: 0 }}>{t("categoryRules.title")}</h2>
         <button className="link-button" onClick={() => setOpen((o) => !o)}>
           {open ? <FiChevronDown /> : <FiChevronRight />} ({rules?.length ?? 0})
         </button>
@@ -53,7 +53,7 @@ export function CategoryRulesPanel(props: { categories: Category[] }) {
       {open && (
         <>
           <p className="muted" style={{ marginTop: 12 }}>
-            {t("rules.description")}
+            {t("categoryRules.description")}
           </p>
 
           <form
@@ -67,10 +67,10 @@ export function CategoryRulesPanel(props: { categories: Category[] }) {
             }}
           >
             <label>
-              {t("rules.matchText")}
+              {t("categoryRules.matchText")}
               <input
                 type="text"
-                placeholder={t("rules.matchTextPlaceholder")}
+                placeholder={t("categoryRules.matchTextPlaceholder")}
                 value={newMatchText}
                 onChange={(e) => setNewMatchText(e.target.value)}
               />
@@ -80,18 +80,18 @@ export function CategoryRulesPanel(props: { categories: Category[] }) {
               <CategorySelect
                 categories={props.categories}
                 value={newCategoryId}
-                placeholder={t("rules.categoryPlaceholder")}
+                placeholder={t("categoryRules.categoryPlaceholder")}
                 onChange={setNewCategoryId}
               />
             </label>
             <button type="submit">
-              <FiPlus /> {t("rules.addRule")}
+              <FiPlus /> {t("categoryRules.addRule")}
             </button>
           </form>
 
           <input
             type="text"
-            placeholder={t("rules.searchPlaceholder")}
+            placeholder={t("categoryRules.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ width: "100%", maxWidth: 420, marginBottom: 12 }}
@@ -99,14 +99,14 @@ export function CategoryRulesPanel(props: { categories: Category[] }) {
 
           {sorted.length === 0 ? (
             <p className="muted">
-              {search.trim() ? t("rules.noResultsForSearch") : t("rules.noRules")}
+              {search.trim() ? t("categoryRules.noResultsForSearch") : t("categoryRules.noRules")}
             </p>
           ) : (
             <table>
               <thead>
                 <tr>
                   <SortableTh
-                    label={t("rules.matchText")}
+                    label={t("categoryRules.matchText")}
                     sortKey="matchText"
                     activeKey={sortKey}
                     direction={direction}
@@ -131,7 +131,7 @@ export function CategoryRulesPanel(props: { categories: Category[] }) {
                       <button
                         className="danger icon"
                         onClick={() => deleteRule.mutate(r.id)}
-                        title={t("rules.deleteTitle")}
+                        title={t("categoryRules.deleteTitle")}
                       >
                         <FiTrash2 />
                       </button>
