@@ -21,7 +21,10 @@ além disso; bifurque e mude o código se algo não bater com o seu dinheiro.
 
 ## Configuração
 
-Rode `/get-started` no Claude Code pra um passo a passo guiado. Versão manual:
+O jeito mais simples: mande o link deste repositório pro Claude Code e peça pra ele
+configurar — ele cuida de tudo (`/get-started`).
+
+Prefere fazer à mão?
 
 1. `bun install`, depois copie `.env.example` pra `.env` (os padrões já servem).
 2. `bun run dev`, acesse a URL impressa e defina uma senha. Isso criptografa o banco

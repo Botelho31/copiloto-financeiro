@@ -20,7 +20,10 @@ change the code if something doesn't fit how your money works.
 
 ## Setup
 
-Run `/get-started` in Claude Code for a guided walkthrough. Manual version:
+Simplest way: send this repo's link to Claude Code and ask it to set things up — it
+handles everything (`/get-started`).
+
+Prefer doing it by hand?
 
 1. `bun install`, then copy `.env.example` to `.env` (the defaults are fine).
 2. `bun run dev`, open the printed URL, and set a password. This encrypts the database
