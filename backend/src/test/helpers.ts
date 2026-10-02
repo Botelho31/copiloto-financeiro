@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { getDb } from "../db";
 
 // Data tables only — categories/admin/_migrations are reference data seeded
 // once by the migrations and left alone, so every test still has
@@ -7,10 +7,6 @@ import { db } from "../db";
 // and PRAGMA foreign_keys is ON.
 const DATA_TABLES = [
   "app_config",
-  "notification_deliveries",
-  "notifications",
-  "notification_providers",
-  "notification_rule_settings",
   "transaction_tags",
   "debt_transactions",
   "debt_links",
@@ -38,11 +34,12 @@ const DATA_TABLES = [
 // reset. Migration 021_users.sql's own seeding behavior is instead verified
 // once, statically, in db/migrations.test.ts — not by depending on this
 // runtime state surviving across every other test file.
-export function resetDb(): void {
+export async function resetDb(): Promise<void> {
+  const db = getDb();
   for (const table of DATA_TABLES) {
-    db.exec(`DELETE FROM ${table};`);
+    await db.execute(`DELETE FROM ${table};`);
   }
-  db.exec(
+  await db.execute(
     `DELETE FROM sqlite_sequence WHERE name IN (${DATA_TABLES.map((t) => `'${t}'`).join(",")});`
   );
 }
@@ -60,28 +57,29 @@ let userCounter = 0;
 // Bypasses the routes/users.ts validation path (name-uniqueness, etc.) since
 // tests want a quick, always-valid fixture — the validation itself is what
 // users.test.ts exercises directly.
-export function insertTestUser(overrides: TestUserOverrides = {}): number {
+export async function insertTestUser(overrides: TestUserOverrides = {}): Promise<number> {
   userCounter += 1;
   const name = overrides.name ?? `Test User ${userCounter}`;
-  const result = db
-    .query(
-      `INSERT INTO users (name, color, pluggy_client_id, pluggy_client_secret, pluggy_item_ids)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-    .run(
+  const result = await getDb().execute({
+    sql: `INSERT INTO users (name, color, pluggy_client_id, pluggy_client_secret, pluggy_item_ids)
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [
       name,
       overrides.color ?? "#5f7fbf",
       overrides.pluggyClientId ?? null,
       overrides.pluggyClientSecret ?? null,
-      overrides.pluggyItemIds ?? null
-    );
+      overrides.pluggyItemIds ?? null,
+    ],
+  });
   return Number(result.lastInsertRowid);
 }
 
-export function categoryIdByName(name: string): number {
-  const row = db.query("SELECT id FROM categories WHERE name = ?").get(name) as {
-    id: number;
-  } | null;
+export async function categoryIdByName(name: string): Promise<number> {
+  const result = await getDb().execute({
+    sql: "SELECT id FROM categories WHERE name = ?",
+    args: [name],
+  });
+  const row = result.rows[0] as unknown as { id: number } | undefined;
   if (!row)
     throw new Error(`Fixture setup: category "${name}" not found — did migrations seed it?`);
   return row.id;
@@ -101,23 +99,24 @@ export interface TestTransactionOverrides {
   categoryId?: number | null;
 }
 
-export function insertTestTransaction(overrides: TestTransactionOverrides): string {
+export async function insertTestTransaction(overrides: TestTransactionOverrides): Promise<string> {
   transactionCounter += 1;
   const id = overrides.id ?? `test-tx-${transactionCounter}`;
-  db.query(
-    `INSERT INTO transactions (id, account_id, user_id, date, description, amount, type, status, currency_code, category_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'BRL', ?)`
-  ).run(
-    id,
-    overrides.accountId,
-    overrides.userId,
-    overrides.date,
-    overrides.description ?? "Test transaction",
-    overrides.amount,
-    overrides.type ?? (overrides.amount < 0 ? "DEBIT" : "CREDIT"),
-    overrides.status ?? "POSTED",
-    overrides.categoryId ?? categoryIdByName("Uncategorized")
-  );
+  await getDb().execute({
+    sql: `INSERT INTO transactions (id, account_id, user_id, date, description, amount, type, status, currency_code, category_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'BRL', ?)`,
+    args: [
+      id,
+      overrides.accountId,
+      overrides.userId,
+      overrides.date,
+      overrides.description ?? "Test transaction",
+      overrides.amount,
+      overrides.type ?? (overrides.amount < 0 ? "DEBIT" : "CREDIT"),
+      overrides.status ?? "POSTED",
+      overrides.categoryId ?? (await categoryIdByName("Uncategorized")),
+    ],
+  });
   return id;
 }
 
@@ -131,23 +130,58 @@ export interface TestAccountOverrides {
   balance?: number;
 }
 
-export function insertTestAccount(overrides: TestAccountOverrides): string {
+export async function insertTestAccount(overrides: TestAccountOverrides): Promise<string> {
   const itemId = overrides.itemId ?? `test-item-${overrides.id}`;
-  db.query("INSERT OR IGNORE INTO items (id, user_id, status) VALUES (?, ?, 'active')").run(
-    itemId,
-    overrides.userId
-  );
-  db.query(
-    `INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance, currency_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'BRL')`
-  ).run(
-    overrides.id,
-    itemId,
-    overrides.userId,
-    overrides.name ?? overrides.id,
-    overrides.type ?? "BANK",
-    overrides.subtype ?? "checking",
-    overrides.balance ?? 0
-  );
+  const db = getDb();
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO items (id, user_id, status) VALUES (?, ?, 'active')",
+    args: [itemId, overrides.userId],
+  });
+  await db.execute({
+    sql: `INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance, currency_code)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'BRL')`,
+    args: [
+      overrides.id,
+      itemId,
+      overrides.userId,
+      overrides.name ?? overrides.id,
+      overrides.type ?? "BANK",
+      overrides.subtype ?? "checking",
+      overrides.balance ?? 0,
+    ],
+  });
+  return overrides.id;
+}
+
+export interface TestInvestmentOverrides {
+  id: string;
+  userId: number;
+  itemId?: string;
+  name?: string;
+  type?: string;
+  balance?: number;
+  status?: string;
+}
+
+export async function insertTestInvestment(overrides: TestInvestmentOverrides): Promise<string> {
+  const itemId = overrides.itemId ?? `test-item-${overrides.id}`;
+  const db = getDb();
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO items (id, user_id, status) VALUES (?, ?, 'active')",
+    args: [itemId, overrides.userId],
+  });
+  await db.execute({
+    sql: `INSERT INTO investments (id, item_id, user_id, name, type, balance, currency_code, status)
+          VALUES (?, ?, ?, ?, ?, ?, 'BRL', ?)`,
+    args: [
+      overrides.id,
+      itemId,
+      overrides.userId,
+      overrides.name ?? overrides.id,
+      overrides.type ?? "FIXED_INCOME",
+      overrides.balance ?? 0,
+      overrides.status ?? "ACTIVE",
+    ],
+  });
   return overrides.id;
 }

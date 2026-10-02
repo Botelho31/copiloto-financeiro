@@ -1,5 +1,10 @@
 node_modules/
 data/*.sqlite*
+data/vault.json
+data/mcp-api-key
 frontend/dist/
 .env
 *.log
+schema.mmd
+schema.svg
+schema.png

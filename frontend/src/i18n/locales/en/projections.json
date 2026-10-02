@@ -74,15 +74,17 @@
   },
   "savingsChart": {
     "title": "Projected savings per month",
-    "description": "Built from solid things only: confirmed bills (income + expense), each active debt's own fixed installment schedule (skipped if its payment history is too irregular to call a real cadence), and a 3-month average of actual credit card spend — no generic bank-transaction averaging, so a one-off transfer can't smear itself across every future month.",
+    "description": "Built only from solid data: confirmed bills, each debt's installment schedule, and your 3-month card-spend average — one-off transfers never get spread across future months.",
     "summary": {
       "startingBalance": "Starting balance",
+      "startingBalanceCaption": "Bank accounts + investments (not credit card balances)",
       "cardSpendBaseline": "Card spend baseline (3mo avg)"
     },
     "cardSpendGoal": {
       "label": "Monthly card spending goal",
       "usingAverage": "Using the 3-month average (no goal set)",
-      "editHint": "Set from /config"
+      "editHintPerson": "Set in this person's profile",
+      "editHintHousehold": "Sum of each person's goal — set in each person's profile"
     },
     "netSavingsLabel": "Net savings",
     "breakdownToggle": "Monthly breakdown"
@@ -110,7 +112,7 @@
   },
   "whatIf": {
     "title": "What-if",
-    "description": "Every change here recomputes the charts and headline numbers above, live — the gold badge marks them as a hypothetical, with your real baseline kept as the dashed line for comparison. Nothing here is saved; reset or switch the horizon to go back.",
+    "description": "Changes here update the charts above live — the gold badge marks them as hypothetical, with your real baseline dashed. Nothing is saved.",
     "discretionary": {
       "label": "Discretionary spending adjustment: {{value}}%"
     },
@@ -118,13 +120,17 @@
       "label": "Annual interest rate on idle cash: {{value}}%",
       "hint": "(defaults to Brazil's Selic rate — edit if it's moved)"
     },
-    "income": { "title": "Income" },
-    "expenses": { "title": "Expenses" },
+    "income": {
+      "title": "Income"
+    },
+    "expenses": {
+      "title": "Expenses"
+    },
     "table": {
       "bill": "Bill",
       "expected": "Expected",
       "card": "Card?",
-      "cardColumnTitle": "Charged to a credit card — excluded from the projection since it's already covered by the card spending goal/average",
+      "cardColumnTitle": "On a credit card — left out of the projection since the card-spend goal/average already covers it",
       "override": "Override",
       "cardDisabledTitle": "Charged to card — not part of the projection, so overriding has no effect"
     }

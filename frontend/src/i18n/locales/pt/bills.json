@@ -54,7 +54,7 @@
   },
   "projected": {
     "title": "Próximos meses por categoria",
-    "subtitle": "Para onde vão os itens recorrentes acima nos próximos meses, agrupados por categoria — mesmo mecanismo da página de Projeções.",
+    "subtitle": "Onde os itens recorrentes acima caem nos próximos meses, por categoria.",
     "loading": "Carregando projeção…",
     "empty": "Nada para projetar ainda — confirme ou adicione um item recorrente acima.",
     "category": "Categoria",
@@ -73,7 +73,7 @@
     "recurrenceStart": "Início da recorrência (opcional)",
     "recurrenceEnd": "Fim da recorrência (opcional)",
     "cardExpense": "Cobrado no cartão",
-    "cardExpenseHint": "Cobrado em um cartão de crédito — excluído da projeção porque já está coberto pela meta/média de gastos no cartão",
+    "cardExpenseHint": "No cartão de crédito — fora da projeção, já coberto pela meta/média de gastos no cartão",
     "cancel": "Cancelar"
   },
   "addForm": {

@@ -1,13 +1,9 @@
-import { Cron } from "croner";
-import { db } from "../db";
+import { getDb } from "../db";
 import { runSync, type SyncUser } from "../pluggy/sync";
-import { getAppConfig } from "../services/appConfig";
-import { evaluateAndDispatch } from "../services/notifications/dispatch";
 import { detectRecurringBills } from "./recurringDetection";
 import { detectSelfTransfers } from "./transferDetection";
 
 let isRunning = false;
-let cronJob: Cron | null = null;
 
 interface UserRow {
   id: number;
@@ -16,13 +12,16 @@ interface UserRow {
   pluggy_item_ids: string | null;
 }
 
-function usersWithPluggyCredentials(): SyncUser[] {
-  const rows = db
-    .query(
-      `SELECT id, pluggy_client_id, pluggy_client_secret, pluggy_item_ids
-       FROM users WHERE pluggy_client_id IS NOT NULL AND pluggy_client_secret IS NOT NULL`
-    )
-    .all() as UserRow[];
+// Exported for reuse by the sync-on-unlock check (see db/index.ts's unlock())
+// — this app no longer runs a background cron tick (see triggerSync's own
+// doc comment below), so staleness is only ever evaluated right after the
+// vault unlocks, not on a timer.
+export async function usersWithPluggyCredentials(): Promise<SyncUser[]> {
+  const result = await getDb().execute(
+    `SELECT id, pluggy_client_id, pluggy_client_secret, pluggy_item_ids
+     FROM users WHERE pluggy_client_id IS NOT NULL AND pluggy_client_secret IS NOT NULL`
+  );
+  const rows = result.rows as unknown as UserRow[];
   return rows.map((r) => ({
     id: r.id,
     pluggyClientId: r.pluggy_client_id,
@@ -38,6 +37,13 @@ function usersWithPluggyCredentials(): SyncUser[] {
 // person's failure (bad credentials, Pluggy outage for their item) doesn't
 // block the rest, and each gets their own sync_log row. Pass userId to sync
 // just that one person (e.g. a manual "sync me" from /config) instead.
+//
+// No background scheduler calls this anymore — a locked-by-default app that
+// may sit closed for days doesn't suit a cron tick (it either fires while
+// locked and fails, or never fires at all if the app isn't running at the
+// scheduled hour). Sync is instead triggered on unlock, if enough time has
+// passed since the last successful one (see isStale below, wired into
+// db/index.ts's unlock()), plus this manual "sync now" path.
 export async function triggerSync(reason: string, userId?: number): Promise<{ started: boolean }> {
   if (isRunning) {
     console.log(`[sync] skipped (${reason}) — already running`);
@@ -47,39 +53,23 @@ export async function triggerSync(reason: string, userId?: number): Promise<{ st
   isRunning = true;
   console.log(`[sync] starting (${reason})`);
   try {
-    const users = usersWithPluggyCredentials().filter((u) => userId == null || u.id === userId);
+    const allUsers = await usersWithPluggyCredentials();
+    const users = allUsers.filter((u) => userId == null || u.id === userId);
     for (const user of users) {
       try {
-        const { transactionsUpserted, newTransactionIds } = await runSync(user);
+        const { transactionsUpserted } = await runSync(user);
         console.log(
           `[sync] done (${reason}) for user ${user.id}: ${transactionsUpserted} transactions upserted`
         );
-        const newBills = detectRecurringBills(user.id);
+        const newBills = await detectRecurringBills(user.id);
         if (newBills > 0) {
           console.log(
             `[sync] detected ${newBills} new recurring bill candidate(s) for user ${user.id}`
           );
         }
-        const transferPairs = detectSelfTransfers(user.id);
+        const transferPairs = await detectSelfTransfers(user.id);
         if (transferPairs > 0) {
           console.log(`[sync] detected ${transferPairs} self-transfer pair(s) for user ${user.id}`);
-        }
-        // Isolated from the outer catch on purpose — a broken rule or a
-        // provider outage is a notification-delivery problem, not a sync
-        // failure, and shouldn't get logged/treated as one (the sync itself
-        // already succeeded by this point).
-        try {
-          const notificationsCreated = await evaluateAndDispatch({
-            userId: user.id,
-            newTransactionIds,
-          });
-          if (notificationsCreated > 0) {
-            console.log(
-              `[sync] created ${notificationsCreated} notification(s) for user ${user.id}`
-            );
-          }
-        } catch (error) {
-          console.error(`[sync] notification dispatch failed for user ${user.id}:`, error);
         }
       } catch (error) {
         console.error(`[sync] failed (${reason}) for user ${user.id}:`, error);
@@ -91,31 +81,14 @@ export async function triggerSync(reason: string, userId?: number): Promise<{ st
   }
 }
 
-function isStale(userId: number): boolean {
-  const row = db
-    .query("SELECT MAX(finished_at) as last FROM sync_log WHERE status = 'success' AND user_id = ?")
-    .get(userId) as { last: string | null };
+// Exported for reuse by the sync-on-unlock check (see db/index.ts's unlock()).
+export async function isStale(userId: number): Promise<boolean> {
+  const result = await getDb().execute({
+    sql: "SELECT MAX(finished_at) as last FROM sync_log WHERE status = 'success' AND user_id = ?",
+    args: [userId],
+  });
+  const row = result.rows[0] as unknown as { last: string | null };
   if (!row.last) return true;
   const ageMs = Date.now() - new Date(row.last).getTime();
   return ageMs > 24 * 60 * 60 * 1000;
-}
-
-export function startDailySync(): void {
-  cronJob = new Cron(getAppConfig().cronSchedule, () => {
-    void triggerSync("cron");
-  });
-
-  const anyStale = usersWithPluggyCredentials().some((u) => isStale(u.id));
-  if (anyStale) {
-    void triggerSync("startup catch-up");
-  }
-}
-
-// Called after App Settings updates cronSchedule so the new schedule takes
-// effect immediately, without a process restart.
-export function rescheduleCron(): void {
-  cronJob?.stop();
-  cronJob = new Cron(getAppConfig().cronSchedule, () => {
-    void triggerSync("cron");
-  });
 }

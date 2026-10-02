@@ -10,6 +10,7 @@ import projectionsEn from "./locales/en/projections.json";
 import debtsEn from "./locales/en/debts.json";
 import configEn from "./locales/en/config.json";
 import householdEn from "./locales/en/household.json";
+import vaultEn from "./locales/en/vault.json";
 
 import commonPt from "./locales/pt/common.json";
 import dashboardPt from "./locales/pt/dashboard.json";
@@ -19,6 +20,7 @@ import projectionsPt from "./locales/pt/projections.json";
 import debtsPt from "./locales/pt/debts.json";
 import configPt from "./locales/pt/config.json";
 import householdPt from "./locales/pt/household.json";
+import vaultPt from "./locales/pt/vault.json";
 
 // One namespace per page (plus "common" for the shared shell/nav) rather
 // than one giant file — keeps each page's strings independently editable
@@ -39,6 +41,7 @@ void i18n
         debts: debtsEn,
         config: configEn,
         household: householdEn,
+        vault: vaultEn,
       },
       pt: {
         common: commonPt,
@@ -49,6 +52,7 @@ void i18n
         debts: debtsPt,
         config: configPt,
         household: householdPt,
+        vault: vaultPt,
       },
     },
     // Portuguese by default regardless of browser locale — this app is
@@ -66,6 +70,7 @@ void i18n
       "debts",
       "config",
       "household",
+      "vault",
     ],
     detection: {
       order: ["localStorage"],

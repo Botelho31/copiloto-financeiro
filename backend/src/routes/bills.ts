@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { Bill } from "shared";
-import { db } from "../db";
+import { getDb } from "../db";
 import { parseUserId } from "../lib/scope";
 import { debtExists } from "../services/debts";
 
@@ -27,21 +27,21 @@ interface BillRow {
 }
 
 // null userId = Household (every person's bills combined).
-export function listBills(userId: number | null = null): Bill[] {
+export async function listBills(userId: number | null = null): Promise<Bill[]> {
   const where = userId != null ? "WHERE b.user_id = ?" : "";
-  const rows = db
-    .query(
-      `SELECT b.id, b.name, b.category_id, c.name as category_name, c.kind as category_kind,
-              b.expected_amount, b.cadence, b.next_due_date,
-              b.recurrence_start_date, b.recurrence_end_date, b.is_card_expense,
-              b.source, b.confirmed, b.active, b.debt_id, d.name as debt_name
-       FROM recurring_bills b
-       LEFT JOIN categories c ON c.id = b.category_id
-       LEFT JOIN debts d ON d.id = b.debt_id
-       ${where}
-       ORDER BY b.confirmed ASC, b.next_due_date ASC`
-    )
-    .all(...(userId != null ? [userId] : [])) as BillRow[];
+  const result = await getDb().execute({
+    sql: `SELECT b.id, b.name, b.category_id, c.name as category_name, c.kind as category_kind,
+                 b.expected_amount, b.cadence, b.next_due_date,
+                 b.recurrence_start_date, b.recurrence_end_date, b.is_card_expense,
+                 b.source, b.confirmed, b.active, b.debt_id, d.name as debt_name
+          FROM recurring_bills b
+          LEFT JOIN categories c ON c.id = b.category_id
+          LEFT JOIN debts d ON d.id = b.debt_id
+          ${where}
+          ORDER BY b.confirmed ASC, b.next_due_date ASC`,
+    args: userId != null ? [userId] : [],
+  });
+  const rows = result.rows as unknown as BillRow[];
 
   return rows.map((r) => ({
     ...r,
@@ -52,12 +52,16 @@ export function listBills(userId: number | null = null): Bill[] {
   }));
 }
 
-function billExists(id: number): boolean {
-  return db.query("SELECT id FROM recurring_bills WHERE id = ?").get(id) != null;
+async function billExists(id: number): Promise<boolean> {
+  const result = await getDb().execute({
+    sql: "SELECT id FROM recurring_bills WHERE id = ?",
+    args: [id],
+  });
+  return result.rows.length > 0;
 }
 
-function validateDebtId(debtId: number | null | undefined): void {
-  if (debtId != null && !debtExists(debtId)) {
+async function validateDebtId(debtId: number | null | undefined): Promise<void> {
+  if (debtId != null && !(await debtExists(debtId))) {
     throw new Error("debtId does not match an existing debt");
   }
 }
@@ -85,15 +89,13 @@ export type NewBillInput = z.infer<typeof NewBillBody>;
 // schema (different wire shape: categoryName/debtName instead of ids), so
 // this function still validates debtId's existence itself since both
 // callers need that DB-dependent check.
-export function createBill(input: NewBillInput): number {
-  validateDebtId(input.debtId);
+export async function createBill(input: NewBillInput): Promise<number> {
+  await validateDebtId(input.debtId);
 
-  const result = db
-    .query(
-      `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, next_due_date, recurrence_start_date, recurrence_end_date, is_card_expense, debt_id, source, confirmed, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1, 1)`
-    )
-    .run(
+  const result = await getDb().execute({
+    sql: `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, next_due_date, recurrence_start_date, recurrence_end_date, is_card_expense, debt_id, source, confirmed, active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1, 1)`,
+    args: [
       input.name,
       input.userId,
       input.categoryId ?? null,
@@ -103,8 +105,9 @@ export function createBill(input: NewBillInput): number {
       input.recurrenceStartDate ?? null,
       input.recurrenceEndDate ?? null,
       input.isCardExpense ? 1 : 0,
-      input.debtId ?? null
-    );
+      input.debtId ?? null,
+    ],
+  });
   return Number(result.lastInsertRowid);
 }
 
@@ -123,11 +126,11 @@ export const BillUpdateBody = z.object({
 });
 export type BillUpdateInput = z.infer<typeof BillUpdateBody>;
 
-export function updateBill(id: number, input: BillUpdateInput): void {
-  if (!billExists(id)) {
+export async function updateBill(id: number, input: BillUpdateInput): Promise<void> {
+  if (!(await billExists(id))) {
     throw new Error(`Bill ${id} not found`);
   }
-  validateDebtId(input.debtId);
+  await validateDebtId(input.debtId);
 
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -178,22 +181,38 @@ export function updateBill(id: number, input: BillUpdateInput): void {
 
   if (fields.length > 0) {
     values.push(id);
-    db.query(`UPDATE recurring_bills SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
+    await getDb().execute({
+      sql: `UPDATE recurring_bills SET ${fields.join(", ")} WHERE id = ?`,
+      args: values as [],
+    });
   }
 }
 
-export function deleteBill(id: number): void {
-  db.query("DELETE FROM recurring_bill_matches WHERE recurring_bill_id = ?").run(id);
-  db.query("DELETE FROM recurring_bills WHERE id = ?").run(id);
+// Both deletes as one unit — an interrupted delete should never leave an
+// orphaned recurring_bill_matches row pointing at a bill that no longer
+// exists.
+export async function deleteBill(id: number): Promise<void> {
+  const tx = await getDb().transaction();
+  try {
+    await tx.execute({
+      sql: "DELETE FROM recurring_bill_matches WHERE recurring_bill_id = ?",
+      args: [id],
+    });
+    await tx.execute({ sql: "DELETE FROM recurring_bills WHERE id = ?", args: [id] });
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
 }
 
 export const billsRoutes = new Elysia({ prefix: "/api/bills" })
   .get("/", ({ query }) => listBills(parseUserId(query)))
   .post(
     "/",
-    ({ body, set, query }) => {
+    async ({ body, set, query }) => {
       try {
-        createBill(body);
+        await createBill(body);
         return listBills(parseUserId(query));
       } catch (error) {
         set.status = 400;
@@ -204,9 +223,9 @@ export const billsRoutes = new Elysia({ prefix: "/api/bills" })
   )
   .patch(
     "/:id",
-    ({ params, body, set, query }) => {
+    async ({ params, body, set, query }) => {
       try {
-        updateBill(Number(params.id), body);
+        await updateBill(Number(params.id), body);
         return listBills(parseUserId(query));
       } catch (error) {
         set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
@@ -215,7 +234,7 @@ export const billsRoutes = new Elysia({ prefix: "/api/bills" })
     },
     { body: BillUpdateBody }
   )
-  .delete("/:id", ({ params, query }) => {
-    deleteBill(Number(params.id));
+  .delete("/:id", async ({ params, query }) => {
+    await deleteBill(Number(params.id));
     return listBills(parseUserId(query));
   });

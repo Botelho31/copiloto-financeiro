@@ -54,7 +54,7 @@
   },
   "projected": {
     "title": "Next months by category",
-    "subtitle": "Where the recurring items above land over the coming months, grouped by category — same engine as the Projections page.",
+    "subtitle": "Where the recurring items above land in the coming months, by category.",
     "loading": "Loading projection…",
     "empty": "Nothing to project yet — confirm or add a recurring item above.",
     "category": "Category",
@@ -73,7 +73,7 @@
     "recurrenceStart": "Recurrence starts (optional)",
     "recurrenceEnd": "Recurrence ends (optional)",
     "cardExpense": "Charged to card",
-    "cardExpenseHint": "Charged to a credit card — excluded from the projection since it's already covered by the card spending goal/average",
+    "cardExpenseHint": "On a credit card — left out of the projection since the card-spend goal/average already covers it",
     "cancel": "Cancel"
   },
   "addForm": {

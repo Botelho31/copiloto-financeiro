@@ -1,0 +1,27 @@
+{
+  "setup": {
+    "title": "Defina uma senha",
+    "subtitle": "Criptografa tudo no disco. Só esta senha ou o código de recuperação da próxima tela abrem os dados.",
+    "password": "Senha",
+    "confirmPassword": "Confirmar senha",
+    "passwordTooShort": "Use pelo menos 8 caracteres.",
+    "passwordMismatch": "As senhas não coincidem.",
+    "submit": "Criar senha",
+    "recoveryTitle": "Salve seu código de recuperação",
+    "recoverySubtitle": "Sua única forma de voltar se esquecer a senha. Ele não aparece de novo — guarde em um lugar seguro agora.",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "acknowledge": "Eu salvei isso em um lugar seguro",
+    "continue": "Continuar"
+  },
+  "unlock": {
+    "password": "Senha",
+    "submit": "Desbloquear",
+    "wrongPassword": "Senha incorreta.",
+    "wrongRecoveryCode": "Código de recuperação incorreto.",
+    "useRecoveryCode": "Usar o código de recuperação",
+    "usePassword": "Usar a senha",
+    "recoveryCode": "Código de recuperação"
+  },
+  "loading": "Carregando…"
+}

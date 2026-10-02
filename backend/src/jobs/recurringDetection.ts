@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { getDb } from "../db";
 
 const LOOKBACK_DAYS = 180;
 const MIN_OCCURRENCES = 3;
@@ -67,25 +67,28 @@ function mostCommonCategoryId(categoryIds: (number | null)[]): number | null {
   return best;
 }
 
-function existingBillKeys(userId: number): Set<string> {
-  const rows = db.query("SELECT name FROM recurring_bills WHERE user_id = ?").all(userId) as {
-    name: string;
-  }[];
+async function existingBillKeys(userId: number): Promise<Set<string>> {
+  const result = await getDb().execute({
+    sql: "SELECT name FROM recurring_bills WHERE user_id = ?",
+    args: [userId],
+  });
+  const rows = result.rows as unknown as { name: string }[];
   return new Set(rows.map((r) => normalizeDescription(r.name)));
 }
 
-function categoryKind(categoryId: number | null): string | null {
+async function categoryKind(categoryId: number | null): Promise<string | null> {
   if (categoryId == null) return null;
-  const row = db.query("SELECT kind FROM categories WHERE id = ?").get(categoryId) as {
-    kind: string;
-  } | null;
+  const result = await getDb().execute({
+    sql: "SELECT kind FROM categories WHERE id = ?",
+    args: [categoryId],
+  });
+  const row = result.rows[0] as unknown as { kind: string } | undefined;
   return row?.kind ?? null;
 }
 
-function incomeCategoryId(): number | null {
-  const row = db.query("SELECT id FROM categories WHERE kind = 'income' LIMIT 1").get() as {
-    id: number;
-  } | null;
+async function incomeCategoryId(): Promise<number | null> {
+  const result = await getDb().execute("SELECT id FROM categories WHERE kind = 'income' LIMIT 1");
+  const row = result.rows[0] as unknown as { id: number } | undefined;
   return row?.id ?? null;
 }
 
@@ -95,14 +98,15 @@ function incomeCategoryId(): number | null {
 // kind, not the transaction type, so a detected income pattern needs an
 // income-kind category to project correctly — default to "Income" if the
 // group's most common category isn't already income-kind.
-export function detectRecurringBills(userId: number): number {
+export async function detectRecurringBills(userId: number): Promise<number> {
+  const db = getDb();
   const since = new Date(Date.now() - LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
-  const transactions = db
-    .query(
-      `SELECT id, date, description, amount, type, category_id FROM transactions
-       WHERE date >= ? AND user_id = ?`
-    )
-    .all(since, userId) as TxRow[];
+  const transactionsResult = await db.execute({
+    sql: `SELECT id, date, description, amount, type, category_id FROM transactions
+          WHERE date >= ? AND user_id = ?`,
+    args: [since, userId],
+  });
+  const transactions = transactionsResult.rows as unknown as TxRow[];
 
   const groups = new Map<string, TxRow[]>();
   for (const tx of transactions) {
@@ -113,7 +117,7 @@ export function detectRecurringBills(userId: number): number {
     groups.set(key, list);
   }
 
-  const alreadyTracked = existingBillKeys(userId);
+  const alreadyTracked = await existingBillKeys(userId);
   let created = 0;
 
   for (const [key, txs] of groups) {
@@ -136,22 +140,31 @@ export function detectRecurringBills(userId: number): number {
 
     const creditCount = txs.filter((t) => t.type === "CREDIT").length;
     const isIncomePattern = creditCount > txs.length / 2;
-    if (isIncomePattern && categoryKind(categoryId) !== "income") {
-      categoryId = incomeCategoryId() ?? categoryId;
+    if (isIncomePattern && (await categoryKind(categoryId)) !== "income") {
+      categoryId = (await incomeCategoryId()) ?? categoryId;
     }
 
-    const insert = db
-      .query(
-        `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, next_due_date, source, confirmed, active)
-         VALUES (?, ?, ?, ?, ?, ?, 'detected', 0, 1)`
-      )
-      .run(lastTx.description, userId, categoryId, meanAmount, cadence, nextDueDate);
-
-    const billId = Number(insert.lastInsertRowid);
-    for (const tx of txs) {
-      db.query(
-        "INSERT OR IGNORE INTO recurring_bill_matches (recurring_bill_id, transaction_id) VALUES (?, ?)"
-      ).run(billId, tx.id);
+    // The new bill and every transaction match it claims are one unit — a
+    // failure partway would otherwise create a bill with none of its
+    // matching transactions actually linked to it.
+    const tx = await db.transaction();
+    try {
+      const insertResult = await tx.execute({
+        sql: `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, next_due_date, source, confirmed, active)
+              VALUES (?, ?, ?, ?, ?, ?, 'detected', 0, 1)`,
+        args: [lastTx.description, userId, categoryId, meanAmount, cadence, nextDueDate],
+      });
+      const billId = Number(insertResult.lastInsertRowid);
+      for (const matchTx of txs) {
+        await tx.execute({
+          sql: "INSERT OR IGNORE INTO recurring_bill_matches (recurring_bill_id, transaction_id) VALUES (?, ?)",
+          args: [billId, matchTx.id],
+        });
+      }
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback();
+      throw err;
     }
 
     alreadyTracked.add(key);

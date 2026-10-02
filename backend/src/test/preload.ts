@@ -9,9 +9,13 @@ import { join } from "node:path";
 // leftover file/WAL journal.
 const dir = mkdtempSync(join(tmpdir(), "budget-tracker-test-"));
 process.env.DB_PATH = join(dir, "test.sqlite");
-process.env.SESSION_SECRET = "test-session-secret";
-// Pluggy credentials stay unset — sync/pluggy code isn't exercised by these
-// tests, and config.ts only treats them as an optional one-time bootstrap.
-process.env.PLUGGY_CLIENT_ID = "";
-process.env.PLUGGY_CLIENT_SECRET = "";
-process.env.PLUGGY_ITEM_IDS = "";
+
+// setupVault() both creates the encrypted test DB and runs every migration
+// against it (see db/index.ts) — replaces the old eager-migration-on-import
+// behavior. Every test file shares this one unlocked vault for the whole
+// run; resetDb() (test/helpers.ts) clears data tables between tests, it
+// never re-locks or re-creates the vault itself. Top-level await here blocks
+// every later import in the preload chain until this resolves, same ordering
+// guarantee the old synchronous bun:sqlite open used to give for free.
+const { setupVault } = await import("../db");
+await setupVault("test-password-not-secret");

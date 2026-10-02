@@ -5,24 +5,24 @@ import { listAccounts } from "./accounts";
 beforeEach(() => resetDb());
 
 describe("listAccounts — user scoping", () => {
-  test("null userId (Household) returns every person's accounts combined", () => {
-    const alice = insertTestUser({ name: "Alice" });
-    const bob = insertTestUser({ name: "Bob" });
-    insertTestAccount({ id: "alice-acct", userId: alice });
-    insertTestAccount({ id: "bob-acct", userId: bob });
+  test("null userId (Household) returns every person's accounts combined", async () => {
+    const alice = await insertTestUser({ name: "Alice" });
+    const bob = await insertTestUser({ name: "Bob" });
+    await insertTestAccount({ id: "alice-acct", userId: alice });
+    await insertTestAccount({ id: "bob-acct", userId: bob });
 
-    const all = listAccounts(null);
+    const all = await listAccounts(null);
     expect(all.map((a) => a.id).sort()).toEqual(["alice-acct", "bob-acct"]);
   });
 
-  test("a specific userId only returns that person's accounts", () => {
-    const alice = insertTestUser({ name: "Alice" });
-    const bob = insertTestUser({ name: "Bob" });
-    insertTestAccount({ id: "alice-acct", userId: alice });
-    insertTestAccount({ id: "bob-acct", userId: bob });
+  test("a specific userId only returns that person's accounts", async () => {
+    const alice = await insertTestUser({ name: "Alice" });
+    const bob = await insertTestUser({ name: "Bob" });
+    await insertTestAccount({ id: "alice-acct", userId: alice });
+    await insertTestAccount({ id: "bob-acct", userId: bob });
 
-    const aliceOnly = listAccounts(alice);
+    const aliceOnly = await listAccounts(alice);
     expect(aliceOnly.map((a) => a.id)).toEqual(["alice-acct"]);
-    expect(listAccounts(bob).map((a) => a.id)).toEqual(["bob-acct"]);
+    expect((await listAccounts(bob)).map((a) => a.id)).toEqual(["bob-acct"]);
   });
 });

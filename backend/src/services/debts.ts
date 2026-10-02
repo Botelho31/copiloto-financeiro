@@ -15,7 +15,7 @@ import {
   sacPaymentForMonth,
   simulateAmortization,
 } from "shared";
-import { db } from "../db";
+import { getDb } from "../db";
 
 interface LinkedBillRow {
   id: number;
@@ -30,14 +30,14 @@ interface LinkedBillRow {
 // Unconfirmed/inactive bills don't project, and a card-expense bill is
 // already absorbed into the card-spend goal/average — none of them can
 // stand in as part of this debt's schedule without double- or ghost-counting.
-function fetchLinkedBills(debtId: number): LinkedBillRow[] {
-  return db
-    .query(
-      `SELECT id, name, expected_amount, cadence, next_due_date, recurrence_start_date, recurrence_end_date
-       FROM recurring_bills
-       WHERE debt_id = ? AND confirmed = 1 AND active = 1 AND is_card_expense = 0`
-    )
-    .all(debtId) as LinkedBillRow[];
+async function fetchLinkedBills(debtId: number): Promise<LinkedBillRow[]> {
+  const result = await getDb().execute({
+    sql: `SELECT id, name, expected_amount, cadence, next_due_date, recurrence_start_date, recurrence_end_date
+          FROM recurring_bills
+          WHERE debt_id = ? AND confirmed = 1 AND active = 1 AND is_card_expense = 0`,
+    args: [debtId],
+  });
+  return result.rows as unknown as LinkedBillRow[];
 }
 
 interface DebtRow {
@@ -87,12 +87,12 @@ const MAX_INSTALLMENT_COEFFICIENT_OF_VARIATION = 0.15;
 // cadence, not flattened into a blended guess), plus — unless the debt opts
 // out — the fixed-installment history heuristic layered on top, since a bill
 // might cover only part of what's actually being paid.
-function computePaymentPlan(
+async function computePaymentPlan(
   row: DebtRow,
   principal: number,
   remaining: number,
   linkedBills: LinkedBillRow[]
-): DebtPaymentPlan {
+): Promise<DebtPaymentPlan> {
   if (row.loan_type && row.interest_rate_monthly_percent != null && row.target_payoff_date) {
     const termMonths = monthsBetweenDates(row.start_date, row.target_payoff_date);
     if (termMonths > 0) {
@@ -126,16 +126,14 @@ function computePaymentPlan(
     }
   }
 
-  const amounts = (
-    db
-      .query(
-        `SELECT ABS(t.amount) as amount
-         FROM debt_transactions dt
-         JOIN transactions t ON t.id = dt.transaction_id
-         WHERE dt.debt_id = ? AND dt.role = 'pay_off'`
-      )
-      .all(row.id) as { amount: number }[]
-  ).map((r) => r.amount);
+  const amountsResult = await getDb().execute({
+    sql: `SELECT ABS(t.amount) as amount
+          FROM debt_transactions dt
+          JOIN transactions t ON t.id = dt.transaction_id
+          WHERE dt.debt_id = ? AND dt.role = 'pay_off'`,
+    args: [row.id],
+  });
+  const amounts = (amountsResult.rows as unknown as { amount: number }[]).map((r) => r.amount);
 
   let automatic: { monthly_amount: number; payment_count: number } | null = null;
   if (!row.override_automatic_schedule && amounts.length >= 2) {
@@ -385,17 +383,16 @@ function computeBalanceHistory(
   return history;
 }
 
-function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
-  const txOriginSum = (
-    db
-      .query(
-        `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
-         FROM debt_transactions dt
-         JOIN transactions t ON t.id = dt.transaction_id
-         WHERE dt.debt_id = ? AND dt.role IN ('borrow', 'lend')`
-      )
-      .get(row.id) as { total: number }
-  ).total;
+async function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Promise<Debt> {
+  const db = getDb();
+  const txOriginSumResult = await db.execute({
+    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
+          FROM debt_transactions dt
+          JOIN transactions t ON t.id = dt.transaction_id
+          WHERE dt.debt_id = ? AND dt.role IN ('borrow', 'lend')`,
+    args: [row.id],
+  });
+  const txOriginSum = (txOriginSumResult.rows[0] as unknown as { total: number }).total;
 
   // A whole other debt can feed into this one's origin sum — e.g. the full
   // Estudio Foz architect debt (present AND future installments, not just
@@ -408,51 +405,51 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
   // reference each other.
   const today = new Date().toISOString().slice(0, 10);
   const nextVisiting = new Set(visiting).add(row.id);
-  const linkedDebts = (
-    db.query("SELECT child_debt_id FROM debt_links WHERE parent_debt_id = ?").all(row.id) as {
-      child_debt_id: number;
-    }[]
-  )
-    .map(({ child_debt_id }) => {
-      if (visiting.has(child_debt_id)) return null;
-      const childRow = getDebtRow(child_debt_id);
-      if (!childRow) return null;
-      const childComputed = computeDebt(childRow, nextVisiting);
-      // The displayed principal is always the real figure — only whether it
-      // counts toward *this* debt's origin sum depends on whether the child
-      // has actually started.
-      return {
-        id: childRow.id,
-        name: childRow.name,
-        principal: childComputed.principal,
-        countsTowardOrigin: childRow.start_date <= today,
-      };
-    })
-    .filter(
-      (d): d is { id: number; name: string; principal: number; countsTowardOrigin: boolean } =>
-        d !== null
-    );
+  const linkedDebtRowsResult = await db.execute({
+    sql: "SELECT child_debt_id FROM debt_links WHERE parent_debt_id = ?",
+    args: [row.id],
+  });
+  const linkedDebtChildIds = linkedDebtRowsResult.rows as unknown as { child_debt_id: number }[];
+  const linkedDebts: {
+    id: number;
+    name: string;
+    principal: number;
+    countsTowardOrigin: boolean;
+  }[] = [];
+  for (const { child_debt_id } of linkedDebtChildIds) {
+    if (visiting.has(child_debt_id)) continue;
+    const childRow = await getDebtRow(child_debt_id);
+    if (!childRow) continue;
+    const childComputed = await computeDebt(childRow, nextVisiting);
+    // The displayed principal is always the real figure — only whether it
+    // counts toward *this* debt's origin sum depends on whether the child
+    // has actually started.
+    linkedDebts.push({
+      id: childRow.id,
+      name: childRow.name,
+      principal: childComputed.principal,
+      countsTowardOrigin: childRow.start_date <= today,
+    });
+  }
 
   const originSum =
     txOriginSum +
     linkedDebts.filter((d) => d.countsTowardOrigin).reduce((sum, d) => sum + d.principal, 0);
 
-  const totalPaid = (
-    db
-      .query(
-        `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
-         FROM debt_transactions dt
-         JOIN transactions t ON t.id = dt.transaction_id
-         WHERE dt.debt_id = ? AND dt.role = 'pay_off'`
-      )
-      .get(row.id) as { total: number }
-  ).total;
+  const totalPaidResult = await db.execute({
+    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
+          FROM debt_transactions dt
+          JOIN transactions t ON t.id = dt.transaction_id
+          WHERE dt.debt_id = ? AND dt.role = 'pay_off'`,
+    args: [row.id],
+  });
+  const totalPaid = (totalPaidResult.rows[0] as unknown as { total: number }).total;
 
-  const transactionCount = (
-    db.query("SELECT COUNT(*) as n FROM debt_transactions WHERE debt_id = ?").get(row.id) as {
-      n: number;
-    }
-  ).n;
+  const transactionCountResult = await db.execute({
+    sql: "SELECT COUNT(*) as n FROM debt_transactions WHERE debt_id = ?",
+    args: [row.id],
+  });
+  const transactionCount = (transactionCountResult.rows[0] as unknown as { n: number }).n;
 
   const principal =
     row.split_percentage != null
@@ -460,14 +457,18 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
       : (row.principal_amount ?? originSum);
 
   if (row.interest_rate_monthly_percent != null && principal > 0) {
-    const payments = db
-      .query(
-        `SELECT t.id, t.date, ABS(t.amount) as amount
-         FROM debt_transactions dt
-         JOIN transactions t ON t.id = dt.transaction_id
-         WHERE dt.debt_id = ? AND dt.role = 'pay_off'`
-      )
-      .all(row.id) as { id: string; date: string; amount: number }[];
+    const paymentsResult = await db.execute({
+      sql: `SELECT t.id, t.date, ABS(t.amount) as amount
+            FROM debt_transactions dt
+            JOIN transactions t ON t.id = dt.transaction_id
+            WHERE dt.debt_id = ? AND dt.role = 'pay_off'`,
+      args: [row.id],
+    });
+    const payments = paymentsResult.rows as unknown as {
+      id: string;
+      date: string;
+      amount: number;
+    }[];
 
     const sim = simulateAmortization(
       principal,
@@ -476,8 +477,8 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
       payments
     );
 
-    const linkedBills = fetchLinkedBills(row.id);
-    const plan = computePaymentPlan(row, principal, sim.currentPayoffBalance, linkedBills);
+    const linkedBills = await fetchLinkedBills(row.id);
+    const plan = await computePaymentPlan(row, principal, sim.currentPayoffBalance, linkedBills);
     const { schedule, finishDate, remainingInterest } = computeProjectedBalanceSchedule(
       row,
       plan,
@@ -521,8 +522,8 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
       ? totalPaid * ((row.expected_total_amount - principal) / row.expected_total_amount)
       : null;
 
-  const linkedBills = fetchLinkedBills(row.id);
-  const plan = computePaymentPlan(row, principal, remaining, linkedBills);
+  const linkedBills = await fetchLinkedBills(row.id);
+  const plan = await computePaymentPlan(row, principal, remaining, linkedBills);
   const { schedule, finishDate, remainingInterest } = computeProjectedBalanceSchedule(
     row,
     plan,
@@ -530,14 +531,18 @@ function computeDebt(row: DebtRow, visiting: Set<number> = new Set()): Debt {
     remaining,
     linkedBills
   );
-  const payOffPayments = db
-    .query(
-      `SELECT t.id, t.date, ABS(t.amount) as amount
-       FROM debt_transactions dt
-       JOIN transactions t ON t.id = dt.transaction_id
-       WHERE dt.debt_id = ? AND dt.role = 'pay_off'`
-    )
-    .all(row.id) as { id: string; date: string; amount: number }[];
+  const payOffPaymentsResult = await db.execute({
+    sql: `SELECT t.id, t.date, ABS(t.amount) as amount
+          FROM debt_transactions dt
+          JOIN transactions t ON t.id = dt.transaction_id
+          WHERE dt.debt_id = ? AND dt.role = 'pay_off'`,
+    args: [row.id],
+  });
+  const payOffPayments = payOffPaymentsResult.rows as unknown as {
+    id: string;
+    date: string;
+    amount: number;
+  }[];
   const balanceHistory = computeBalanceHistory(row, principal, remaining, payOffPayments);
 
   return {
@@ -571,86 +576,107 @@ const DEBT_FROM = `FROM debts d LEFT JOIN users su ON su.id = d.shared_with_user
 // null userId = Household (every person's debts, unfiltered). Scoped to a
 // person, a debt shows up whether they own it or are the shared-with party —
 // is_owner distinguishes the two for the frontend.
-export function listDebts(userId: number | null = null): Debt[] {
+export async function listDebts(userId: number | null = null): Promise<Debt[]> {
   const where = userId != null ? `WHERE d.user_id = ? OR d.shared_with_user_id = ?` : "";
-  const rows = db
-    .query(
-      `SELECT ${DEBT_ROW_COLUMNS} ${DEBT_FROM} ${where} ORDER BY d.status ASC, d.start_date DESC`
-    )
-    .all(...(userId != null ? [userId, userId] : [])) as DebtRow[];
-  return rows.map((row) => {
-    const debt = computeDebt(row);
-    if (userId != null) debt.is_owner = row.user_id === userId;
-    return debt;
+  const result = await getDb().execute({
+    sql: `SELECT ${DEBT_ROW_COLUMNS} ${DEBT_FROM} ${where} ORDER BY d.status ASC, d.start_date DESC`,
+    args: userId != null ? [userId, userId] : [],
   });
+  const rows = result.rows as unknown as DebtRow[];
+  const debts: Debt[] = [];
+  for (const row of rows) {
+    const debt = await computeDebt(row);
+    if (userId != null) debt.is_owner = row.user_id === userId;
+    debts.push(debt);
+  }
+  return debts;
 }
 
-function getDebtRow(id: number): DebtRow | null {
-  return db
-    .query(`SELECT ${DEBT_ROW_COLUMNS} ${DEBT_FROM} WHERE d.id = ?`)
-    .get(id) as DebtRow | null;
+async function getDebtRow(id: number): Promise<DebtRow | null> {
+  const result = await getDb().execute({
+    sql: `SELECT ${DEBT_ROW_COLUMNS} ${DEBT_FROM} WHERE d.id = ?`,
+    args: [id],
+  });
+  return (result.rows[0] as unknown as DebtRow | undefined) ?? null;
 }
 
-export function debtExists(id: number): boolean {
-  return db.query("SELECT id FROM debts WHERE id = ?").get(id) != null;
+export async function debtExists(id: number): Promise<boolean> {
+  const result = await getDb().execute({ sql: "SELECT id FROM debts WHERE id = ?", args: [id] });
+  return result.rows.length > 0;
 }
 
-export function linkTransactionsToDebt(
+// All-or-nothing: a partial link (e.g. 3 of 5 transactions linked before a
+// failure) would silently misrepresent what the caller asked for, since this
+// is always meant as one logical "link these transactions" action.
+export async function linkTransactionsToDebt(
   debtId: number,
   transactionIds: string[],
   role: "borrow" | "lend" | "pay_off"
-): void {
-  for (const txId of transactionIds) {
-    db.query(
-      "INSERT OR REPLACE INTO debt_transactions (transaction_id, debt_id, role) VALUES (?, ?, ?)"
-    ).run(txId, debtId, role);
+): Promise<void> {
+  if (transactionIds.length === 0) return;
+  const tx = await getDb().transaction();
+  try {
+    for (const txId of transactionIds) {
+      await tx.execute({
+        sql: "INSERT OR REPLACE INTO debt_transactions (transaction_id, debt_id, role) VALUES (?, ?, ?)",
+        args: [txId, debtId, role],
+      });
+    }
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
   }
 }
 
-export function unlinkTransactionsFromDebt(debtId: number, transactionIds: string[]): void {
+export async function unlinkTransactionsFromDebt(
+  debtId: number,
+  transactionIds: string[]
+): Promise<void> {
   const placeholders = transactionIds.map(() => "?").join(",");
-  db.query(
-    `DELETE FROM debt_transactions WHERE debt_id = ? AND transaction_id IN (${placeholders})`
-  ).run(debtId, ...transactionIds);
+  await getDb().execute({
+    sql: `DELETE FROM debt_transactions WHERE debt_id = ? AND transaction_id IN (${placeholders})`,
+    args: [debtId, ...transactionIds],
+  });
 }
 
 // Feeds a whole other debt's computed principal into this (parent) debt's
 // origin sum — e.g. the full Estudio Foz debt counts toward Juliana's 20%
 // share, not just whichever installments happen to already be paid.
-export function linkDebtToDebt(parentDebtId: number, childDebtId: number): void {
+export async function linkDebtToDebt(parentDebtId: number, childDebtId: number): Promise<void> {
   if (parentDebtId === childDebtId) {
     throw new Error("A debt cannot be linked to itself.");
   }
-  if (!getDebtRow(parentDebtId) || !getDebtRow(childDebtId)) {
+  if (!(await getDebtRow(parentDebtId)) || !(await getDebtRow(childDebtId))) {
     throw new Error("Both debts must exist.");
   }
-  db.query("INSERT OR REPLACE INTO debt_links (parent_debt_id, child_debt_id) VALUES (?, ?)").run(
-    parentDebtId,
-    childDebtId
-  );
+  await getDb().execute({
+    sql: "INSERT OR REPLACE INTO debt_links (parent_debt_id, child_debt_id) VALUES (?, ?)",
+    args: [parentDebtId, childDebtId],
+  });
 }
 
-export function unlinkDebtFromDebt(parentDebtId: number, childDebtId: number): void {
-  db.query("DELETE FROM debt_links WHERE parent_debt_id = ? AND child_debt_id = ?").run(
-    parentDebtId,
-    childDebtId
-  );
+export async function unlinkDebtFromDebt(parentDebtId: number, childDebtId: number): Promise<void> {
+  await getDb().execute({
+    sql: "DELETE FROM debt_links WHERE parent_debt_id = ? AND child_debt_id = ?",
+    args: [parentDebtId, childDebtId],
+  });
 }
 
-export function getDebtTransactions(id: number): DebtLinkedTransaction[] {
-  const rows = db
-    .query(
-      `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.currency_code,
-              t.category_id, c.name as category_name, dt.role
-       FROM debt_transactions dt
-       JOIN transactions t ON t.id = dt.transaction_id
-       LEFT JOIN categories c ON c.id = t.category_id
-       WHERE dt.debt_id = ?
-       ORDER BY t.date ASC`
-    )
-    .all(id) as Omit<DebtLinkedTransaction, "interest" | "principal">[];
+export async function getDebtTransactions(id: number): Promise<DebtLinkedTransaction[]> {
+  const result = await getDb().execute({
+    sql: `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.currency_code,
+                 t.category_id, c.name as category_name, dt.role
+          FROM debt_transactions dt
+          JOIN transactions t ON t.id = dt.transaction_id
+          LEFT JOIN categories c ON c.id = t.category_id
+          WHERE dt.debt_id = ?
+          ORDER BY t.date ASC`,
+    args: [id],
+  });
+  const rows = result.rows as unknown as Omit<DebtLinkedTransaction, "interest" | "principal">[];
 
-  const debtRow = getDebtRow(id);
+  const debtRow = await getDebtRow(id);
   const withBreakdown: DebtLinkedTransaction[] = rows.map((r) => ({
     ...r,
     interest: null,
@@ -658,7 +684,7 @@ export function getDebtTransactions(id: number): DebtLinkedTransaction[] {
   }));
 
   if (debtRow?.interest_rate_monthly_percent != null) {
-    const debt = computeDebt(debtRow);
+    const debt = await computeDebt(debtRow);
     const payOffRows = rows.filter((r) => r.role === "pay_off");
     const sim = simulateAmortization(
       debt.principal,
@@ -702,16 +728,14 @@ export interface NewDebtInput {
 // can't (a DB-free cross-field check would be fine in Zod too, but keeping
 // it here matches the "principalAmount xor splitPercentage" business rule
 // living next to the math that depends on it).
-export function createDebt(input: NewDebtInput): number {
+export async function createDebt(input: NewDebtInput): Promise<number> {
   if (input.principalAmount == null && input.splitPercentage == null) {
     throw new Error("either principalAmount or splitPercentage is required");
   }
-  const result = db
-    .query(
-      `INSERT INTO debts (name, direction, counterparty, user_id, shared_with_user_id, principal_amount, split_percentage, expected_total_amount, interest_rate_monthly_percent, start_date, target_payoff_date, notes, matching_rule, loan_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
+  const result = await getDb().execute({
+    sql: `INSERT INTO debts (name, direction, counterparty, user_id, shared_with_user_id, principal_amount, split_percentage, expected_total_amount, interest_rate_monthly_percent, start_date, target_payoff_date, notes, matching_rule, loan_type)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
       input.name,
       input.direction,
       input.counterparty ?? null,
@@ -725,8 +749,9 @@ export function createDebt(input: NewDebtInput): number {
       input.targetPayoffDate ?? null,
       input.notes ?? null,
       input.matchingRule ?? null,
-      input.loanType ?? null
-    );
+      input.loanType ?? null,
+    ],
+  });
   return Number(result.lastInsertRowid);
 }
 
@@ -747,8 +772,8 @@ export type DebtUpdateInput = Partial<{
   overrideAutomaticSchedule: boolean;
 }>;
 
-export function updateDebt(id: number, input: DebtUpdateInput): void {
-  if (!debtExists(id)) {
+export async function updateDebt(id: number, input: DebtUpdateInput): Promise<void> {
+  if (!(await debtExists(id))) {
     throw new Error(`Debt ${id} not found`);
   }
   const fields: string[] = [];
@@ -811,12 +836,28 @@ export function updateDebt(id: number, input: DebtUpdateInput): void {
   }
   if (fields.length > 0) {
     values.push(id);
-    db.query(`UPDATE debts SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
+    await getDb().execute({
+      sql: `UPDATE debts SET ${fields.join(", ")} WHERE id = ?`,
+      args: values as [],
+    });
   }
 }
 
-export function deleteDebt(id: number): void {
-  db.query("DELETE FROM debt_transactions WHERE debt_id = ?").run(id);
-  db.query("DELETE FROM debt_links WHERE parent_debt_id = ? OR child_debt_id = ?").run(id, id);
-  db.query("DELETE FROM debts WHERE id = ?").run(id);
+// All-or-nothing across the three dependent tables — a crash or error
+// between these deletes would otherwise leave orphaned debt_transactions/
+// debt_links rows pointing at a debt that no longer exists.
+export async function deleteDebt(id: number): Promise<void> {
+  const tx = await getDb().transaction();
+  try {
+    await tx.execute({ sql: "DELETE FROM debt_transactions WHERE debt_id = ?", args: [id] });
+    await tx.execute({
+      sql: "DELETE FROM debt_links WHERE parent_debt_id = ? OR child_debt_id = ?",
+      args: [id, id],
+    });
+    await tx.execute({ sql: "DELETE FROM debts WHERE id = ?", args: [id] });
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
 }

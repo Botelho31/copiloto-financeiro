@@ -4,8 +4,8 @@ import { NavLink, Outlet } from "react-router-dom";
 const TABS = [
   { to: "/config/app-settings", end: false, key: "appSettings" },
   { to: "/config", end: true, key: "people" },
-  { to: "/config/notifications", end: false, key: "notifications" },
   { to: "/config/categories", end: false, key: "categories" },
+  { to: "/config/api-keys", end: false, key: "apiKeys" },
 ] as const;
 
 export function ConfigPage() {

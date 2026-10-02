@@ -1,12 +1,37 @@
 {
   "tabs": {
     "people": "People",
-    "notifications": "Notifications",
     "categories": "Categories",
-    "appSettings": "General"
+    "appSettings": "General",
+    "apiKeys": "API Keys"
+  },
+  "apiKeys": {
+    "subtitle": "Lets Claude Code or other local tools reach your data while the vault is unlocked. Locking cuts off every key instantly.",
+    "new": {
+      "title": "Generate a key",
+      "subtitle": "Name it after where it'll be used, e.g. \"Claude Code — MacBook\".",
+      "namePlaceholder": "Name",
+      "submit": "Generate"
+    },
+    "created": {
+      "title": "\"{{name}}\" created",
+      "subtitle": "Save this to data/mcp-api-key in the project folder — it won't be shown again.",
+      "done": "Done"
+    },
+    "copy": "Copy",
+    "copied": "Copied",
+    "list": {
+      "title": "Active keys",
+      "empty": "No keys yet.",
+      "name": "Name",
+      "createdAt": "Created",
+      "lastUsedAt": "Last used",
+      "neverUsed": "Never",
+      "revoke": "Revoke"
+    }
   },
   "title": "People",
-  "subtitle": "Each person has their own accounts, transactions, bills, debts and goals — Pluggy credentials live here per person, not in .env.",
+  "subtitle": "Each person has their own accounts, debts and goals — Pluggy credentials live here, not in .env.",
   "table": {
     "name": "Name",
     "pluggy": "Pluggy",
@@ -46,46 +71,6 @@
     "connectionOk": "Connected",
     "connectionFailed": "Failed: {{error}}"
   },
-  "notifications": {
-    "title": "Notifications",
-    "description": "Sent when a sync rule fires (a large transaction, a projected shortfall) — pick where this person hears about it.",
-    "destinationsTitle": "Delivery",
-    "destinationsSubtitle": "Where this person hears about it.",
-    "empty": "No providers added yet.",
-    "addProvider": "Add provider",
-    "pushover": "Pushover",
-    "pushoverPlaceholder": "Pushover user key",
-    "email": "Email",
-    "emailPlaceholder": "you@example.com",
-    "callmebot": "CallMeBot (WhatsApp)",
-    "callmebotPhonePlaceholder": "Phone with country code, e.g. 15551234567",
-    "callmebotApikeyPlaceholder": "API key",
-    "rules": {
-      "title": "Notification rules",
-      "subtitle": "Household defaults — anyone without their own override gets these.",
-      "perPersonTitle": "Overrides for this person",
-      "perPersonSubtitle": "Only affects this person — everyone else keeps using the household default above.",
-      "usingHouseholdDefault": "Using the household default",
-      "on": "on",
-      "off": "off",
-      "customize": "Customize for this person",
-      "removeOverride": "Remove override",
-      "largeTransaction": {
-        "label": "Large transaction",
-        "description": "Fires when a newly synced transaction is at or above the threshold.",
-        "threshold": "Threshold (BRL)",
-        "thresholdHint": "A transaction at or above this amount triggers this notification."
-      },
-      "projectedShortfall": {
-        "label": "Projected shortfall",
-        "description": "Fires when next month's cash-flow projection goes negative."
-      }
-    }
-  },
-  "providerSetup": {
-    "title": "Provider setup",
-    "subtitle": "One-time, app-wide credentials each provider needs to actually deliver anything — set once here, then each person above just adds their own destination."
-  },
   "categories": {
     "title": "Categories",
     "subtitle": "Shared across the whole household — renaming or recoloring here updates it everywhere.",
@@ -100,7 +85,7 @@
   },
   "categoryRules": {
     "title": "Category rules",
-    "description": "Auto-applied to every new transaction at sync time, matched in insertion order against the normalized description. Created whenever you (or the assistant, via MCP) categorize a group or reclassify a pattern — or add one yourself below. Adding a rule here only affects future transactions; it doesn't retroactively reclassify existing ones.",
+    "description": "Applied to new transactions at each sync, in order. Added when you or the assistant categorize something, or by hand below — existing transactions stay as they are.",
     "matchText": "Match text",
     "matchTextPlaceholder": "e.g. netflix",
     "categoryPlaceholder": "Choose category…",
@@ -111,30 +96,14 @@
     "deleteTitle": "Delete"
   },
   "appSettings": {
-    "subtitle": "Preferences for the whole household — language, sync schedule, and alert thresholds.",
+    "subtitle": "Preferences for the whole household — language and alert thresholds.",
     "language": "Interface language",
     "saved": "Saved",
-    "sync": {
-      "title": "Sync",
-      "subtitle": "Cron schedule for the daily sync, and thresholds used by notification rules and cash-flow projections.",
-      "cronSchedule": "Cron schedule",
-      "cronScheduleHint": "Standard 5-field cron expression (minute hour day month weekday) — the default runs daily at 6am.",
-      "minBuffer": "Low-balance alert threshold",
-      "minBufferHint": "A projected month with a balance below this amount is flagged as a shortfall, on the Projections page and in the projected-shortfall notification."
-    },
-    "pushover": {
-      "title": "Pushover",
-      "subtitle": "One app-level token for the whole deployment, from pushover.net/apps/build.",
-      "appToken": "App token"
-    },
-    "smtp": {
-      "title": "Email (SMTP)",
-      "subtitle": "One relay for the whole deployment.",
-      "host": "Host",
-      "port": "Port",
-      "user": "User",
-      "pass": "Password",
-      "from": "From address"
+    "thresholds": {
+      "title": "Thresholds",
+      "subtitle": "Used by cash-flow projections.",
+      "minBuffer": "Low-balance threshold",
+      "minBufferHint": "A projected month with a balance below this amount is flagged as a shortfall on the Projections page."
     }
   },
   "profile": {

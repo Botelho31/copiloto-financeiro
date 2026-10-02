@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { PersonScopeProvider } from "./lib/personScope";
+import { VaultTransitionProvider } from "./lib/vaultTransition";
 import "./i18n";
 
 const queryClient = new QueryClient();
@@ -11,11 +12,13 @@ const queryClient = new QueryClient();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <PersonScopeProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </PersonScopeProvider>
+      <VaultTransitionProvider>
+        <PersonScopeProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </PersonScopeProvider>
+      </VaultTransitionProvider>
     </QueryClientProvider>
   </StrictMode>
 );

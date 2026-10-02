@@ -9,10 +9,10 @@
   ],
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,magenta \"bun run dev:backend\" \"bun run dev:frontend\"",
-    "dev:backend": "bun --watch --jsx-import-source=@kitajs/html backend/src/index.tsx",
+    "dev:backend": "bun --watch backend/src/index.ts",
     "dev:frontend": "bun run --cwd frontend dev",
     "build": "bun run --cwd frontend build",
-    "start": "bun --jsx-import-source=@kitajs/html backend/src/index.tsx",
+    "start": "bun backend/src/index.ts",
     "categorize": "bun backend/src/scripts/categorize.ts",
     "typecheck": "bun run --cwd backend typecheck && bun run --cwd frontend typecheck",
     "test": "bun run --cwd backend test",

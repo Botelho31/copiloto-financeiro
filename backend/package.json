@@ -1,26 +1,22 @@
 {
   "name": "backend",
-  "module": "src/index.tsx",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/index.tsx",
-    "start": "bun run src/index.tsx",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
-    "@kitajs/ts-html-plugin": "^4.1.4",
     "@types/bun": "latest",
-    "@types/nodemailer": "^8.0.1",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@elysiajs/html": "^1.4.2",
+    "@libsql/client": "^0.18.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "croner": "^10.0.1",
     "elysia": "^1.4.29",
-    "nodemailer": "^9.0.3",
     "shared": "workspace:*",
     "zod": "^4.4.3"
   }

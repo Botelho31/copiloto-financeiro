@@ -1,6 +1,6 @@
 import type { BillOverride, ProjectedMonth, ProjectionResult } from "shared";
 import { billAppliesToMonth, monthlyEquivalentAmount, pricePayment } from "shared";
-import { db } from "../db";
+import { getDb } from "../db";
 import { getAppConfig } from "./appConfig";
 import { listDebts } from "./debts";
 import { getSettings } from "../routes/settings";
@@ -47,14 +47,27 @@ export interface ProjectionOptions {
 // Only BANK-type accounts (checking/savings) represent liquid cash. A CREDIT
 // account's `balance` is the amount owed on the card — a liability, not cash
 // on hand — so it must not be pooled into the projected starting balance.
-export function currentBalance(userId: number | null = null): number {
+export async function currentBalance(userId: number | null = null): Promise<number> {
   const userCondition = userId != null ? "AND user_id = ?" : "";
-  const row = db
-    .query(
-      `SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'BANK' ${userCondition}`
-    )
-    .get(...(userId != null ? [userId] : [])) as { total: number };
-  return row.total;
+  const result = await getDb().execute({
+    sql: `SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'BANK' ${userCondition}`,
+    args: userId != null ? [userId] : [],
+  });
+  return (result.rows[0] as unknown as { total: number }).total;
+}
+
+// Current value of every active investment holding (e.g. CDBs) — a
+// fully-withdrawn position (status != 'ACTIVE') no longer represents money
+// anywhere, so it's excluded the same way routes/goals.ts already treats
+// net worth. Shared here so computeProjection's startingBalance and goals.ts
+// both fold investments in exactly once, the same way.
+export async function investmentsTotal(userId: number | null = null): Promise<number> {
+  const userCondition = userId != null ? "AND user_id = ?" : "";
+  const result = await getDb().execute({
+    sql: `SELECT COALESCE(SUM(balance), 0) as total FROM investments WHERE status = 'ACTIVE' ${userCondition}`,
+    args: userId != null ? [userId] : [],
+  });
+  return (result.rows[0] as unknown as { total: number }).total;
 }
 
 // What's already owed across every card right now — a real, concrete number
@@ -71,31 +84,30 @@ export function currentBalance(userId: number | null = null): number {
 // an installment due in December isn't coming due in August. Subtract out
 // anything dated beyond next month so this reflects only what's actually
 // coming due on the very next statement.
-export function currentCardBalance(userId: number | null = null): number {
+export async function currentCardBalance(userId: number | null = null): Promise<number> {
+  const db = getDb();
   const userCondition = userId != null ? "AND user_id = ?" : "";
-  const totalRow = db
-    .query(
-      `SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'CREDIT' ${userCondition}`
-    )
-    .get(...(userId != null ? [userId] : [])) as { total: number };
+  const totalResult = await db.execute({
+    sql: `SELECT COALESCE(SUM(balance), 0) as total FROM accounts WHERE type = 'CREDIT' ${userCondition}`,
+    args: userId != null ? [userId] : [],
+  });
+  const total = (totalResult.rows[0] as unknown as { total: number }).total;
 
   const now = new Date();
   const dueAfterNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 1)
     .toISOString()
     .slice(0, 10);
   const notYetDueUserCondition = userId != null ? "AND a.user_id = ?" : "";
-  const notYetDueRow = db
-    .query(
-      `SELECT COALESCE(SUM(t.amount), 0) as total
-       FROM transactions t
-       JOIN accounts a ON a.id = t.account_id
-       WHERE a.type = 'CREDIT' AND t.type = 'DEBIT' AND t.date >= ? ${notYetDueUserCondition}`
-    )
-    .get(...(userId != null ? [dueAfterNextMonth, userId] : [dueAfterNextMonth])) as {
-    total: number;
-  };
+  const notYetDueResult = await db.execute({
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total
+          FROM transactions t
+          JOIN accounts a ON a.id = t.account_id
+          WHERE a.type = 'CREDIT' AND t.type = 'DEBIT' AND t.date >= ? ${notYetDueUserCondition}`,
+    args: userId != null ? [dueAfterNextMonth, userId] : [dueAfterNextMonth],
+  });
+  const notYetDue = (notYetDueResult.rows[0] as unknown as { total: number }).total;
 
-  return totalRow.total - notYetDueRow.total;
+  return total - notYetDue;
 }
 
 // Bills flagged is_card_expense are excluded entirely — that spend gets
@@ -103,17 +115,17 @@ export function currentCardBalance(userId: number | null = null): number {
 // goal/average line rather than being additional spend on top of it. They
 // still exist as trackable bills (visible, editable, deletable on the Bills
 // page); the flag just keeps the projection from double-counting them.
-function activeConfirmedBills(userId: number | null): BillForProjection[] {
+async function activeConfirmedBills(userId: number | null): Promise<BillForProjection[]> {
   const userCondition = userId != null ? "AND b.user_id = ?" : "";
-  const rows = db
-    .query(
-      `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
-              b.recurrence_start_date, b.recurrence_end_date, c.kind as category_kind, c.name as category_name
-       FROM recurring_bills b
-       LEFT JOIN categories c ON c.id = b.category_id
-       WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 0 ${userCondition}`
-    )
-    .all(...(userId != null ? [userId] : [])) as {
+  const result = await getDb().execute({
+    sql: `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
+                 b.recurrence_start_date, b.recurrence_end_date, c.kind as category_kind, c.name as category_name
+          FROM recurring_bills b
+          LEFT JOIN categories c ON c.id = b.category_id
+          WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 0 ${userCondition}`,
+    args: userId != null ? [userId] : [],
+  });
+  const rows = result.rows as unknown as {
     id: number;
     name: string;
     expected_amount: number;
@@ -144,17 +156,17 @@ function activeConfirmedBills(userId: number | null): BillForProjection[] {
 // wherever the point is specifically "what's expected to hit a card this
 // month" (e.g. the Dashboard's per-card chart), just not folded into the
 // overall cashflow numbers.
-function cardExpenseBills(userId: number | null): BillForProjection[] {
+async function cardExpenseBills(userId: number | null): Promise<BillForProjection[]> {
   const userCondition = userId != null ? "AND b.user_id = ?" : "";
-  const rows = db
-    .query(
-      `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
-              b.recurrence_start_date, b.recurrence_end_date, c.name as category_name
-       FROM recurring_bills b
-       LEFT JOIN categories c ON c.id = b.category_id
-       WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 1 ${userCondition}`
-    )
-    .all(...(userId != null ? [userId] : [])) as {
+  const result = await getDb().execute({
+    sql: `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
+                 b.recurrence_start_date, b.recurrence_end_date, c.name as category_name
+          FROM recurring_bills b
+          LEFT JOIN categories c ON c.id = b.category_id
+          WHERE b.confirmed = 1 AND b.active = 1 AND b.is_card_expense = 1 ${userCondition}`,
+    args: userId != null ? [userId] : [],
+  });
+  const rows = result.rows as unknown as {
     id: number;
     name: string;
     expected_amount: number;
@@ -186,7 +198,7 @@ function cardExpenseBills(userId: number | null): BillForProjection[] {
 // and a 3-month average of actual credit card spend (a much more stable
 // proxy for discretionary spending than raw bank-transaction noise, since
 // it's just charges — no transfers, no loan disbursements, no one-off wires).
-function cardSpendBaseline(userId: number | null): number {
+async function cardSpendBaseline(userId: number | null): Promise<number> {
   const now = new Date();
   const since = new Date();
   since.setMonth(since.getMonth() - BASELINE_LOOKBACK_MONTHS);
@@ -205,27 +217,25 @@ function cardSpendBaseline(userId: number | null): number {
   // too — those recur as their own explicit line item elsewhere in this
   // computation, so leaving them in this average as well would count them
   // twice (once smeared into the average, once again by name).
-  const row = db
-    .query(
-      `SELECT COALESCE(SUM(t.amount), 0) as total
-       FROM transactions t
-       JOIN accounts a ON a.id = t.account_id
-       LEFT JOIN categories c ON c.id = t.category_id
-       WHERE a.type = 'CREDIT' AND t.type = 'DEBIT' AND t.date >= ? AND t.date < ?
-         AND COALESCE(c.excludes_from_cashflow, 0) = 0
-         AND t.id NOT IN (
-           SELECT m.transaction_id
-           FROM recurring_bill_matches m
-           JOIN recurring_bills b ON b.id = m.recurring_bill_id
-           WHERE b.confirmed = 1 AND b.active = 1
-         )
-         ${userCondition}`
-    )
-    .get(...(userId != null ? [sinceStr, nowStr, userId] : [sinceStr, nowStr])) as {
-    total: number;
-  };
+  const result = await getDb().execute({
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total
+          FROM transactions t
+          JOIN accounts a ON a.id = t.account_id
+          LEFT JOIN categories c ON c.id = t.category_id
+          WHERE a.type = 'CREDIT' AND t.type = 'DEBIT' AND t.date >= ? AND t.date < ?
+            AND COALESCE(c.excludes_from_cashflow, 0) = 0
+            AND t.id NOT IN (
+              SELECT m.transaction_id
+              FROM recurring_bill_matches m
+              JOIN recurring_bills b ON b.id = m.recurring_bill_id
+              WHERE b.confirmed = 1 AND b.active = 1
+            )
+            ${userCondition}`,
+    args: userId != null ? [sinceStr, nowStr, userId] : [sinceStr, nowStr],
+  });
+  const total = (result.rows[0] as unknown as { total: number }).total;
 
-  return row.total / BASELINE_LOOKBACK_MONTHS;
+  return total / BASELINE_LOOKBACK_MONTHS;
 }
 
 interface DebtProjectionLine {
@@ -345,25 +355,27 @@ function debtLineAmountForMonth(
   return { amount: signed, interestPortion: result.interestPortion };
 }
 
-function billForProjection(id: number): BillForProjection | null {
-  const r = db
-    .query(
-      `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
-              b.recurrence_start_date, b.recurrence_end_date, c.name as category_name
-       FROM recurring_bills b
-       LEFT JOIN categories c ON c.id = b.category_id
-       WHERE b.id = ?`
-    )
-    .get(id) as {
-    id: number;
-    name: string;
-    expected_amount: number;
-    cadence: string;
-    next_due_date: string | null;
-    recurrence_start_date: string | null;
-    recurrence_end_date: string | null;
-    category_name: string | null;
-  } | null;
+async function billForProjection(id: number): Promise<BillForProjection | null> {
+  const result = await getDb().execute({
+    sql: `SELECT b.id, b.name, b.expected_amount, b.cadence, b.next_due_date,
+                 b.recurrence_start_date, b.recurrence_end_date, c.name as category_name
+          FROM recurring_bills b
+          LEFT JOIN categories c ON c.id = b.category_id
+          WHERE b.id = ?`,
+    args: [id],
+  });
+  const r = result.rows[0] as unknown as
+    | {
+        id: number;
+        name: string;
+        expected_amount: number;
+        cadence: string;
+        next_due_date: string | null;
+        recurrence_start_date: string | null;
+        recurrence_end_date: string | null;
+        category_name: string | null;
+      }
+    | undefined;
   if (!r) return null;
   return {
     id: r.id,
@@ -392,13 +404,12 @@ interface DebtSchedules {
 // in routes/debts.ts — the single resolution the Debts page also displays)
 // into a projection line. Debts whose plan is "none" stay out of the
 // projection rather than being guessed at.
-function activeDebtSchedules(userId: number | null): DebtSchedules {
+async function activeDebtSchedules(userId: number | null): Promise<DebtSchedules> {
   // A debt merely shared with this person (not owned) doesn't inject payment
   // obligations into their own forecast — listDebts already includes it for
   // visibility on the Debts page, but only owned debts feed the projection.
-  const debts = listDebts(userId).filter(
-    (d) => d.status === "active" && d.remaining > 1 && d.is_owner
-  );
+  const allDebts = await listDebts(userId);
+  const debts = allDebts.filter((d) => d.status === "active" && d.remaining > 1 && d.is_owner);
   const lines: DebtProjectionLine[] = [];
   const consumedBillIds = new Set<number>();
 
@@ -426,7 +437,7 @@ function activeDebtSchedules(userId: number | null): DebtSchedules {
       // pay the debt off faster than the plain schedule alone.
       for (const bill of plan.extra_bills) {
         if (consumedBillIds.has(bill.bill_id)) continue;
-        const billForProj = billForProjection(bill.bill_id);
+        const billForProj = await billForProjection(bill.bill_id);
         if (!billForProj) continue;
         consumedBillIds.add(bill.bill_id);
         lines.push({
@@ -445,7 +456,7 @@ function activeDebtSchedules(userId: number | null): DebtSchedules {
         // First-wins if two debts ever point at the same bill — the second
         // would otherwise project the same payment twice.
         if (consumedBillIds.has(bill.bill_id)) continue;
-        const billForProj = billForProjection(bill.bill_id);
+        const billForProj = await billForProjection(bill.bill_id);
         if (!billForProj) continue;
         consumedBillIds.add(bill.bill_id);
         lines.push({
@@ -473,7 +484,9 @@ function activeDebtSchedules(userId: number | null): DebtSchedules {
   return { lines, consumedBillIds };
 }
 
-export function computeProjection(options: ProjectionOptions = {}): ProjectionResult {
+export async function computeProjection(
+  options: ProjectionOptions = {}
+): Promise<ProjectionResult> {
   const userId = options.userId ?? null;
   const horizonMonths = options.horizonMonths ?? DEFAULT_HORIZON_MONTHS;
   const overridesByBillId = new Map((options.billOverrides ?? []).map((o) => [o.billId, o.amount]));
@@ -485,32 +498,44 @@ export function computeProjection(options: ProjectionOptions = {}): ProjectionRe
   // stated annual rate over 12 months.
   const monthlyInterestRate = (1 + interestRateAnnualPercent / 100) ** (1 / 12) - 1;
 
-  const { lines: debtLines, consumedBillIds } = activeDebtSchedules(userId);
-  const bills = activeConfirmedBills(userId).filter((b) => !consumedBillIds.has(b.id));
-  const cardBills = cardExpenseBills(userId);
+  const { lines: debtLines, consumedBillIds } = await activeDebtSchedules(userId);
+  const bills = (await activeConfirmedBills(userId)).filter((b) => !consumedBillIds.has(b.id));
+  const cardBills = await cardExpenseBills(userId);
   // Income now comes entirely from confirmed income-kind bills — no generic
   // bank-transaction averaging left to contribute a "baseline" figure.
   const baselineIncome = 0;
-  const cardSpendActualAverage = cardSpendBaseline(userId);
+  const cardSpendActualAverage = await cardSpendBaseline(userId);
   // A cardSpendGoal is a deliberate target, not a recomputation of history —
   // it replaces the average outright rather than being scaled by the
   // discretionary delta (that delta is for nudging the real average, not for
   // adjusting an already-explicit goal). A per-request override wins if
   // given (what-if simulation); otherwise fall back to the persisted per-
   // person goal, so it applies consistently everywhere without re-specifying
-  // it. Household (userId null) has no single goal to fall back to.
-  const cardSpendGoal = options.cardSpendGoal ?? getSettings(userId).cardSpendGoal ?? undefined;
+  // it. Household (userId null) has no single goal to fall back to — what
+  // getSettings(null) returns is an aggregate of individual goals for
+  // display purposes (see routes/settings.ts), not a Household-level
+  // decision, and must not silently override the discretionary-delta
+  // what-if math the way an explicit per-person goal does.
+  const cardSpendGoal =
+    options.cardSpendGoal ??
+    (userId != null ? (await getSettings(userId)).cardSpendGoal : null) ??
+    undefined;
   const baselineExpense =
     cardSpendGoal ?? cardSpendActualAverage * (1 + discretionaryDeltaPercent / 100);
 
-  const startingBalance = currentBalance(userId);
+  // Bank cash plus investment holdings (e.g. CDBs) — the same net-worth
+  // definition routes/goals.ts and the Dashboard's balance-over-time chart
+  // already use. Investments aren't instantly spendable the way checking
+  // cash is, but excluding them entirely made this number read as "wrong"
+  // next to money the person knows they actually have.
+  const startingBalance = (await currentBalance(userId)) + (await investmentsTotal(userId));
   // The very next month's card bill is a known, real number — what's
   // already on the card today — not a recurring assumption. Only the goal/
   // average stands in for months further out, where there's no concrete
   // balance yet to point to.
-  const currentCardOwed = currentCardBalance(userId);
+  const currentCardOwed = await currentCardBalance(userId);
 
-  const { minBuffer } = getAppConfig();
+  const { minBuffer } = await getAppConfig();
   let balance = startingBalance;
   const months: ProjectedMonth[] = [];
   const now = new Date();

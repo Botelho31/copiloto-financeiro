@@ -10,10 +10,12 @@
     "config": "Config",
     "person": "Person"
   },
-  "logout": "Log out",
   "language": {
     "en": "English",
     "pt": "Portuguese"
+  },
+  "vault": {
+    "lockNow": "Lock"
   },
   "period": {
     "month": "Month",
@@ -33,11 +35,6 @@
     "total": "Total",
     "category": "Category",
     "tag": "Tag"
-  },
-  "notifications": {
-    "title": "Notifications",
-    "empty": "No notifications yet.",
-    "markRead": "Mark as read"
   },
   "noTransactionsForFilters": "No transactions to group for the selected filters."
 }

@@ -1,16 +1,14 @@
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
-}
-
 // Everything else that used to live here (Pluggy bootstrap credentials, cron
-// schedule, notification thresholds/providers) is now DB-backed and editable
-// from /config — see services/appConfig.ts. These four stay in .env since
-// they're needed before the DB is even readable.
+// schedule, and — before this app dropped auth entirely for local-only use —
+// the session secret) is now DB-backed and editable from /config — see
+// services/appConfig.ts. These three stay in .env since they're needed
+// before the DB is even readable.
 export const config = {
-  isDev: process.env.NODE_ENV === "development",
   port: Number(process.env.PORT ?? "3000"),
+  // Loopback-only by default — this app has no login, so "unlocked" must mean
+  // "reachable from this machine," not "reachable from anyone on the LAN."
+  // Binding wide open (0.0.0.0) is an explicit opt-in, not the default, same
+  // reasoning as the README's "use Tailscale, don't port-forward this" stance.
+  host: process.env.HOST ?? "127.0.0.1",
   dbPath: process.env.DB_PATH ?? "./data/budget.sqlite",
-  sessionSecret: required("SESSION_SECRET"),
 };

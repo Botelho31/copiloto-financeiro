@@ -126,8 +126,168 @@ a {
   text-underline-offset: 6px;
 }
 
-.logout-form {
-  margin: 0;
+/* Lock/unlock control (components/LockControl.tsx) — the shackle is a
+   separate path from the body so it alone can swing open on a hinge at its
+   own bottom-left anchor, like a real latch, rather than the whole glyph
+   spinning in place. transform-box: view-box makes the pixel-unit
+   transform-origin below resolve against the SVG's own 24x24 coordinate
+   space instead of the shackle path's local bounding box. */
+.lock-glyph {
+  color: var(--text-muted);
+  transition: color 200ms ease;
+  /* The open shackle's rotated arc pokes a sliver above the 0–24 viewBox
+     (rotate(-35deg) around its hinge carries the top of the arc to a
+     slightly negative y) — invisible at the small 18px header size, an
+     obvious flat cut at the large 64px size used by the full-page
+     transition overlay. SVGs clip to their viewBox by default; this turns
+     that off. */
+  overflow: visible;
+}
+
+.lock-glyph.is-unlocked {
+  color: var(--accent);
+}
+
+.lock-glyph__shackle {
+  transform-box: view-box;
+  transform-origin: 7px 10px;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1); /* slight overshoot — a "pop", not a glide */
+}
+
+.lock-glyph.is-unlocked .lock-glyph__shackle {
+  transform: translate(-1px, -1px) rotate(-35deg);
+}
+
+.lock-glyph__keyhole {
+  transition: opacity 150ms ease;
+}
+
+.lock-glyph.is-unlocked .lock-glyph__keyhole {
+  opacity: 0; /* nothing left to turn a key in, once it's open */
+}
+
+.lock-glyph__body {
+  transform-box: view-box;
+  transform-origin: 12px 15px;
+}
+
+.lock-control {
+  position: relative;
+}
+
+/* One gold burst, exactly once, the moment the vault actually unlocks — see
+   LockControl.tsx for why this never fires on re-lock. */
+.lock-control--glint::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--gold) 55%, transparent) 0%,
+    transparent 70%
+  );
+  animation: lock-glint 700ms ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes lock-glint {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lock-glyph__shackle {
+    transition: none;
+  }
+  .lock-control--glint::before {
+    animation: none;
+    display: none;
+  }
+}
+
+/* Full-page lock/unlock transition (lib/vaultTransition.tsx) — a single
+   LockGlyph instance, rendered once at a fixed native size and positioned
+   with a translate+scale transform (FLIP technique: starts matching the
+   real origin icon's exact screen position/size, ends at an approximate
+   destination). The scrim's visibility and the icon's move-to-destination
+   are independent toggles (is-visible / is-moved), not nested, because
+   locking and unlocking order them differently: locking travels first and
+   only locks once it arrives, unlocking unlocks in place first and only
+   then travels — see runLock/runUnlock. The real screen swap (vault-status
+   cache update) always happens while the scrim is opaque, so it's never
+   seen, only the travelling icon and the darkening/lightening page are. */
+.vault-transition-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: color-mix(in srgb, var(--ink) 94%, transparent);
+  opacity: 0;
+  transition: opacity 240ms ease;
+  pointer-events: auto;
+}
+
+.vault-transition-scrim.is-visible {
+  opacity: 1;
+}
+
+.vault-transition-scrim.is-revealing {
+  opacity: 0;
+}
+
+.vault-transition-icon-wrap {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(var(--start-x), var(--start-y)) scale(var(--start-scale));
+  transition:
+    transform 520ms cubic-bezier(0.65, 0, 0.35, 1),
+    opacity 240ms ease;
+  color: var(--text-muted);
+}
+
+.vault-transition-icon-wrap.is-moved {
+  transform: translate(var(--end-x), var(--end-y)) scale(var(--end-scale));
+}
+
+.vault-transition-icon-wrap.is-revealing {
+  opacity: 0;
+}
+
+.vault-transition-icon-wrap .lock-glyph.is-unlocked {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vault-transition-scrim,
+  .vault-transition-icon-wrap {
+    transition: none;
+  }
+}
+
+/* The one-time recovery code / API key display — set like a printed credential: */
+.recovery-code,
+.api-key-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  background: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 14px 16px;
+  word-break: break-all;
+  user-select: all;
 }
 
 main {
@@ -159,6 +319,10 @@ main {
 .auth-card h1 {
   margin: 0 0 4px;
   font-size: 22px;
+}
+
+.auth-card > svg.lock-glyph {
+  align-self: center;
 }
 
 .auth-card input {

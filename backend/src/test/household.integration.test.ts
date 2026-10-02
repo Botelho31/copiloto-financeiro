@@ -9,48 +9,58 @@ import { seedHouseholdFixture, type HouseholdFixture } from "./fixtures";
 describe("household fixture — cross-resource integration", () => {
   let fixture: HouseholdFixture;
 
-  beforeEach(() => {
-    resetDb();
-    fixture = seedHouseholdFixture();
+  beforeEach(async () => {
+    await resetDb();
+    fixture = await seedHouseholdFixture();
   });
 
-  test("Household (userId null) combines every person's accounts and balance", () => {
-    const accounts = listAccounts(null);
+  test("Household (userId null) combines every person's accounts and balance", async () => {
+    const accounts = await listAccounts(null);
     expect(accounts).toHaveLength(4);
-    expect(currentBalance(null)).toBe(8000); // Alice 5000 + Bob 3000 BANK accounts only
+    expect(await currentBalance(null)).toBe(8000); // Alice 5000 + Bob 3000 BANK accounts only
 
-    const aliceOnly = listAccounts(fixture.alice.userId);
+    const aliceOnly = await listAccounts(fixture.alice.userId);
     expect(aliceOnly).toHaveLength(2);
   });
 
-  test("a shared debt is visible to both parties and counted once in Household", () => {
-    const householdDebts = listDebts(null);
+  test("a shared debt is visible to both parties and counted once in Household", async () => {
+    const householdDebts = await listDebts(null);
     expect(householdDebts).toHaveLength(1);
 
-    const aliceView = listDebts(fixture.alice.userId).find((d) => d.id === fixture.sharedDebtId);
+    const aliceView = (await listDebts(fixture.alice.userId)).find(
+      (d) => d.id === fixture.sharedDebtId
+    );
     expect(aliceView?.is_owner).toBe(true);
     expect(aliceView?.principal).toBe(2000);
 
-    const bobView = listDebts(fixture.bob.userId).find((d) => d.id === fixture.sharedDebtId);
+    const bobView = (await listDebts(fixture.bob.userId)).find(
+      (d) => d.id === fixture.sharedDebtId
+    );
     expect(bobView).not.toBeUndefined();
     expect(bobView?.is_owner).toBe(false);
   });
 
-  test("a person's own projection starts from just their own balance", () => {
-    const aliceProjection = computeProjection({ userId: fixture.alice.userId, horizonMonths: 1 });
+  test("a person's own projection starts from just their own balance", async () => {
+    const aliceProjection = await computeProjection({
+      userId: fixture.alice.userId,
+      horizonMonths: 1,
+    });
     expect(aliceProjection.startingBalance).toBe(5000);
 
-    const householdProjection = computeProjection({ userId: null, horizonMonths: 1 });
+    const householdProjection = await computeProjection({ userId: null, horizonMonths: 1 });
     expect(householdProjection.startingBalance).toBe(8000);
   });
 
-  test("the confirmed Rent bill projects into Alice's own month, not Bob's", () => {
-    const aliceProjection = computeProjection({ userId: fixture.alice.userId, horizonMonths: 1 });
+  test("the confirmed Rent bill projects into Alice's own month, not Bob's", async () => {
+    const aliceProjection = await computeProjection({
+      userId: fixture.alice.userId,
+      horizonMonths: 1,
+    });
     const rentLine = aliceProjection.months[0]!.bills.find((b) => b.id === fixture.rentBillId);
     expect(rentLine?.amount).toBe(-1800);
     expect(rentLine?.category_name).toBe("Housing");
 
-    const bobProjection = computeProjection({ userId: fixture.bob.userId, horizonMonths: 1 });
+    const bobProjection = await computeProjection({ userId: fixture.bob.userId, horizonMonths: 1 });
     expect(bobProjection.months[0]!.bills.find((b) => b.id === fixture.rentBillId)).toBeUndefined();
   });
 

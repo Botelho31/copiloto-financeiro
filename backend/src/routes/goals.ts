@@ -1,9 +1,9 @@
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { Goal } from "shared";
-import { db } from "../db";
+import { getDb } from "../db";
 import { parseUserId } from "../lib/scope";
-import { computeProjection, currentBalance } from "../services/projectionEngine";
+import { computeProjection, currentBalance, investmentsTotal } from "../services/projectionEngine";
 
 interface GoalRow {
   id: number;
@@ -20,18 +20,13 @@ function monthsUntil(targetDate: string): number {
   return Math.max(1, months);
 }
 
-function computeGoal(row: GoalRow, userId: number | null): Goal {
+async function computeGoal(row: GoalRow, userId: number | null): Promise<Goal> {
   // Includes investment holdings alongside cash — a goal is about total net
-  // worth reaching a number, not just what's liquid in the bank.
-  const investmentWhere = userId != null ? "AND user_id = ?" : "";
-  const investmentTotal = (
-    db
-      .query(
-        `SELECT COALESCE(SUM(balance), 0) as total FROM investments WHERE status = 'ACTIVE' ${investmentWhere}`
-      )
-      .get(...(userId != null ? [userId] : [])) as { total: number }
-  ).total;
-  const currentNetWorth = currentBalance(userId) + investmentTotal;
+  // worth reaching a number, not just what's liquid in the bank. computeProjection's
+  // own startingBalance/months[].balance already fold investmentsTotal in
+  // (see projectionEngine.ts), so it's read once here, not added again on
+  // top of finalMonth.balance.
+  const currentNetWorth = (await currentBalance(userId)) + (await investmentsTotal(userId));
 
   const months = monthsUntil(row.target_date);
   const requiredMonthlySavings = (row.target_amount - currentNetWorth) / months;
@@ -43,10 +38,9 @@ function computeGoal(row: GoalRow, userId: number | null): Goal {
   // rate that has nothing to do with its own horizon. Deriving the rate from
   // the actual projected balance at the target date keeps this consistent
   // with what the balance chart visually shows.
-  const projection = computeProjection({ horizonMonths: months, userId });
+  const projection = await computeProjection({ horizonMonths: months, userId });
   const finalMonth = projection.months[projection.months.length - 1];
-  const projectedNetWorthAtTarget =
-    investmentTotal + (finalMonth?.balance ?? currentBalance(userId));
+  const projectedNetWorthAtTarget = finalMonth?.balance ?? currentNetWorth;
   const projectedMonthlySavings = (projectedNetWorthAtTarget - currentNetWorth) / months;
 
   return {
@@ -59,14 +53,16 @@ function computeGoal(row: GoalRow, userId: number | null): Goal {
 
 // null userId = Household (goals from every person combined, each still
 // projected against their own net worth — a goal always belongs to one person).
-export function listGoals(userId: number | null = null): Goal[] {
+export async function listGoals(userId: number | null = null): Promise<Goal[]> {
   const where = userId != null ? "WHERE user_id = ?" : "";
-  const rows = db
-    .query(
-      `SELECT id, name, target_amount, target_date FROM goals ${where} ORDER BY target_date ASC`
-    )
-    .all(...(userId != null ? [userId] : [])) as GoalRow[];
-  return rows.map((row) => computeGoal(row, userId));
+  const result = await getDb().execute({
+    sql: `SELECT id, name, target_amount, target_date FROM goals ${where} ORDER BY target_date ASC`,
+    args: userId != null ? [userId] : [],
+  });
+  const rows = result.rows as unknown as GoalRow[];
+  const goals: Goal[] = [];
+  for (const row of rows) goals.push(await computeGoal(row, userId));
+  return goals;
 }
 
 export const NewGoalBody = z.object({
@@ -81,10 +77,11 @@ export type NewGoalInput = z.infer<typeof NewGoalBody>;
 // validation happens via NewGoalBody at the REST route boundary; the MCP
 // create_goal tool has its own Zod schema (same shape here, kept separate
 // since the MCP tool's schema also carries LLM-facing descriptions).
-export function createGoal(input: NewGoalInput): number {
-  const result = db
-    .query("INSERT INTO goals (name, target_amount, target_date, user_id) VALUES (?, ?, ?, ?)")
-    .run(input.name, input.targetAmount, input.targetDate, input.userId);
+export async function createGoal(input: NewGoalInput): Promise<number> {
+  const result = await getDb().execute({
+    sql: "INSERT INTO goals (name, target_amount, target_date, user_id) VALUES (?, ?, ?, ?)",
+    args: [input.name, input.targetAmount, input.targetDate, input.userId],
+  });
   return Number(result.lastInsertRowid);
 }
 
@@ -95,8 +92,10 @@ export const GoalUpdateBody = z.object({
 });
 export type GoalUpdateInput = z.infer<typeof GoalUpdateBody>;
 
-export function updateGoal(id: number, input: GoalUpdateInput): void {
-  if (!db.query("SELECT id FROM goals WHERE id = ?").get(id)) {
+export async function updateGoal(id: number, input: GoalUpdateInput): Promise<void> {
+  const db = getDb();
+  const existingResult = await db.execute({ sql: "SELECT id FROM goals WHERE id = ?", args: [id] });
+  if (existingResult.rows.length === 0) {
     throw new Error(`Goal ${id} not found`);
   }
   const fields: string[] = [];
@@ -115,21 +114,24 @@ export function updateGoal(id: number, input: GoalUpdateInput): void {
   }
   if (fields.length > 0) {
     values.push(id);
-    db.query(`UPDATE goals SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
+    await db.execute({
+      sql: `UPDATE goals SET ${fields.join(", ")} WHERE id = ?`,
+      args: values as [],
+    });
   }
 }
 
-export function deleteGoal(id: number): void {
-  db.query("DELETE FROM goals WHERE id = ?").run(id);
+export async function deleteGoal(id: number): Promise<void> {
+  await getDb().execute({ sql: "DELETE FROM goals WHERE id = ?", args: [id] });
 }
 
 export const goalsRoutes = new Elysia({ prefix: "/api/goals" })
   .get("/", ({ query }) => listGoals(parseUserId(query)))
   .post(
     "/",
-    ({ body, set, query }) => {
+    async ({ body, set, query }) => {
       try {
-        createGoal(body);
+        await createGoal(body);
         return listGoals(parseUserId(query));
       } catch (error) {
         set.status = 400;
@@ -140,9 +142,9 @@ export const goalsRoutes = new Elysia({ prefix: "/api/goals" })
   )
   .patch(
     "/:id",
-    ({ params, body, set, query }) => {
+    async ({ params, body, set, query }) => {
       try {
-        updateGoal(Number(params.id), body);
+        await updateGoal(Number(params.id), body);
         return listGoals(parseUserId(query));
       } catch (error) {
         set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
@@ -151,7 +153,7 @@ export const goalsRoutes = new Elysia({ prefix: "/api/goals" })
     },
     { body: GoalUpdateBody }
   )
-  .delete("/:id", ({ params, query }) => {
-    deleteGoal(Number(params.id));
+  .delete("/:id", async ({ params, query }) => {
+    await deleteGoal(Number(params.id));
     return listGoals(parseUserId(query));
   });

@@ -22,14 +22,7 @@ export type PluggyConnectionTestResult = { ok: true } | { ok: false; error: stri
 // as a hasXxx flag (same convention as User.hasPluggyCredentials); a blank
 // string on update means "leave unchanged."
 export interface AppConfig {
-  cronSchedule: string;
   minBuffer: number;
-  hasPushoverAppToken: boolean;
-  smtpHost: string | null;
-  smtpPort: number;
-  smtpUser: string | null;
-  smtpFrom: string | null;
-  hasSmtpPass: boolean;
 }
 
 export interface Account {
@@ -185,6 +178,7 @@ export interface ProjectedMonth {
 }
 
 export interface ProjectionResult {
+  /** Bank cash plus active investment holdings (e.g. CDBs) — not just what's liquid in checking. */
   startingBalance: number;
   baselineIncome: number;
   baselineExpense: number;
@@ -373,46 +367,4 @@ export interface SyncLogEntry {
   status: string;
   transactions_upserted: number;
   error: string | null;
-}
-
-export type NotificationSeverity = "info" | "warning" | "critical";
-
-export interface Notification {
-  id: number;
-  user_id: number;
-  rule_key: string;
-  severity: NotificationSeverity;
-  title: string;
-  body: string;
-  data: Record<string, unknown> | null;
-  created_at: string;
-  read_at: string | null;
-}
-
-// "pushover" and "email" are the only handlers implemented today, but the
-// column (and this type) are a free-form string on purpose — a new provider
-// is a new handler registered in services/notifications/providers, not a
-// schema or type change.
-export interface NotificationProviderConfig {
-  id: number;
-  user_id: number;
-  provider: string;
-  config: Record<string, unknown>;
-  enabled: boolean;
-  created_at: string;
-}
-
-export type ProviderTestResult = { ok: true } | { ok: false; error: string };
-
-// One row per (rule, scope) that's actually been saved (services/
-// notifications/rules) — userId null is the household default, a specific
-// id is that person's own override, which wins over the household default
-// for their own sync. metadata's shape is rule-specific (e.g.
-// large_transaction's threshold), validated against that rule's own zod
-// schema in the backend.
-export interface NotificationRuleSettings {
-  key: string;
-  userId: number | null;
-  enabled: boolean;
-  metadata: Record<string, unknown>;
 }

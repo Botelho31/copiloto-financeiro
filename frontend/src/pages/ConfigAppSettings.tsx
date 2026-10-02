@@ -9,20 +9,17 @@ export function ConfigAppSettings() {
   const { data: appConfig } = useAppConfig();
   const updateAppConfig = useUpdateAppConfig();
 
-  const [cronSchedule, setCronSchedule] = useState("");
   const [minBuffer, setMinBuffer] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!appConfig) return;
-    setCronSchedule(appConfig.cronSchedule);
     setMinBuffer(String(appConfig.minBuffer));
   }, [appConfig]);
 
   function submit(e: FormEvent) {
     e.preventDefault();
     const input: AppConfigUpdateInput = {
-      cronSchedule,
       minBuffer: Number(minBuffer),
     };
     setSaved(false);
@@ -46,29 +43,19 @@ export function ConfigAppSettings() {
 
         <form className="card grid" style={{ gap: 16 }} onSubmit={submit}>
           <div className="card-intro">
-            <h2>{t("appSettings.sync.title")}</h2>
-            <p className="muted">{t("appSettings.sync.subtitle")}</p>
+            <h2>{t("appSettings.thresholds.title")}</h2>
+            <p className="muted">{t("appSettings.thresholds.subtitle")}</p>
           </div>
           <div className="form-grid">
             <label>
-              {t("appSettings.sync.cronSchedule")}
-              <input
-                type="text"
-                value={cronSchedule}
-                onChange={(e) => setCronSchedule(e.target.value)}
-                placeholder="0 6 * * *"
-              />
-              <span className="hint">{t("appSettings.sync.cronScheduleHint")}</span>
-            </label>
-            <label>
-              {t("appSettings.sync.minBuffer")}
+              {t("appSettings.thresholds.minBuffer")}
               <input
                 type="number"
                 step="0.01"
                 value={minBuffer}
                 onChange={(e) => setMinBuffer(e.target.value)}
               />
-              <span className="hint">{t("appSettings.sync.minBufferHint")}</span>
+              <span className="hint">{t("appSettings.thresholds.minBufferHint")}</span>
             </label>
           </div>
 

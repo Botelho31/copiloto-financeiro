@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { FiLogOut, FiSettings } from "react-icons/fi";
+import { FiSettings } from "react-icons/fi";
 import { Link, useLocation } from "react-router-dom";
-import { NotificationBell } from "./NotificationBell";
+import { LockControl } from "./LockControl";
 import { PersonSwitcher } from "./PersonSwitcher";
-import { logout } from "../lib/api";
 
 function useNavLinks() {
   const { t } = useTranslation();
@@ -38,7 +37,6 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <PersonSwitcher />
-        <NotificationBell />
         <Link
           to="/config"
           className={"secondary icon" + (location.pathname.startsWith("/config") ? " active" : "")}
@@ -46,17 +44,7 @@ export function Layout({ children }: { children: ReactNode }) {
         >
           <FiSettings />
         </Link>
-        <form
-          className="logout-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void logout();
-          }}
-        >
-          <button type="submit" className="secondary icon" title={t("logout")}>
-            <FiLogOut />
-          </button>
-        </form>
+        <LockControl />
       </header>
       <main>{children}</main>
     </div>

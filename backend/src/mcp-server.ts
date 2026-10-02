@@ -1,44 +1,87 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { Transaction } from "shared";
 import { z } from "zod";
-import { db } from "./db";
-import { listAccounts } from "./routes/accounts";
-import { createBill, deleteBill, listBills, updateBill } from "./routes/bills";
-import {
-  createCategory,
-  getUncategorizedGroups,
-  listCategories,
-  listRules,
-  updateCategory,
-} from "./routes/categories";
-import {
-  createDebt,
-  deleteDebt,
-  getDebtTransactions,
-  linkDebtToDebt,
-  linkTransactionsToDebt,
-  listDebts,
-  unlinkDebtFromDebt,
-  updateDebt,
-} from "./services/debts";
-import { createGoal, deleteGoal, listGoals, updateGoal } from "./routes/goals";
-import { listInvestments } from "./routes/investments";
-import { listNotifications, markNotificationRead } from "./routes/notifications";
-import { getSettings, updateSettings } from "./routes/settings";
-import { getLastSync } from "./routes/sync";
-import { createUser, deleteUser, listUsers, updateUser } from "./routes/users";
-import { computeProjection } from "./services/projectionEngine";
-import { bulkTag, bulkUntag, createTag, listTags } from "./routes/tags";
-import { detectRecurringBills } from "./jobs/recurringDetection";
-import { detectSelfTransfers } from "./jobs/transferDetection";
-import { triggerSync } from "./jobs/dailySync";
-import {
-  applyCategoryRule,
-  bulkSetCategory,
-  reclassifyMatching,
-  setTransactionCategory,
-} from "./services/categorization";
+import { config } from "./config";
+
+// This app encrypts its SQLite database at rest, and only the main HTTP
+// server process (backend/src/index.ts) ever holds the decryption key in
+// memory, only while unlocked (see backend/src/db/index.ts). mcp-server.ts
+// is a separate OS process Claude Code spawns independently — it cannot
+// share that key, so it never touches the database or any service function
+// directly (the only backend import here is ./config, pure env-var parsing
+// with no business logic or DB access of its own). Every tool below is a
+// plain HTTP client of the main server's own /api/* routes instead (the
+// same ones the frontend calls), the same pattern frontend/src/lib/api.ts
+// uses, authenticated via an API key (see routes/vault.ts) instead of a
+// browser session cookie. Locking the vault makes every one of these
+// requests fail with 423 — instantly, for this process too, with nothing
+// cached here to go stale.
+
+// Same directory vault/store.ts derives vault.json's path from — follows a
+// custom DB_PATH (e.g. a Docker deployment), not hardcoded relative to this
+// source file.
+const API_KEY_PATH = join(dirname(config.dbPath), "mcp-api-key");
+const BASE_URL = `http://127.0.0.1:${config.port}`;
+
+class McpApiError extends Error {}
+
+function readApiKey(): string {
+  try {
+    return readFileSync(API_KEY_PATH, "utf-8").trim();
+  } catch {
+    throw new McpApiError(
+      "No API key found at data/mcp-api-key. Generate one from /config in the browser " +
+        "(Developer / API Keys) and save the raw key to that file."
+    );
+  }
+}
+
+// Re-reads the key file on every call — it's stable (not rotated), so this
+// is cheap insurance that a freshly-generated key is picked up without
+// restarting this process, not a performance concern.
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const key = readApiKey();
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", "X-API-Key": key, ...init?.headers },
+    });
+  } catch {
+    throw new McpApiError(
+      "Could not reach the server — is it running? Start it with `bun run dev` or `bun run start`."
+    );
+  }
+  if (res.status === 423) {
+    throw new McpApiError("The vault is locked — unlock it in the browser first.");
+  }
+  if (res.status === 401) {
+    throw new McpApiError(
+      "No valid API key — generate one from /config in the browser and save it to data/mcp-api-key."
+    );
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}) as { error?: string });
+    throw new McpApiError(body.error ?? `${res.status} ${res.statusText}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+// Builds a query string from a plain object, skipping null/undefined/false
+// values (and converting booleans to the "true" string literal the backend's
+// query-parsing expects, e.g. unreadOnly/uncategorizedOnly).
+function toQuery(params: Record<string, unknown>): string {
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === false) continue;
+    usp.set(key, value === true ? "true" : String(value));
+  }
+  const qs = usp.toString();
+  return qs ? `?${qs}` : "";
+}
 
 function json(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
@@ -63,7 +106,13 @@ server.registerTool(
       "Most other tools take an optional userId to scope to one person (omit for the Household " +
       "view, everyone combined) — look up ids here first.",
   },
-  async () => json(listUsers())
+  async () => {
+    try {
+      return json(await apiFetch("/api/users"));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -89,7 +138,7 @@ server.registerTool(
   },
   async (input) => {
     try {
-      return json(createUser(input));
+      return json(await apiFetch("/api/users", { method: "POST", body: JSON.stringify(input) }));
     } catch (error) {
       return errorResult(error);
     }
@@ -117,7 +166,9 @@ server.registerTool(
   },
   async ({ id, ...input }) => {
     try {
-      return json(updateUser(id, input));
+      return json(
+        await apiFetch(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(input) })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -135,7 +186,7 @@ server.registerTool(
   },
   async ({ id }) => {
     try {
-      return json(deleteUser(id));
+      return json(await apiFetch(`/api/users/${id}`, { method: "DELETE" }));
     } catch (error) {
       return errorResult(error);
     }
@@ -148,7 +199,13 @@ server.registerTool(
     description:
       "List all categories, including which are excluded from cash-flow totals (Transfers, Savings & Investments).",
   },
-  async () => json(listCategories())
+  async () => {
+    try {
+      return json(await apiFetch("/api/categories"));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -157,7 +214,13 @@ server.registerTool(
     description:
       "List all category_rules (substring match against normalized descriptions -> category), applied automatically to new transactions during sync.",
   },
-  async () => json(listRules())
+  async () => {
+    try {
+      return json(await apiFetch("/api/categories/rules"));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -168,8 +231,11 @@ server.registerTool(
     inputSchema: { id: z.number().int() },
   },
   async ({ id }) => {
-    db.query("DELETE FROM category_rules WHERE id = ?").run(id);
-    return json(listRules());
+    try {
+      return json(await apiFetch(`/api/categories/rules/${id}`, { method: "DELETE" }));
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -187,7 +253,15 @@ server.registerTool(
         .describe("Scope to one person (see list_users); omit for Household"),
     },
   },
-  async ({ days, userId }) => json(getUncategorizedGroups(days ?? 30, userId ?? null))
+  async ({ days, userId }) => {
+    try {
+      return json(
+        await apiFetch(`/api/categories/uncategorized-groups${toQuery({ days, userId })}`)
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -208,7 +282,12 @@ server.registerTool(
   },
   async ({ matchText, categoryName }) => {
     try {
-      return json(applyCategoryRule(matchText, categoryName));
+      return json(
+        await apiFetch("/api/categories/apply-rule", {
+          method: "POST",
+          body: JSON.stringify({ matchText, categoryName }),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -225,9 +304,11 @@ server.registerTool(
       color: z.string().optional().describe("Hex color, e.g. '#4c9a6a' — auto-assigned if omitted"),
     },
   },
-  async ({ name, kind, color }) => {
+  async (input) => {
     try {
-      return json(createCategory(name, kind, color));
+      return json(
+        await apiFetch("/api/categories", { method: "POST", body: JSON.stringify(input) })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -246,9 +327,11 @@ server.registerTool(
       excludesFromCashflow: z.boolean().optional(),
     },
   },
-  async ({ id, name, color, excludesFromCashflow }) => {
+  async ({ id, ...input }) => {
     try {
-      return json(updateCategory(id, { name, color, excludesFromCashflow }));
+      return json(
+        await apiFetch(`/api/categories/${id}`, { method: "PATCH", body: JSON.stringify(input) })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -261,7 +344,13 @@ server.registerTool(
     description:
       "List all tags — a cross-cutting label independent of category, e.g. 'House build' can span transactions in Shopping, Transport, Debt & Credit Card, etc.",
   },
-  async () => json(listTags())
+  async () => {
+    try {
+      return json(await apiFetch("/api/tags"));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -273,9 +362,9 @@ server.registerTool(
       color: z.string().optional().describe("Hex color — auto-assigned if omitted"),
     },
   },
-  async ({ name, color }) => {
+  async (input) => {
     try {
-      return json(createTag(name, color));
+      return json(await apiFetch("/api/tags", { method: "POST", body: JSON.stringify(input) }));
     } catch (error) {
       return errorResult(error);
     }
@@ -292,7 +381,15 @@ server.registerTool(
       tagId: z.number().int(),
     },
   },
-  async ({ transactionIds, tagId }) => json({ tagged: bulkTag(transactionIds, tagId) })
+  async (input) => {
+    try {
+      return json(
+        await apiFetch("/api/tags/bulk-tag", { method: "POST", body: JSON.stringify(input) })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -304,7 +401,15 @@ server.registerTool(
       tagId: z.number().int(),
     },
   },
-  async ({ transactionIds, tagId }) => json({ untagged: bulkUntag(transactionIds, tagId) })
+  async (input) => {
+    try {
+      return json(
+        await apiFetch("/api/tags/bulk-untag", { method: "POST", body: JSON.stringify(input) })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -318,7 +423,16 @@ server.registerTool(
   },
   async ({ transactionId, categoryName }) => {
     try {
-      setTransactionCategory(transactionId, categoryName);
+      // The route takes categoryId, not categoryName — resolve it first via
+      // list_categories' own route, same lookup create_bill/update_bill do
+      // below for categoryName/debtName.
+      const categories = await apiFetch<{ id: number; name: string }[]>("/api/categories");
+      const category = categories.find((c) => c.name === categoryName);
+      if (!category) return errorResult(`Unknown category "${categoryName}"`);
+      await apiFetch(`/api/transactions/${transactionId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ categoryId: category.id }),
+      });
       return json({ ok: true });
     } catch (error) {
       return errorResult(error);
@@ -339,10 +453,14 @@ server.registerTool(
       categoryName: z.string(),
     },
   },
-  async ({ transactionIds, categoryName }) => {
+  async (input) => {
     try {
-      const updated = bulkSetCategory(transactionIds, categoryName);
-      return json({ updated });
+      return json(
+        await apiFetch("/api/transactions/bulk-set-category", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -363,9 +481,14 @@ server.registerTool(
       categoryName: z.string(),
     },
   },
-  async ({ matchText, categoryName }) => {
+  async (input) => {
     try {
-      return json(reclassifyMatching(matchText, categoryName));
+      return json(
+        await apiFetch("/api/transactions/reclassify", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -399,72 +522,12 @@ server.registerTool(
         .describe("Scope to one person (see list_users); omit for Household"),
     },
   },
-  async ({
-    from,
-    to,
-    categoryName,
-    accountId,
-    tagId,
-    uncategorizedOnly,
-    descriptionContains,
-    descriptionRegex,
-    limit,
-    userId,
-  }) => {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    if (userId != null) {
-      conditions.push("t.user_id = ?");
-      params.push(userId);
+  async (input) => {
+    try {
+      return json(await apiFetch(`/api/transactions${toQuery(input)}`));
+    } catch (error) {
+      return errorResult(error);
     }
-    if (from) {
-      conditions.push("t.date >= ?");
-      params.push(from);
-    }
-    if (to) {
-      conditions.push("t.date < ?");
-      params.push(to);
-    }
-    if (accountId) {
-      conditions.push("t.account_id = ?");
-      params.push(accountId);
-    }
-    if (categoryName) {
-      conditions.push("c.name = ?");
-      params.push(categoryName);
-    }
-    if (tagId) {
-      conditions.push("t.id IN (SELECT transaction_id FROM transaction_tags WHERE tag_id = ?)");
-      params.push(tagId);
-    }
-    if (uncategorizedOnly) {
-      conditions.push("c.name = 'Uncategorized'");
-    }
-    if (descriptionContains) {
-      conditions.push("t.description LIKE ?");
-      params.push(`%${descriptionContains}%`);
-    }
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    // When regex-filtering, don't apply LIMIT in SQL — it would truncate
-    // before the regex ever runs. Cap the regex-filtered result instead.
-    const sqlLimit = descriptionRegex ? undefined : (limit ?? 200);
-    const allParams: unknown[] = sqlLimit ? [...params, sqlLimit] : params;
-    let rows = db
-      .query(
-        `SELECT t.id, t.account_id, t.date, t.description, t.amount, t.type, t.status, t.currency_code,
-                t.category_id, c.name as category_name
-         FROM transactions t
-         LEFT JOIN categories c ON c.id = t.category_id
-         ${where}
-         ORDER BY t.date DESC
-         ${sqlLimit ? "LIMIT ?" : ""}`
-      )
-      .all(...(allParams as [])) as Transaction[];
-    if (descriptionRegex) {
-      const re = new RegExp(descriptionRegex, "i");
-      rows = rows.filter((t) => re.test(t.description)).slice(0, limit ?? 200);
-    }
-    return json(rows);
   }
 );
 
@@ -480,7 +543,13 @@ server.registerTool(
     description: "List all synced BANK/CREDIT accounts with current balances.",
     inputSchema: { userId: userIdScopeParam },
   },
-  async ({ userId }) => json(listAccounts(userId ?? null))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/accounts${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -490,7 +559,13 @@ server.registerTool(
       "List synced investment holdings (Pluggy's separate Investments API, not Accounts). Only status='ACTIVE' rows are current holdings — 'TOTAL_WITHDRAWAL' means already redeemed.",
     inputSchema: { userId: userIdScopeParam },
   },
-  async ({ userId }) => json(listInvestments(userId ?? null))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/investments${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -500,8 +575,24 @@ server.registerTool(
       "List recurring bills (manual + auto-detected), including pending/unconfirmed ones.",
     inputSchema: { userId: userIdScopeParam },
   },
-  async ({ userId }) => json(listBills(userId ?? null))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/bills${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
+
+async function resolveCategoryId(categoryName: string): Promise<number | null> {
+  const categories = await apiFetch<{ id: number; name: string }[]>("/api/categories");
+  return categories.find((c) => c.name === categoryName)?.id ?? null;
+}
+
+async function resolveDebtId(debtName: string): Promise<number | null> {
+  const debts = await apiFetch<{ id: number; name: string }[]>("/api/debts");
+  return debts.find((d) => d.name === debtName)?.id ?? null;
+}
 
 server.registerTool(
   "create_bill",
@@ -532,48 +623,26 @@ server.registerTool(
         ),
     },
   },
-  async ({
-    name,
-    userId,
-    categoryName,
-    expectedAmount,
-    cadence,
-    nextDueDate,
-    recurrenceStartDate,
-    recurrenceEndDate,
-    isCardExpense,
-    debtName,
-  }) => {
-    let categoryId: number | undefined;
-    if (categoryName) {
-      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
-        id: number;
-      } | null;
-      if (!row) return errorResult(`Unknown category "${categoryName}"`);
-      categoryId = row.id;
-    }
-    let debtId: number | undefined;
-    if (debtName) {
-      const row = db.query("SELECT id FROM debts WHERE name = ?").get(debtName) as {
-        id: number;
-      } | null;
-      if (!row) return errorResult(`Unknown debt "${debtName}"`);
-      debtId = row.id;
-    }
+  async ({ name, userId, categoryName, debtName, ...rest }) => {
     try {
-      createBill({
-        name,
-        userId,
-        categoryId,
-        expectedAmount,
-        cadence,
-        nextDueDate,
-        recurrenceStartDate,
-        recurrenceEndDate,
-        isCardExpense,
-        debtId,
-      });
-      return json(listBills(userId));
+      let categoryId: number | undefined;
+      if (categoryName) {
+        const id = await resolveCategoryId(categoryName);
+        if (id == null) return errorResult(`Unknown category "${categoryName}"`);
+        categoryId = id;
+      }
+      let debtId: number | undefined;
+      if (debtName) {
+        const id = await resolveDebtId(debtName);
+        if (id == null) return errorResult(`Unknown debt "${debtName}"`);
+        debtId = id;
+      }
+      return json(
+        await apiFetch(`/api/bills${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ name, userId, categoryId, debtId, ...rest }),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -614,56 +683,30 @@ server.registerTool(
       ),
     },
   },
-  async ({
-    id,
-    name,
-    categoryName,
-    expectedAmount,
-    cadence,
-    nextDueDate,
-    recurrenceStartDate,
-    recurrenceEndDate,
-    isCardExpense,
-    debtName,
-    confirmed,
-    active,
-    userId,
-  }) => {
-    let categoryId: number | undefined;
-    if (categoryName !== undefined) {
-      const row = db.query("SELECT id FROM categories WHERE name = ?").get(categoryName) as {
-        id: number;
-      } | null;
-      if (!row) return errorResult(`Unknown category "${categoryName}"`);
-      categoryId = row.id;
-    }
-    let debtId: number | null | undefined;
-    if (debtName !== undefined) {
-      if (debtName === null) {
-        debtId = null;
-      } else {
-        const row = db.query("SELECT id FROM debts WHERE name = ?").get(debtName) as {
-          id: number;
-        } | null;
-        if (!row) return errorResult(`Unknown debt "${debtName}"`);
-        debtId = row.id;
-      }
-    }
+  async ({ id, categoryName, debtName, userId, ...rest }) => {
     try {
-      updateBill(id, {
-        name,
-        categoryId,
-        expectedAmount,
-        cadence,
-        nextDueDate,
-        recurrenceStartDate,
-        recurrenceEndDate,
-        isCardExpense,
-        debtId,
-        confirmed,
-        active,
-      });
-      return json(listBills(userId ?? null));
+      let categoryId: number | undefined;
+      if (categoryName !== undefined) {
+        const resolved = await resolveCategoryId(categoryName);
+        if (resolved == null) return errorResult(`Unknown category "${categoryName}"`);
+        categoryId = resolved;
+      }
+      let debtId: number | null | undefined;
+      if (debtName !== undefined) {
+        if (debtName === null) {
+          debtId = null;
+        } else {
+          const resolved = await resolveDebtId(debtName);
+          if (resolved == null) return errorResult(`Unknown debt "${debtName}"`);
+          debtId = resolved;
+        }
+      }
+      return json(
+        await apiFetch(`/api/bills/${id}${toQuery({ userId })}`, {
+          method: "PATCH",
+          body: JSON.stringify({ categoryId, debtId, ...rest }),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -680,8 +723,11 @@ server.registerTool(
     },
   },
   async ({ id, userId }) => {
-    deleteBill(id);
-    return json(listBills(userId ?? null));
+    try {
+      return json(await apiFetch(`/api/bills/${id}${toQuery({ userId })}`, { method: "DELETE" }));
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -695,7 +741,13 @@ server.registerTool(
       ),
     },
   },
-  async ({ userId }) => json(getLastSync(userId ?? null))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/sync/status${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -711,31 +763,48 @@ server.registerTool(
         .describe("Sync just this person (see list_users); omit to sync everyone"),
     },
   },
-  async ({ userId }) => json(await triggerSync("mcp", userId))
+  async ({ userId }) => {
+    try {
+      return json(
+        await apiFetch("/api/sync/run", { method: "POST", body: JSON.stringify({ userId }) })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
-  "list_notifications",
+  "get_app_config",
   {
     description:
-      "List notifications generated by sync rules (large transactions, projected shortfalls, ...). Newest first, capped at 100.",
-    inputSchema: {
-      userId: userIdScopeParam,
-      unreadOnly: z.boolean().optional().describe("Only notifications not yet marked read"),
-    },
+      "Get app-wide settings: the minimum balance buffer below which a projected month is flagged as a shortfall.",
   },
-  async ({ userId, unreadOnly }) => json(listNotifications(userId ?? null, unreadOnly ?? false))
+  async () => {
+    try {
+      return json(await apiFetch("/api/app-config"));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
-  "mark_notification_read",
+  "update_app_config",
   {
-    description: "Mark a single notification as read.",
-    inputSchema: { id: z.number().int() },
+    description: "Update app-wide settings — currently just the minimum balance buffer.",
+    inputSchema: {
+      minBuffer: z.number().optional(),
+    },
   },
-  async ({ id }) => {
-    markNotificationRead(id);
-    return json({ ok: true });
+  async (input) => {
+    try {
+      return json(
+        await apiFetch("/api/app-config", { method: "PATCH", body: JSON.stringify(input) })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -747,8 +816,16 @@ server.registerTool(
     inputSchema: { userId: z.number().int().describe("Which person to scan (see list_users)") },
   },
   async ({ userId }) => {
-    const created = detectRecurringBills(userId);
-    return json({ created });
+    try {
+      return json(
+        await apiFetch("/api/sync/detect-recurring-bills", {
+          method: "POST",
+          body: JSON.stringify({ userId }),
+        })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -760,8 +837,16 @@ server.registerTool(
     inputSchema: { userId: z.number().int().describe("Which person to scan (see list_users)") },
   },
   async ({ userId }) => {
-    const pairs = detectSelfTransfers(userId);
-    return json({ pairs });
+    try {
+      return json(
+        await apiFetch("/api/sync/detect-self-transfers", {
+          method: "POST",
+          body: JSON.stringify({ userId }),
+        })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -772,7 +857,13 @@ server.registerTool(
       "List debts (money borrowed or lent) with computed totals: principal, total_paid, remaining, percent_complete, interest_paid_so_far, plus payment_plan (how each debt's expected payment is calculated: loan formula, linked payment bill, history-inferred, or none). Scoped to one person, a debt shows whether they own it or are the sharedWithUserId party (isOwner distinguishes the two).",
     inputSchema: { userId: userIdScopeParam },
   },
-  async ({ userId }) => json(listDebts(userId ?? null))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/debts${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -781,7 +872,13 @@ server.registerTool(
     description: "List the transactions linked to a debt, with their role (borrow/lend/pay_off).",
     inputSchema: { debtId: z.number().int() },
   },
-  async ({ debtId }) => json(getDebtTransactions(debtId))
+  async ({ debtId }) => {
+    try {
+      return json(await apiFetch(`/api/debts/${debtId}/transactions`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -844,10 +941,14 @@ server.registerTool(
         ),
     },
   },
-  async (input) => {
+  async ({ userId, ...rest }) => {
     try {
-      createDebt(input);
-      return json(listDebts(input.userId));
+      return json(
+        await apiFetch(`/api/debts${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ userId, ...rest }),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -926,8 +1027,12 @@ server.registerTool(
   },
   async ({ id, userId, ...input }) => {
     try {
-      updateDebt(id, input);
-      return json(listDebts(userId ?? null));
+      return json(
+        await apiFetch(`/api/debts/${id}${toQuery({ userId })}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -944,8 +1049,11 @@ server.registerTool(
     },
   },
   async ({ id, userId }) => {
-    deleteDebt(id);
-    return json(listDebts(userId ?? null));
+    try {
+      return json(await apiFetch(`/api/debts/${id}${toQuery({ userId })}`, { method: "DELETE" }));
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -962,8 +1070,16 @@ server.registerTool(
     },
   },
   async ({ debtId, transactionIds, role, userId }) => {
-    linkTransactionsToDebt(debtId, transactionIds, role);
-    return json(listDebts(userId ?? null));
+    try {
+      return json(
+        await apiFetch(`/api/debts/${debtId}/link${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ transactionIds, role }),
+        })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -978,11 +1094,16 @@ server.registerTool(
     },
   },
   async ({ debtId, transactionIds, userId }) => {
-    const placeholders = transactionIds.map(() => "?").join(",");
-    db.query(
-      `DELETE FROM debt_transactions WHERE debt_id = ? AND transaction_id IN (${placeholders})`
-    ).run(debtId, ...transactionIds);
-    return json(listDebts(userId ?? null));
+    try {
+      return json(
+        await apiFetch(`/api/debts/${debtId}/unlink${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ transactionIds }),
+        })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -1003,8 +1124,12 @@ server.registerTool(
   },
   async ({ parentDebtId, childDebtId, userId }) => {
     try {
-      linkDebtToDebt(parentDebtId, childDebtId);
-      return json(listDebts(userId ?? null));
+      return json(
+        await apiFetch(`/api/debts/${parentDebtId}/link-debt${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ childDebtId }),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -1022,8 +1147,16 @@ server.registerTool(
     },
   },
   async ({ parentDebtId, childDebtId, userId }) => {
-    unlinkDebtFromDebt(parentDebtId, childDebtId);
-    return json(listDebts(userId ?? null));
+    try {
+      return json(
+        await apiFetch(`/api/debts/${parentDebtId}/unlink-debt${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ childDebtId }),
+        })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -1034,7 +1167,13 @@ server.registerTool(
       "List savings goals with computed feasibility: required_monthly_savings (to hit the target by the date) vs projected_monthly_savings (from recent baseline + confirmed bills), and on_track.",
     inputSchema: { userId: userIdScopeParam },
   },
-  async ({ userId }) => json(listGoals(userId ?? null))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/goals${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -1048,10 +1187,14 @@ server.registerTool(
       targetDate: z.string().describe("ISO date"),
     },
   },
-  async ({ name, userId, targetAmount, targetDate }) => {
+  async ({ userId, ...rest }) => {
     try {
-      createGoal({ name, userId, targetAmount, targetDate });
-      return json(listGoals(userId));
+      return json(
+        await apiFetch(`/api/goals${toQuery({ userId })}`, {
+          method: "POST",
+          body: JSON.stringify({ userId, ...rest }),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -1070,10 +1213,14 @@ server.registerTool(
       userId: userIdScopeParam.describe("Scope the returned list; omit for Household"),
     },
   },
-  async ({ id, name, targetAmount, targetDate, userId }) => {
+  async ({ id, userId, ...input }) => {
     try {
-      updateGoal(id, { name, targetAmount, targetDate });
-      return json(listGoals(userId ?? null));
+      return json(
+        await apiFetch(`/api/goals/${id}${toQuery({ userId })}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        })
+      );
     } catch (error) {
       return errorResult(error);
     }
@@ -1090,8 +1237,11 @@ server.registerTool(
     },
   },
   async ({ id, userId }) => {
-    deleteGoal(id);
-    return json(listGoals(userId ?? null));
+    try {
+      return json(await apiFetch(`/api/goals/${id}${toQuery({ userId })}`, { method: "DELETE" }));
+    } catch (error) {
+      return errorResult(error);
+    }
   }
 );
 
@@ -1107,7 +1257,13 @@ server.registerTool(
         .describe("Which person (see list_users) — settings are per-person, not global"),
     },
   },
-  async ({ userId }) => json(getSettings(userId))
+  async ({ userId }) => {
+    try {
+      return json(await apiFetch(`/api/settings${toQuery({ userId })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -1123,7 +1279,18 @@ server.registerTool(
       cardSpendGoal: z.number().nullable().optional(),
     },
   },
-  async ({ userId, cardSpendGoal }) => json(updateSettings(userId, { cardSpendGoal }))
+  async ({ userId, cardSpendGoal }) => {
+    try {
+      return json(
+        await apiFetch(`/api/settings${toQuery({ userId })}`, {
+          method: "PATCH",
+          body: JSON.stringify({ cardSpendGoal }),
+        })
+      );
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 server.registerTool(
@@ -1173,17 +1340,34 @@ server.registerTool(
     discretionaryDeltaPercent,
     interestRateAnnualPercent,
     cardSpendGoal,
-  }) =>
-    json(
-      computeProjection({
-        userId: userId ?? null,
-        horizonMonths,
-        billOverrides,
-        discretionaryDeltaPercent,
-        interestRateAnnualPercent,
-        cardSpendGoal,
-      })
-    )
+  }) => {
+    try {
+      // Any what-if-only field present routes to POST /what-if instead of
+      // the plain GET — same split routes/projections.ts itself makes.
+      const isWhatIf =
+        billOverrides != null ||
+        discretionaryDeltaPercent != null ||
+        interestRateAnnualPercent != null ||
+        cardSpendGoal != null;
+      if (isWhatIf) {
+        return json(
+          await apiFetch(`/api/projections/what-if${toQuery({ userId })}`, {
+            method: "POST",
+            body: JSON.stringify({
+              horizonMonths,
+              billOverrides,
+              discretionaryDeltaPercent,
+              interestRateAnnualPercent,
+              cardSpendGoal,
+            }),
+          })
+        );
+      }
+      return json(await apiFetch(`/api/projections${toQuery({ userId, horizonMonths })}`));
+    } catch (error) {
+      return errorResult(error);
+    }
+  }
 );
 
 const transport = new StdioServerTransport();

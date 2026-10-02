@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { User } from "shared";
-import { db } from "../db";
+import { getDb } from "../db";
 import { testPluggyCredentials } from "../pluggy/client";
 
 interface UserRow {
@@ -12,10 +12,11 @@ interface UserRow {
   pluggy_item_ids: string | null;
 }
 
-export function listUsers(): User[] {
-  const rows = db
-    .query("SELECT id, name, color, pluggy_client_id, pluggy_item_ids FROM users ORDER BY id ASC")
-    .all() as UserRow[];
+export async function listUsers(): Promise<User[]> {
+  const result = await getDb().execute(
+    "SELECT id, name, color, pluggy_client_id, pluggy_item_ids FROM users ORDER BY id ASC"
+  );
+  const rows = result.rows as unknown as UserRow[];
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -30,8 +31,9 @@ export function listUsers(): User[] {
   }));
 }
 
-function userExists(id: number): boolean {
-  return db.query("SELECT id FROM users WHERE id = ?").get(id) != null;
+async function userExists(id: number): Promise<boolean> {
+  const result = await getDb().execute({ sql: "SELECT id FROM users WHERE id = ?", args: [id] });
+  return result.rows.length > 0;
 }
 
 export const NewUserBody = z.object({
@@ -47,24 +49,30 @@ export type NewUserInput = z.infer<typeof NewUserBody>;
 // NewUserBody at the REST route boundary — kept here too since this is
 // also called directly (tests, and reused if a future caller bypasses the
 // route), and name-uniqueness is DB-dependent so can't live in Zod anyway.
-export function createUser(input: NewUserInput): User[] {
+export async function createUser(input: NewUserInput): Promise<User[]> {
   if (!input.name) {
     throw new Error("name is required");
   }
-  if (db.query("SELECT id FROM users WHERE name = ?").get(input.name)) {
+  const db = getDb();
+  const existingResult = await db.execute({
+    sql: "SELECT id FROM users WHERE name = ?",
+    args: [input.name],
+  });
+  if (existingResult.rows.length > 0) {
     throw new Error("a person with that name already exists");
   }
 
-  db.query(
-    `INSERT INTO users (name, color, pluggy_client_id, pluggy_client_secret, pluggy_item_ids)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(
-    input.name,
-    input.color ?? "#6b7280",
-    input.pluggyClientId ?? null,
-    input.pluggyClientSecret ?? null,
-    input.pluggyItemIds ?? null
-  );
+  await db.execute({
+    sql: `INSERT INTO users (name, color, pluggy_client_id, pluggy_client_secret, pluggy_item_ids)
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [
+      input.name,
+      input.color ?? "#6b7280",
+      input.pluggyClientId ?? null,
+      input.pluggyClientSecret ?? null,
+      input.pluggyItemIds ?? null,
+    ],
+  });
   return listUsers();
 }
 
@@ -84,12 +92,12 @@ export async function testPluggyConnection(
   let clientId: string | null;
   let clientSecret: string | null;
   if ("userId" in input) {
-    const row = db
-      .query("SELECT pluggy_client_id, pluggy_client_secret FROM users WHERE id = ?")
-      .get(input.userId) as {
-      pluggy_client_id: string | null;
-      pluggy_client_secret: string | null;
-    } | null;
+    const result = await getDb().execute({
+      sql: "SELECT pluggy_client_id, pluggy_client_secret FROM users WHERE id = ?",
+      args: [input.userId],
+    });
+    const row = result.rows[0] as unknown as
+      { pluggy_client_id: string | null; pluggy_client_secret: string | null } | undefined;
     if (!row) return { ok: false, error: `User ${input.userId} not found` };
     clientId = row.pluggy_client_id;
     clientSecret = row.pluggy_client_secret;
@@ -112,8 +120,8 @@ export const UserUpdateBody = z.object({
 });
 export type UserUpdateInput = z.infer<typeof UserUpdateBody>;
 
-export function updateUser(id: number, input: UserUpdateInput): User[] {
-  if (!userExists(id)) {
+export async function updateUser(id: number, input: UserUpdateInput): Promise<User[]> {
+  if (!(await userExists(id))) {
     throw new Error(`User ${id} not found`);
   }
 
@@ -143,58 +151,90 @@ export function updateUser(id: number, input: UserUpdateInput): User[] {
 
   if (fields.length > 0) {
     values.push(id);
-    db.query(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).run(...(values as []));
+    await getDb().execute({
+      sql: `UPDATE users SET ${fields.join(", ")} WHERE id = ?`,
+      args: values as [],
+    });
   }
   return listUsers();
 }
 
-export function deleteUser(id: number): User[] {
-  if (!userExists(id)) {
+// A long cascading delete across every person-owned table — all one atomic
+// unit. A partial failure here (crash, constraint error) would otherwise
+// leave orphaned rows scattered across a dozen tables pointing at a user_id
+// that no longer exists, which is a much worse state than the delete simply
+// not having happened at all.
+export async function deleteUser(id: number): Promise<User[]> {
+  if (!(await userExists(id))) {
     throw new Error(`User ${id} not found`);
   }
-  if (db.query("SELECT id FROM users").all().length <= 1) {
+  const db = getDb();
+  const countResult = await db.execute("SELECT id FROM users");
+  if (countResult.rows.length <= 1) {
     throw new Error("cannot delete the last remaining person");
   }
-  const sharedDebt = db
-    .query("SELECT id FROM debts WHERE shared_with_user_id = ? AND status = 'active'")
-    .get(id);
-  if (sharedDebt) {
+  const sharedDebtResult = await db.execute({
+    sql: "SELECT id FROM debts WHERE shared_with_user_id = ? AND status = 'active'",
+    args: [id],
+  });
+  if (sharedDebtResult.rows.length > 0) {
     throw new Error("unlink this person from any shared debts before deleting");
   }
 
-  const transactionIds = db.query("SELECT id FROM transactions WHERE user_id = ?").all(id) as {
-    id: string;
-  }[];
-  for (const { id: transactionId } of transactionIds) {
-    db.query("DELETE FROM transaction_tags WHERE transaction_id = ?").run(transactionId);
-    db.query("DELETE FROM debt_transactions WHERE transaction_id = ?").run(transactionId);
-    db.query("DELETE FROM recurring_bill_matches WHERE transaction_id = ?").run(transactionId);
-  }
-  db.query("DELETE FROM transactions WHERE user_id = ?").run(id);
-  db.query("DELETE FROM accounts WHERE user_id = ?").run(id);
-  db.query("DELETE FROM investments WHERE user_id = ?").run(id);
-  db.query("DELETE FROM items WHERE user_id = ?").run(id);
+  const tx = await db.transaction();
+  try {
+    const transactionIdsResult = await tx.execute({
+      sql: "SELECT id FROM transactions WHERE user_id = ?",
+      args: [id],
+    });
+    const transactionIds = transactionIdsResult.rows as unknown as { id: string }[];
+    for (const { id: transactionId } of transactionIds) {
+      await tx.execute({
+        sql: "DELETE FROM transaction_tags WHERE transaction_id = ?",
+        args: [transactionId],
+      });
+      await tx.execute({
+        sql: "DELETE FROM debt_transactions WHERE transaction_id = ?",
+        args: [transactionId],
+      });
+      await tx.execute({
+        sql: "DELETE FROM recurring_bill_matches WHERE transaction_id = ?",
+        args: [transactionId],
+      });
+    }
+    await tx.execute({ sql: "DELETE FROM transactions WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM accounts WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM investments WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM items WHERE user_id = ?", args: [id] });
 
-  const debtIds = db.query("SELECT id FROM debts WHERE user_id = ?").all(id) as {
-    id: number;
-  }[];
-  for (const { id: debtId } of debtIds) {
-    db.query("DELETE FROM debt_transactions WHERE debt_id = ?").run(debtId);
-    db.query("DELETE FROM debt_links WHERE parent_debt_id = ? OR child_debt_id = ?").run(
-      debtId,
-      debtId
-    );
-  }
-  db.query("DELETE FROM debts WHERE user_id = ?").run(id);
+    const debtIdsResult = await tx.execute({
+      sql: "SELECT id FROM debts WHERE user_id = ?",
+      args: [id],
+    });
+    const debtIds = debtIdsResult.rows as unknown as { id: number }[];
+    for (const { id: debtId } of debtIds) {
+      await tx.execute({ sql: "DELETE FROM debt_transactions WHERE debt_id = ?", args: [debtId] });
+      await tx.execute({
+        sql: "DELETE FROM debt_links WHERE parent_debt_id = ? OR child_debt_id = ?",
+        args: [debtId, debtId],
+      });
+    }
+    await tx.execute({ sql: "DELETE FROM debts WHERE user_id = ?", args: [id] });
 
-  db.query(
-    "DELETE FROM recurring_bill_matches WHERE recurring_bill_id IN (SELECT id FROM recurring_bills WHERE user_id = ?)"
-  ).run(id);
-  db.query("DELETE FROM recurring_bills WHERE user_id = ?").run(id);
-  db.query("DELETE FROM goals WHERE user_id = ?").run(id);
-  db.query("DELETE FROM app_settings WHERE user_id = ?").run(id);
-  db.query("DELETE FROM sync_log WHERE user_id = ?").run(id);
-  db.query("DELETE FROM users WHERE id = ?").run(id);
+    await tx.execute({
+      sql: "DELETE FROM recurring_bill_matches WHERE recurring_bill_id IN (SELECT id FROM recurring_bills WHERE user_id = ?)",
+      args: [id],
+    });
+    await tx.execute({ sql: "DELETE FROM recurring_bills WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM goals WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM app_settings WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM sync_log WHERE user_id = ?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM users WHERE id = ?", args: [id] });
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
 
   return listUsers();
 }
@@ -206,9 +246,9 @@ export const usersRoutes = new Elysia({ prefix: "/api/users" })
   })
   .post(
     "/",
-    ({ body, set }) => {
+    async ({ body, set }) => {
       try {
-        return createUser(body);
+        return await createUser(body);
       } catch (error) {
         set.status = 400;
         return { error: error instanceof Error ? error.message : String(error) };
@@ -218,9 +258,9 @@ export const usersRoutes = new Elysia({ prefix: "/api/users" })
   )
   .patch(
     "/:id",
-    ({ params, body, set }) => {
+    async ({ params, body, set }) => {
       try {
-        return updateUser(Number(params.id), body);
+        return await updateUser(Number(params.id), body);
       } catch (error) {
         set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
         return { error: error instanceof Error ? error.message : String(error) };
@@ -228,9 +268,9 @@ export const usersRoutes = new Elysia({ prefix: "/api/users" })
     },
     { body: UserUpdateBody }
   )
-  .delete("/:id", ({ params, set }) => {
+  .delete("/:id", async ({ params, set }) => {
     try {
-      return deleteUser(Number(params.id));
+      return await deleteUser(Number(params.id));
     } catch (error) {
       set.status = error instanceof Error && error.message.includes("not found") ? 404 : 400;
       return { error: error instanceof Error ? error.message : String(error) };

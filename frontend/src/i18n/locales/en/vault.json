@@ -1,0 +1,27 @@
+{
+  "setup": {
+    "title": "Set a password",
+    "subtitle": "Encrypts everything on disk. Only this password or the recovery code on the next screen can unlock it.",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "passwordTooShort": "Use at least 8 characters.",
+    "passwordMismatch": "Passwords don't match.",
+    "submit": "Create password",
+    "recoveryTitle": "Save your recovery code",
+    "recoverySubtitle": "Your only way back in if you forget the password. It won't be shown again — save it somewhere safe now.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "acknowledge": "I've saved this somewhere safe",
+    "continue": "Continue"
+  },
+  "unlock": {
+    "password": "Password",
+    "submit": "Unlock",
+    "wrongPassword": "Wrong password.",
+    "wrongRecoveryCode": "Wrong recovery code.",
+    "useRecoveryCode": "Use your recovery code instead",
+    "usePassword": "Use your password instead",
+    "recoveryCode": "Recovery code"
+  },
+  "loading": "Loading…"
+}

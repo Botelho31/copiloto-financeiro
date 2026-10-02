@@ -1,12 +1,37 @@
 {
   "tabs": {
     "people": "Pessoas",
-    "notifications": "Notificações",
     "categories": "Categorias",
-    "appSettings": "Geral"
+    "appSettings": "Geral",
+    "apiKeys": "Chaves de API"
+  },
+  "apiKeys": {
+    "subtitle": "Permite que o Claude Code ou outras ferramentas locais acessem seus dados com o cofre desbloqueado. Bloquear corta todas as chaves na hora.",
+    "new": {
+      "title": "Gerar uma chave",
+      "subtitle": "Dê um nome pelo lugar onde ela vai ser usada, ex.: \"Claude Code — MacBook\".",
+      "namePlaceholder": "Nome",
+      "submit": "Gerar"
+    },
+    "created": {
+      "title": "\"{{name}}\" criada",
+      "subtitle": "Salve isso em data/mcp-api-key na pasta do projeto — ela não vai aparecer de novo.",
+      "done": "Concluído"
+    },
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "list": {
+      "title": "Chaves ativas",
+      "empty": "Nenhuma chave ainda.",
+      "name": "Nome",
+      "createdAt": "Criada em",
+      "lastUsedAt": "Último uso",
+      "neverUsed": "Nunca",
+      "revoke": "Revogar"
+    }
   },
   "title": "Pessoas",
-  "subtitle": "Cada pessoa tem suas próprias contas, transações, contas a pagar, dívidas e metas — as credenciais do Pluggy ficam aqui por pessoa, não no .env.",
+  "subtitle": "Cada pessoa tem suas próprias contas, dívidas e metas — as credenciais do Pluggy ficam aqui, não no .env.",
   "table": {
     "name": "Nome",
     "pluggy": "Pluggy",
@@ -46,46 +71,6 @@
     "connectionOk": "Conectado",
     "connectionFailed": "Falhou: {{error}}"
   },
-  "notifications": {
-    "title": "Notificações",
-    "description": "Enviado quando uma regra de sincronização dispara (uma transação grande, um déficit projetado) — escolha por onde essa pessoa fica sabendo.",
-    "destinationsTitle": "Envio",
-    "destinationsSubtitle": "Por onde essa pessoa fica sabendo.",
-    "empty": "Nenhum provedor adicionado ainda.",
-    "addProvider": "Adicionar provedor",
-    "pushover": "Pushover",
-    "pushoverPlaceholder": "Chave de usuário do Pushover",
-    "email": "Email",
-    "emailPlaceholder": "voce@exemplo.com",
-    "callmebot": "CallMeBot (WhatsApp)",
-    "callmebotPhonePlaceholder": "Telefone com código do país, ex.: 5511999999999",
-    "callmebotApikeyPlaceholder": "Chave de API",
-    "rules": {
-      "title": "Regras de notificação",
-      "subtitle": "Padrões da família — quem não tiver personalização própria usa estes.",
-      "perPersonTitle": "Personalizações desta pessoa",
-      "perPersonSubtitle": "Afeta só esta pessoa — todo o resto continua usando o padrão da família acima.",
-      "usingHouseholdDefault": "Usando o padrão da família",
-      "on": "ativado",
-      "off": "desativado",
-      "customize": "Personalizar para esta pessoa",
-      "removeOverride": "Remover personalização",
-      "largeTransaction": {
-        "label": "Transação grande",
-        "description": "Dispara quando uma transação recém-sincronizada é igual ou acima do limite.",
-        "threshold": "Limite (BRL)",
-        "thresholdHint": "Uma transação igual ou acima deste valor dispara esta notificação."
-      },
-      "projectedShortfall": {
-        "label": "Déficit projetado",
-        "description": "Dispara quando a projeção de fluxo de caixa do próximo mês fica negativa."
-      }
-    }
-  },
-  "providerSetup": {
-    "title": "Configuração dos provedores",
-    "subtitle": "Credenciais únicas, para toda a instância, que cada provedor precisa para conseguir enviar algo — defina uma vez aqui, depois cada pessoa acima só adiciona o próprio destino."
-  },
   "categories": {
     "title": "Categorias",
     "subtitle": "Compartilhadas por toda a família — renomear ou recolorir aqui atualiza em todo lugar.",
@@ -100,7 +85,7 @@
   },
   "categoryRules": {
     "title": "Regras de categorização",
-    "description": "Aplicada automaticamente a cada nova transação na sincronização, comparando em ordem de inserção com a descrição normalizada. Criada sempre que você (ou o assistente, via MCP) categoriza um grupo ou reclassifica um padrão — ou adiciona uma regra manualmente abaixo. Adicionar uma regra aqui afeta só as transações futuras; não reclassifica retroativamente as que já existem.",
+    "description": "Aplicadas às novas transações a cada sincronização, em ordem. Criadas quando você ou o assistente categorizam algo, ou à mão abaixo — as transações existentes não mudam.",
     "matchText": "Texto de correspondência",
     "matchTextPlaceholder": "ex.: netflix",
     "categoryPlaceholder": "Escolher categoria…",
@@ -111,30 +96,14 @@
     "deleteTitle": "Excluir"
   },
   "appSettings": {
-    "subtitle": "Preferências de toda a família — idioma, horário de sincronização e limites de alerta.",
+    "subtitle": "Preferências de toda a família — idioma e limites de alerta.",
     "language": "Idioma da interface",
     "saved": "Salvo",
-    "sync": {
-      "title": "Sincronização",
-      "subtitle": "Horário do cron para a sincronização diária, e limites usados pelas regras de notificação e projeções de fluxo de caixa.",
-      "cronSchedule": "Horário do cron",
-      "cronScheduleHint": "Expressão cron padrão de 5 campos (minuto hora dia mês dia-da-semana) — o padrão roda todo dia às 6h.",
-      "minBuffer": "Limite de alerta de saldo baixo",
-      "minBufferHint": "Um mês projetado com saldo abaixo deste valor é marcado como déficit, na página de Projeções e na notificação de déficit projetado."
-    },
-    "pushover": {
-      "title": "Pushover",
-      "subtitle": "Um token de app para toda a instância, obtido em pushover.net/apps/build.",
-      "appToken": "Token do app"
-    },
-    "smtp": {
-      "title": "Email (SMTP)",
-      "subtitle": "Um relay para toda a instância.",
-      "host": "Host",
-      "port": "Porta",
-      "user": "Usuário",
-      "pass": "Senha",
-      "from": "Endereço de origem"
+    "thresholds": {
+      "title": "Limites",
+      "subtitle": "Usado pelas projeções de fluxo de caixa.",
+      "minBuffer": "Limite de saldo baixo",
+      "minBufferHint": "Um mês projetado com saldo abaixo deste valor é marcado como déficit na página de Projeções."
     }
   },
   "profile": {

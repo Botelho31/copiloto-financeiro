@@ -74,15 +74,17 @@
   },
   "savingsChart": {
     "title": "Economia projetada por mês",
-    "description": "Construído apenas com dados sólidos: contas confirmadas (receitas e despesas), o cronograma fixo de parcelas de cada dívida ativa (ignorado se o histórico de pagamentos for irregular demais para caracterizar uma cadência real) e a média dos últimos 3 meses de gastos reais no cartão de crédito — sem médias genéricas de transações bancárias, para que uma transferência pontual não se espalhe por todos os meses futuros.",
+    "description": "Feito só com dados sólidos: contas confirmadas, o cronograma de parcelas de cada dívida e a média de 3 meses do cartão — transferências pontuais nunca se espalham pelos meses futuros.",
     "summary": {
       "startingBalance": "Saldo inicial",
+      "startingBalanceCaption": "Contas bancárias + investimentos (sem o saldo do cartão)",
       "cardSpendBaseline": "Gasto no cartão (média de 3 meses)"
     },
     "cardSpendGoal": {
       "label": "Meta mensal de gasto no cartão",
       "usingAverage": "Usando a média dos últimos 3 meses (sem meta definida)",
-      "editHint": "Definir em /config"
+      "editHintPerson": "Definir no perfil desta pessoa",
+      "editHintHousehold": "Soma da meta de cada pessoa — definir no perfil de cada uma"
     },
     "netSavingsLabel": "Economia líquida",
     "breakdownToggle": "Detalhamento mensal"
@@ -110,7 +112,7 @@
   },
   "whatIf": {
     "title": "Simulação",
-    "description": "Cada alteração aqui recalcula os gráficos e números principais acima, em tempo real — o selo dourado marca esses valores como hipotéticos, mantendo seu cenário real como a linha tracejada para comparação. Nada aqui é salvo; use redefinir ou troque o período para voltar.",
+    "description": "As mudanças aqui atualizam os gráficos acima na hora — o selo dourado marca tudo como hipotético, com seu cenário real tracejado. Nada é salvo.",
     "discretionary": {
       "label": "Ajuste de gastos discricionários: {{value}}%"
     },
@@ -118,13 +120,17 @@
       "label": "Taxa de juros anual sobre saldo parado: {{value}}%",
       "hint": "(usa a taxa Selic do Brasil por padrão — edite se ela tiver mudado)"
     },
-    "income": { "title": "Receitas" },
-    "expenses": { "title": "Despesas" },
+    "income": {
+      "title": "Receitas"
+    },
+    "expenses": {
+      "title": "Despesas"
+    },
     "table": {
       "bill": "Conta",
       "expected": "Previsto",
       "card": "Cartão?",
-      "cardColumnTitle": "Cobrado no cartão de crédito — excluído da projeção porque já está coberto pela meta/média de gastos no cartão",
+      "cardColumnTitle": "No cartão de crédito — fora da projeção, já coberto pela meta/média de gastos no cartão",
       "override": "Substituir",
       "cardDisabledTitle": "Cobrado no cartão — não faz parte da projeção, então substituir não tem efeito"
     }

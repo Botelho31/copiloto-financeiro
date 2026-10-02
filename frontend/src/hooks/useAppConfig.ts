@@ -9,17 +9,8 @@ export function useAppConfig() {
   });
 }
 
-// Blank secret fields mean "leave unchanged" (see services/appConfig.ts) —
-// the caller can pass a partial update with only the fields that changed.
 export interface AppConfigUpdateInput {
-  cronSchedule?: string;
   minBuffer?: number;
-  pushoverAppToken?: string;
-  smtpHost?: string;
-  smtpPort?: number;
-  smtpUser?: string;
-  smtpPass?: string;
-  smtpFrom?: string;
 }
 
 export function useUpdateAppConfig() {

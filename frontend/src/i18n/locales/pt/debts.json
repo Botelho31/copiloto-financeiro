@@ -106,9 +106,9 @@
     "filterPlaceholder": "Filtrar por nome ou categoria…",
     "noBillsMatch": "Nenhum lançamento corresponde a \"{{filter}}\".",
     "overrideLabel": "Não inferir cronograma pelo histórico de pagamentos (usar apenas os lançamentos acima)",
-    "overrideTitle": "Pular a heurística baseada no histórico de pagamentos mesmo que ela passasse — útil quando os lançamentos acima já dão conta dos pagamentos desta dívida.",
-    "footerLoan": "A parcela mensal de um empréstimo formal sempre vem da fórmula do empréstimo, sem mudar — mas qualquer lançamento vinculado aqui conta como uma amortização extra, além dela, quitando o saldo devedor (e a dívida) mais rápido do que o cronograma simples sozinho.",
-    "footerOther": "Cada lançamento vinculado soma seu valor e periodicidade ao pagamento esperado desta dívida, limitado pelo que ainda resta — explícito, em vez de apenas inferido do histórico.",
+    "overrideTitle": "Útil quando os lançamentos acima já cobrem os pagamentos desta dívida.",
+    "footerLoan": "A parcela vem da fórmula do empréstimo. Qualquer lançamento vinculado aqui amortiza a mais, quitando antes.",
+    "footerOther": "Cada lançamento vinculado soma ao pagamento esperado desta dívida, até o que ainda falta.",
     "noProjectedPayments": "Nenhum pagamento projetado nos próximos {{horizon}} meses{{suffix}}.",
     "noProjectedSuffix": " — esta dívida só começa em {{date}}"
   },
@@ -122,13 +122,13 @@
     "legendBalanceReal": "Saldo (real)",
     "legendBalanceProjected": "Saldo (projetado)",
     "canPayOffHere": "Você pode quitar aqui",
-    "notEnoughHistory": "Ainda sem histórico suficiente para o gráfico — assim que alguns pagamentos forem vinculados, o gráfico de saldo ao longo do tempo desta dívida aparece aqui.",
-    "canPayOffNote": "Você pode quitar aqui: {{month}} — o mês mais cedo em que só o seu saldo de caixa projetado já cobre tudo que ainda é devido nesta dívida, principal e juros, sem esperar o cronograma normal terminar.",
-    "captionFuture": "Esta dívida ainda não começou, então não há histórico real — a linha inteira é projetada{{source}}, a partir da própria data de início.",
+    "notEnoughHistory": "Ainda sem histórico para o gráfico — vincule alguns pagamentos e ele aparece aqui.",
+    "canPayOffNote": "Você pode quitar aqui: {{month}} — o primeiro mês em que seu saldo projetado cobre tudo que ainda deve.",
+    "captionFuture": "Ainda não começou — a linha inteira é projetada{{source}}.",
     "captionFutureSourceSchedule": " a partir do próprio cronograma do empréstimo",
     "captionFutureSourceBill": " a partir do lançamento de pagamento vinculado",
     "captionFutureSourcePlanned": " a partir do pagamento planejado",
-    "captionWithRate": "A linha terracota é esta dívida crescendo a juros de {{rate}}% ao mês sem nunca ser paga; a linha verde é o saldo com pagamentos — sólida onde é real{{source}}. A diferença entre elas é o quanto vale a pena quitá-la.",
+    "captionWithRate": "Terracota é esta dívida a {{rate}}% ao mês sem nenhum pagamento; a linha verde é com pagamentos — sólida onde é real{{source}}. A diferença é o que você economiza pagando.",
     "captionWithRateSourceSchedule": ", tracejada onde projetada a partir do próprio cronograma do empréstimo",
     "captionWithRateSourceBill": ", tracejada onde projetada a partir do lançamento de pagamento vinculado",
     "captionWithRateSourceHeuristic": ", tracejada onde projetada a partir da sua média recente de pagamento",
@@ -139,7 +139,7 @@
     "totalInterestRunning": "Total de juros até agora + projetado",
     "totalPaidLifetime": "Total pago até a quitação",
     "totalPaidRunning": "Total pago até agora + projetado",
-    "notTrueEndOfLoan": "O pagamento planejado não supera claramente os juros, então isso é apenas um total corrente até o horizonte exibido acima, não um valor final real do empréstimo."
+    "notTrueEndOfLoan": "Os pagamentos não superam claramente os juros, então são totais até o horizonte do gráfico, não até o fim do empréstimo."
   },
   "overviewChart": {
     "title": "Todas as dívidas — saldo ao longo do tempo",
@@ -147,7 +147,7 @@
     "legendOwedProjected": "Eu devo (projetado)",
     "legendLentReal": "Me devem (real)",
     "legendLentProjected": "Me devem (projetado)",
-    "caption": "Todas as dívidas somadas por direção — terracota é o que você deve, verde é o que devem a você (mantidos separados, sem compensação entre eles). Sólido é histórico real; tracejado projeta cada dívida adiante pelo seu próprio cronograma ou pagamentos recentes, mantendo estável onde não há base para projetar."
+    "caption": "Terracota é o que você deve, verde é o que devem a você — sem compensar um com o outro. Sólido é real; tracejado é projetado."
   },
   "balanceScheduleTooltip": {
     "principalOwed": "Principal devido: {{amount}}",
@@ -158,7 +158,7 @@
     "title": "O que ainda é devido — principal vs. juros",
     "legendPrincipal": "Principal devido",
     "legendInterest": "Juros ainda devidos",
-    "caption": "Ambos chegam a zero juntos, exatamente na quitação. Só é exato para um empréstimo formal (com taxa e cronograma PRICE/SAC definidos) — uma dívida quitada por um lançamento vinculado ou inferida do histórico aparece inteiramente como principal, já que não há fórmula para separar."
+    "caption": "Ambos zeram na quitação. Só é exato para empréstimos formais com taxa e cronograma PRICE/SAC — o resto aparece todo como principal."
   },
   "card": {
     "paidSoFar": "Pago até agora",
@@ -181,7 +181,7 @@
     "future": "Futuras",
     "futureNote": "Ainda não começou — a data de início ainda está por vir.",
     "addDebt": "Adicionar dívida",
-    "addDebtDescription": "Um principal fixo é para um empréstimo simples. Uma porcentagem de divisão é para uma despesa compartilhada que você adiantou (ex.: o custo de uma construção dividido 50/50) — vincule a(s) transação(ões) da compra compartilhada como \"pegar emprestado\"/\"emprestar\" e o valor devido cresce automaticamente conforme você vincula mais.",
+    "addDebtDescription": "Use um principal fixo para um empréstimo simples, ou uma porcentagem de divisão para uma despesa compartilhada que você adiantou — depois vincule as compras como \"pegar emprestado\"/\"emprestar\".",
     "name": "Nome",
     "direction": "Direção",
     "counterparty": "Contraparte",

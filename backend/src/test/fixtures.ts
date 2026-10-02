@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { getDb } from "../db";
 import { categoryIdByName } from "./helpers";
 
 // A realistic two-person household, seeded once per test via seedHouseholdFixture()
@@ -14,46 +14,51 @@ export interface HouseholdFixture {
   rentBillId: number;
 }
 
-export function seedHouseholdFixture(): HouseholdFixture {
-  const income = categoryIdByName("Income");
-  const groceries = categoryIdByName("Groceries");
-  const housing = categoryIdByName("Housing");
+export async function seedHouseholdFixture(): Promise<HouseholdFixture> {
+  const db = getDb();
+  const income = await categoryIdByName("Income");
+  const groceries = await categoryIdByName("Groceries");
+  const housing = await categoryIdByName("Housing");
 
-  const aliceId = Number(
-    db
-      .query(
-        `INSERT INTO users (name, color, pluggy_client_id, pluggy_item_ids)
-         VALUES ('Alice', '#5f7fbf', 'alice-client', 'alice-item-1')`
-      )
-      .run().lastInsertRowid
+  const aliceResult = await db.execute(
+    `INSERT INTO users (name, color, pluggy_client_id, pluggy_item_ids)
+     VALUES ('Alice', '#5f7fbf', 'alice-client', 'alice-item-1')`
   );
-  const bobId = Number(
-    db.query("INSERT INTO users (name, color) VALUES ('Bob', '#4c9a6a')").run().lastInsertRowid
-  );
+  const aliceId = Number(aliceResult.lastInsertRowid);
+  const bobResult = await db.execute("INSERT INTO users (name, color) VALUES ('Bob', '#4c9a6a')");
+  const bobId = Number(bobResult.lastInsertRowid);
 
-  db.query("INSERT INTO items (id, user_id, status) VALUES ('alice-item-1', ?, 'active')").run(
-    aliceId
-  );
-  db.query("INSERT INTO items (id, user_id, status) VALUES ('bob-item-1', ?, 'active')").run(bobId);
+  await db.execute({
+    sql: "INSERT INTO items (id, user_id, status) VALUES ('alice-item-1', ?, 'active')",
+    args: [aliceId],
+  });
+  await db.execute({
+    sql: "INSERT INTO items (id, user_id, status) VALUES ('bob-item-1', ?, 'active')",
+    args: [bobId],
+  });
 
   const aliceBank = "alice-bank";
   const aliceCard = "alice-card";
   const bobBank = "bob-bank";
   const bobCard = "bob-card";
-  db.query(
-    "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'alice-item-1', ?, 'Alice Checking', 'BANK', 'checking', 5000)"
-  ).run(aliceBank, aliceId);
-  db.query(
-    "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'alice-item-1', ?, 'Alice Card', 'CREDIT', 'credit_card', 800)"
-  ).run(aliceCard, aliceId);
-  db.query(
-    "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'bob-item-1', ?, 'Bob Checking', 'BANK', 'checking', 3000)"
-  ).run(bobBank, bobId);
-  db.query(
-    "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'bob-item-1', ?, 'Bob Card', 'CREDIT', 'credit_card', 200)"
-  ).run(bobCard, bobId);
+  await db.execute({
+    sql: "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'alice-item-1', ?, 'Alice Checking', 'BANK', 'checking', 5000)",
+    args: [aliceBank, aliceId],
+  });
+  await db.execute({
+    sql: "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'alice-item-1', ?, 'Alice Card', 'CREDIT', 'credit_card', 800)",
+    args: [aliceCard, aliceId],
+  });
+  await db.execute({
+    sql: "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'bob-item-1', ?, 'Bob Checking', 'BANK', 'checking', 3000)",
+    args: [bobBank, bobId],
+  });
+  await db.execute({
+    sql: "INSERT INTO accounts (id, item_id, user_id, name, type, subtype, balance) VALUES (?, 'bob-item-1', ?, 'Bob Card', 'CREDIT', 'credit_card', 200)",
+    args: [bobCard, bobId],
+  });
 
-  const tx = (
+  const tx = async (
     id: string,
     accountId: string,
     userId: number,
@@ -62,47 +67,44 @@ export function seedHouseholdFixture(): HouseholdFixture {
     amount: number,
     categoryId: number
   ) => {
-    db.query(
-      `INSERT INTO transactions (id, account_id, user_id, date, description, amount, type, status, currency_code, category_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'POSTED', 'BRL', ?)`
-    ).run(
-      id,
-      accountId,
-      userId,
-      date,
-      description,
-      amount,
-      amount >= 0 ? "CREDIT" : "DEBIT",
-      categoryId
-    );
+    await db.execute({
+      sql: `INSERT INTO transactions (id, account_id, user_id, date, description, amount, type, status, currency_code, category_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'POSTED', 'BRL', ?)`,
+      args: [
+        id,
+        accountId,
+        userId,
+        date,
+        description,
+        amount,
+        amount >= 0 ? "CREDIT" : "DEBIT",
+        categoryId,
+      ],
+    });
   };
 
-  tx("alice-salary", aliceBank, aliceId, "2026-06-01", "Salary", 6000, income);
-  tx("alice-groceries", aliceBank, aliceId, "2026-06-05", "Supermarket", -450, groceries);
-  tx("alice-rent", aliceBank, aliceId, "2026-06-01", "Rent payment", -1800, housing);
-  tx("bob-salary", bobBank, bobId, "2026-06-01", "Salary", 4000, income);
-  tx("bob-groceries", bobBank, bobId, "2026-06-06", "Grocery run", -300, groceries);
+  await tx("alice-salary", aliceBank, aliceId, "2026-06-01", "Salary", 6000, income);
+  await tx("alice-groceries", aliceBank, aliceId, "2026-06-05", "Supermarket", -450, groceries);
+  await tx("alice-rent", aliceBank, aliceId, "2026-06-01", "Rent payment", -1800, housing);
+  await tx("bob-salary", bobBank, bobId, "2026-06-01", "Salary", 4000, income);
+  await tx("bob-groceries", bobBank, bobId, "2026-06-06", "Grocery run", -300, groceries);
 
-  const rentBillId = Number(
-    db
-      .query(
-        `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, source, confirmed, active)
-         VALUES ('Rent', ?, ?, 1800, 'monthly', 'manual', 1, 1)`
-      )
-      .run(aliceId, housing).lastInsertRowid
-  );
+  const rentBillResult = await db.execute({
+    sql: `INSERT INTO recurring_bills (name, user_id, category_id, expected_amount, cadence, source, confirmed, active)
+          VALUES ('Rent', ?, ?, 1800, 'monthly', 'manual', 1, 1)`,
+    args: [aliceId, housing],
+  });
+  const rentBillId = Number(rentBillResult.lastInsertRowid);
 
   // Alice fronted a shared expense; Bob owes 50% of it back — the same
   // split_percentage + shared_with_user_id mechanic ARCHITECTURE.md describes
   // for a real shared debt (e.g. "Juliana owes 20% of Estudio Foz").
-  const sharedDebtId = Number(
-    db
-      .query(
-        `INSERT INTO debts (name, direction, user_id, shared_with_user_id, principal_amount, start_date, status)
-         VALUES ('Shared renovation cost', 'owed_to_me', ?, ?, 2000, '2026-01-01', 'active')`
-      )
-      .run(aliceId, bobId).lastInsertRowid
-  );
+  const sharedDebtResult = await db.execute({
+    sql: `INSERT INTO debts (name, direction, user_id, shared_with_user_id, principal_amount, start_date, status)
+          VALUES ('Shared renovation cost', 'owed_to_me', ?, ?, 2000, '2026-01-01', 'active')`,
+    args: [aliceId, bobId],
+  });
+  const sharedDebtId = Number(sharedDebtResult.lastInsertRowid);
 
   return {
     alice: { userId: aliceId, bankAccountId: aliceBank, cardAccountId: aliceCard },

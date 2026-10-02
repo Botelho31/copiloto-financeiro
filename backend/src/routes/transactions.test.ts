@@ -3,16 +3,16 @@ import { insertTestAccount, insertTestTransaction, insertTestUser, resetDb } fro
 import { transactionsRoutes } from "./transactions";
 import type { PaginatedTransactions } from "shared";
 
-beforeEach(() => resetDb());
+beforeEach(async () => await resetDb());
 
 // Real HTTP requests against a real Elysia instance — proves paging is
 // actually wired at the route, not just present in the handler's dead code.
 describe("GET /api/transactions — pagination", () => {
   test("page param returns a slice + accurate total, unpaged callers keep the bare-array shape", async () => {
-    const userId = insertTestUser();
-    const accountId = insertTestAccount({ id: "acct-1", userId });
+    const userId = await insertTestUser();
+    const accountId = await insertTestAccount({ id: "acct-1", userId });
     for (let i = 0; i < 12; i++) {
-      insertTestTransaction({
+      await insertTestTransaction({
         accountId,
         userId,
         date: `2026-01-${String(i + 1).padStart(2, "0")}`,
@@ -62,9 +62,9 @@ describe("GET /api/transactions — pagination", () => {
   });
 
   test("pageSize is capped, not trusted from the client", async () => {
-    const userId = insertTestUser();
-    const accountId = insertTestAccount({ id: "acct-1", userId });
-    insertTestTransaction({ accountId, userId, date: "2026-01-01", amount: -10 });
+    const userId = await insertTestUser();
+    const accountId = await insertTestAccount({ id: "acct-1", userId });
+    await insertTestTransaction({ accountId, userId, date: "2026-01-01", amount: -10 });
 
     const app = transactionsRoutes.listen(0);
     const port = (app.server as { port: number }).port;

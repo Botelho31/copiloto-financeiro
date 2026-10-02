@@ -9,7 +9,7 @@ if (!matchTextArg || !categoryNameArg) {
 }
 
 try {
-  const { matchText, updated } = applyCategoryRule(matchTextArg, categoryNameArg);
+  const { matchText, updated } = await applyCategoryRule(matchTextArg, categoryNameArg);
   console.log(
     `Rule "${matchText}" -> "${categoryNameArg}" saved. ${updated} existing transaction(s) recategorized.`
   );

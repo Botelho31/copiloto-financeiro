@@ -106,9 +106,9 @@
     "filterPlaceholder": "Filter by name or category…",
     "noBillsMatch": "No bills match \"{{filter}}\".",
     "overrideLabel": "Don't infer a schedule from payment history (use only the bills above)",
-    "overrideTitle": "Skip the payment-history heuristic even if it would otherwise pass — useful once the bills above are already accounting for this debt's payments.",
-    "footerLoan": "A formal loan's monthly installment always comes from the loan formula, unchanged — but any bill linked here counts as an extra amortization payment on top of it, paying the balance down (and off) faster than the plain schedule alone.",
-    "footerOther": "Every linked bill's amount and cadence adds to this debt's expected payment, bounded by what's still remaining — explicit, instead of only inferred from history.",
+    "overrideTitle": "Useful once the bills above already cover this debt's payments.",
+    "footerLoan": "The installment comes from the loan formula. Any bill linked here pays extra on top, so it's paid off sooner.",
+    "footerOther": "Each linked bill adds to this debt's expected payment, capped at what's left.",
     "noProjectedPayments": "No projected payments in the next {{horizon}} months{{suffix}}.",
     "noProjectedSuffix": " — this debt only starts {{date}}"
   },
@@ -122,13 +122,13 @@
     "legendBalanceReal": "Balance (real)",
     "legendBalanceProjected": "Balance (projected)",
     "canPayOffHere": "You can pay off here",
-    "notEnoughHistory": "Not enough history to chart yet — once a couple of repayments are linked, this debt's balance-over-time chart appears here.",
-    "canPayOffNote": "You can pay off here: {{month}} — the earliest month your projected cash balance alone covers everything still owed on this debt, principal and interest, without waiting for the regular schedule to finish it off.",
-    "captionFuture": "This debt hasn't started yet, so there's no real history — the whole line is projected{{source}}, starting from its own start date.",
+    "notEnoughHistory": "Not enough history to chart yet — link a couple of repayments and it shows up here.",
+    "canPayOffNote": "You can pay off here: {{month}} — the first month your projected balance covers everything still owed.",
+    "captionFuture": "Hasn't started yet — the whole line is projected{{source}}.",
     "captionFutureSourceSchedule": " from the loan's own schedule",
     "captionFutureSourceBill": " from the linked payment bill",
     "captionFutureSourcePlanned": " from the planned payment",
-    "captionWithRate": "The rust line is this debt compounding at {{rate}}% a month with nothing ever paid; the green line is the balance with payments — solid where real{{source}}. The gap between them is what paying it down is worth.",
+    "captionWithRate": "Rust is this debt growing at {{rate}}%/mo if never paid; green is with payments — solid where real{{source}}. The gap is what paying saves you.",
     "captionWithRateSourceSchedule": ", dashed where projected from the loan's own schedule",
     "captionWithRateSourceBill": ", dashed where projected from the linked payment bill",
     "captionWithRateSourceHeuristic": ", dashed where projected from your recent average payment",
@@ -139,7 +139,7 @@
     "totalInterestRunning": "Total interest so far + projected",
     "totalPaidLifetime": "Total paid by payoff",
     "totalPaidRunning": "Total paid so far + projected",
-    "notTrueEndOfLoan": "The planned payment doesn't clearly outpace interest, so this is only a running total through the charted horizon above, not a true end-of-loan figure."
+    "notTrueEndOfLoan": "Payments don't clearly outpace interest, so these are totals through the charted horizon, not the end of the loan."
   },
   "overviewChart": {
     "title": "All debts — balance over time",
@@ -147,7 +147,7 @@
     "legendOwedProjected": "I owe (projected)",
     "legendLentReal": "Owed to me (real)",
     "legendLentProjected": "Owed to me (projected)",
-    "caption": "Every debt summed by direction — rust is what you owe, green is owed to you (kept separate, not netted). Solid is real history; dashed carries each debt forward on its own schedule or recent payments, holding flat where there's nothing to project from."
+    "caption": "Rust is what you owe, green is what's owed to you — never netted. Solid is real; dashed is projected."
   },
   "balanceScheduleTooltip": {
     "principalOwed": "Principal owed: {{amount}}",
@@ -158,7 +158,7 @@
     "title": "What's still owed — principal vs. interest",
     "legendPrincipal": "Principal owed",
     "legendInterest": "Interest still owed",
-    "caption": "Both reach zero together right at payoff. Only exact for a formal loan (rate + PRICE/SAC schedule on file) — a debt paid down by a linked bill or inferred from history shows entirely as principal, since there's no formula to split it from."
+    "caption": "Both hit zero at payoff. Exact only for formal loans with a rate and PRICE/SAC schedule — anything else shows as all principal."
   },
   "card": {
     "paidSoFar": "Paid so far",
@@ -181,7 +181,7 @@
     "future": "Future",
     "futureNote": "Hasn't started yet — its start date is still ahead.",
     "addDebt": "Add a debt",
-    "addDebtDescription": "A fixed principal is for a simple loan. A split percentage is for a shared expense you fronted (e.g. a house-build cost split 50/50) — link the shared purchase transaction(s) as \"borrow\"/\"lend\" and the amount owed grows automatically as you link more.",
+    "addDebtDescription": "Use a fixed principal for a simple loan, or a split percentage for a shared expense you fronted — then link the purchases as \"borrow\"/\"lend\".",
     "name": "Name",
     "direction": "Direction",
     "counterparty": "Counterparty",

@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { getDb } from "../db";
 
 // A transfer between the user's own accounts shows up as a real DEBIT on one
 // BANK account and a real CREDIT on another, for the same amount, within
@@ -16,10 +16,12 @@ interface TxRow {
   type: "DEBIT" | "CREDIT";
 }
 
-function getCategoryId(name: string): number {
-  const row = db.query("SELECT id FROM categories WHERE name = ?").get(name) as {
-    id: number;
-  } | null;
+async function getCategoryId(name: string): Promise<number> {
+  const result = await getDb().execute({
+    sql: "SELECT id FROM categories WHERE name = ?",
+    args: [name],
+  });
+  const row = result.rows[0] as unknown as { id: number } | undefined;
   if (!row) throw new Error(`"${name}" category is missing — did migrations run?`);
   return row.id;
 }
@@ -28,19 +30,20 @@ function getCategoryId(name: string): number {
 // a rule) already categorized is left alone. Scoped to one person's own
 // transactions at a time, so two different people's same-amount transactions
 // within the match window are never mistaken for a transfer between them.
-export function detectSelfTransfers(userId: number): number {
-  const uncategorizedId = getCategoryId("Uncategorized");
-  const transfersId = getCategoryId("Transfers");
+export async function detectSelfTransfers(userId: number): Promise<number> {
+  const db = getDb();
+  const uncategorizedId = await getCategoryId("Uncategorized");
+  const transfersId = await getCategoryId("Transfers");
 
-  const rows = db
-    .query(
-      `SELECT t.id, t.account_id, t.date, t.amount, t.type
-       FROM transactions t
-       JOIN accounts a ON a.id = t.account_id
-       WHERE a.type = 'BANK' AND t.category_id = ? AND t.user_id = ?
-       ORDER BY t.date`
-    )
-    .all(uncategorizedId, userId) as TxRow[];
+  const result = await db.execute({
+    sql: `SELECT t.id, t.account_id, t.date, t.amount, t.type
+          FROM transactions t
+          JOIN accounts a ON a.id = t.account_id
+          WHERE a.type = 'BANK' AND t.category_id = ? AND t.user_id = ?
+          ORDER BY t.date`,
+    args: [uncategorizedId, userId],
+  });
+  const rows = result.rows as unknown as TxRow[];
 
   const matched = new Set<string>();
   let matchedPairs = 0;
@@ -69,10 +72,10 @@ export function detectSelfTransfers(userId: number): number {
   if (matched.size > 0) {
     const ids = [...matched];
     const placeholders = ids.map(() => "?").join(",");
-    db.query(`UPDATE transactions SET category_id = ? WHERE id IN (${placeholders})`).run(
-      transfersId,
-      ...ids
-    );
+    await db.execute({
+      sql: `UPDATE transactions SET category_id = ? WHERE id IN (${placeholders})`,
+      args: [transfersId, ...ids],
+    });
   }
 
   return matchedPairs;

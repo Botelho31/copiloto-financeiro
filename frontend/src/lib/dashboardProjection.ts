@@ -36,6 +36,14 @@ export interface ExpectedLine {
 // expense with no transaction history of its own (e.g. a planned trip) —
 // both are estimates, not facts, and shouldn't be visually conflated with
 // the committed tier.
+//
+// The card-spend line (goal/average/current balance) already represents the
+// WHOLE card total — named cardExpenseBills (e.g. a subscription) are a
+// known subset of it, not additional spend on top (see
+// projectionEngine.ts's activeConfirmedBills comment). Showing both the full
+// line and its own named subset would double it up, so only the
+// unaccounted-for remainder ("misc") is shown as its own line alongside the
+// named ones — the two always sum back to the real total, never past it.
 export function splitCommittedAssumed(month: ProjectedMonth | undefined): {
   committed: ExpectedLine[];
   assumed: ExpectedLine[];
@@ -44,10 +52,13 @@ export function splitCommittedAssumed(month: ProjectedMonth | undefined): {
   const committed = month.bills.filter(
     (b) => b.kind === "bill" || b.kind === "debt" || b.kind === "interest"
   );
-  const assumed: ExpectedLine[] = [
-    ...month.bills.filter((b) => b.kind === "cardSpend"),
-    ...month.cardExpenseBills,
-  ];
+  const cardSpendLine = month.bills.find((b) => b.kind === "cardSpend");
+  const knownCardCharges = month.cardExpenseBills.reduce((sum, b) => sum - b.amount, 0);
+  const assumed: ExpectedLine[] = [...month.cardExpenseBills];
+  if (cardSpendLine) {
+    const misc = Math.abs(cardSpendLine.amount) - knownCardCharges;
+    if (misc > 0) assumed.push({ ...cardSpendLine, amount: -misc });
+  }
   return { committed, assumed };
 }
 
@@ -83,31 +94,24 @@ export function expectedBreakdown(month: ProjectedMonth | undefined): {
 // Narrower than expectedBreakdown on purpose: this is specifically "what's
 // expected to hit a card" (for the per-card spending chart), so it takes
 // only recurring expense bills and cardExpenseBills — not debts (Estudio
-// Foz is paid by bank transfer, not a card) or the card-spend goal/average
-// line itself (that's the real per-card bars' own job, not something to
-// double up as "expected" on top of them).
+// Foz is paid by bank transfer, not a card).
 export function expectedCardCharges(month: ProjectedMonth | undefined): {
   committed: number;
   assumed: number;
 } {
   if (!month) return { committed: 0, assumed: 0 };
   // Committed: a real recurring bill with actual transaction history (e.g.
-  // Nubank Ultravioleta) — about as sure as "future" gets. Assumed: a bill
-  // flagged as a future card expense with no history of its own yet (e.g. a
-  // planned trip), PLUS the general card-spend goal/average itself — the
-  // catch-all for typical discretionary charges (groceries, dining,
-  // shopping) that haven't posted yet. That average is computed excluding
-  // amounts already matched to confirmed bills (see cardSpendBaseline on the
-  // backend), so adding it alongside the named committed bills doesn't
-  // double-count either side. Without it, a future month with barely any
-  // real card data yet (just a pre-scheduled installment or two) reads as
-  // nearly empty instead of showing what's actually expected.
+  // Nubank Ultravioleta) — about as sure as "future" gets. Assumed: same
+  // "known subset + unaccounted misc remainder" split as
+  // splitCommittedAssumed above (see its comment for why cardExpenseBills
+  // is a subset of the cardSpend line's total, not additional spend on top
+  // of it) — just returning a total instead of individual line items.
   const committed = -month.bills
     .filter((b) => b.kind === "bill" && b.amount < 0)
     .reduce((sum, b) => sum + b.amount, 0);
   const cardSpendLine = month.bills.find((b) => b.kind === "cardSpend");
-  const assumed =
-    (cardSpendLine ? -cardSpendLine.amount : 0) +
-    month.cardExpenseBills.reduce((sum, b) => sum - b.amount, 0);
+  const knownCardCharges = month.cardExpenseBills.reduce((sum, b) => sum - b.amount, 0);
+  const misc = cardSpendLine ? Math.max(0, Math.abs(cardSpendLine.amount) - knownCardCharges) : 0;
+  const assumed = knownCardCharges + misc;
   return { committed, assumed };
 }

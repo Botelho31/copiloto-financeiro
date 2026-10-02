@@ -10,10 +10,12 @@
     "config": "Configurações",
     "person": "Pessoa"
   },
-  "logout": "Sair",
   "language": {
     "en": "Inglês",
     "pt": "Português"
+  },
+  "vault": {
+    "lockNow": "Bloquear"
   },
   "period": {
     "month": "Mês",
@@ -33,11 +35,6 @@
     "total": "Total",
     "category": "Categoria",
     "tag": "Etiqueta"
-  },
-  "notifications": {
-    "title": "Notificações",
-    "empty": "Nenhuma notificação ainda.",
-    "markRead": "Marcar como lida"
   },
   "noTransactionsForFilters": "Nenhuma transação para agrupar com os filtros selecionados."
 }

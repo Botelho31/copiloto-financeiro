@@ -49,7 +49,7 @@ function titleCase(value: string): string {
 // need is computed once in useDashboardData instead.
 export function DashboardPage() {
   const { t } = useTranslation(["dashboard", "common"]);
-  const [period, setPeriod] = useState<Period>(() => periodFor("month"));
+  const [period, setPeriod] = useState<Period>(() => periodFor("year"));
   const [tagId, setTagId] = useState<number | undefined>();
   const [includeCardSpend, setIncludeCardSpend] = useState(true);
   const [balanceOverTimeOpen, setBalanceOverTimeOpen] = useState(false);
@@ -135,17 +135,17 @@ export function DashboardPage() {
           <div className="toggle-group">
             <button
               type="button"
-              className={dashboardMode === "review" ? "active" : undefined}
-              onClick={switchToReview}
-            >
-              {t("modes.review")}
-            </button>
-            <button
-              type="button"
               className={dashboardMode === "trends" ? "active" : undefined}
               onClick={switchToTrends}
             >
               {t("modes.trends")}
+            </button>
+            <button
+              type="button"
+              className={dashboardMode === "review" ? "active" : undefined}
+              onClick={switchToReview}
+            >
+              {t("modes.review")}
             </button>
             <button
               type="button"

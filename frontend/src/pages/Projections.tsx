@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { FiCheck, FiChevronDown, FiChevronRight, FiEdit2, FiTrash2, FiX } from "react-icons/fi";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -28,6 +29,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useSortableTable } from "../hooks/useSortableTable";
 import { formatMoney, moneyTooltip } from "../lib/format";
 import { periodFor, type Period } from "../lib/period";
+import { usePersonScope } from "../lib/personScope";
 import {
   DEBT_MARKER_COLOR,
   DEFAULT_INTEREST_RATE_ANNUAL_PERCENT,
@@ -396,6 +398,7 @@ export function ProjectionsPage() {
   const { data: bills } = useBills();
   const { data: debts } = useDebts();
   const { data: settings } = useSettings();
+  const { activeUserId } = usePersonScope();
   const whatIf = useWhatIfProjection();
 
   const [billAmounts, setBillAmounts] = useState<Record<number, number>>({});
@@ -1007,6 +1010,7 @@ export function ProjectionsPage() {
           <SummaryCard
             label={t("savingsChart.summary.startingBalance")}
             value={formatMoney(result?.startingBalance ?? 0)}
+            caption={t("savingsChart.summary.startingBalanceCaption")}
           />
           <SummaryCard
             label={t("savingsChart.summary.cardSpendBaseline")}
@@ -1020,7 +1024,13 @@ export function ProjectionsPage() {
                 ? t("savingsChart.cardSpendGoal.usingAverage")
                 : formatMoney(Number(cardSpendGoal))
             }
-            caption={t("savingsChart.cardSpendGoal.editHint")}
+            caption={
+              <Link to={activeUserId != null ? `/config/users/${activeUserId}` : "/config"}>
+                {activeUserId != null
+                  ? t("savingsChart.cardSpendGoal.editHintPerson")
+                  : t("savingsChart.cardSpendGoal.editHintHousehold")}
+              </Link>
+            }
           />
         </div>
         <div className="chart-container">
