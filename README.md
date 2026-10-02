@@ -1,54 +1,56 @@
 # Copiloto Financeiro
 
-🇧🇷 [Leia em português](README.pt-BR.md)
+🇺🇸 [Read in English](README.en.md)
 
-Self-hosted personal finance copilot for Brazil. Pulls bank transactions daily via
-[Pluggy](https://docs.pluggy.ai/) (Open Finance Brasil), and tracks spending, bills,
-debts, and cash-flow projections across a household.
+Copiloto financeiro pessoal, self-hosted, feito para o Brasil. Puxa transações
+bancárias via [Pluggy](https://docs.pluggy.ai/) (Open Finance Brasil) e acompanha
+gastos, contas, dívidas, metas e projeção de fluxo de caixa da família — uma visão por
+pessoa, mais uma combinada.
 
-A Bun-workspace monorepo: `backend/` (Elysia API + cron sync), `frontend/` (Vite +
-React), `shared/` (shared types). See `ARCHITECTURE.md` and
-`backend/API-ARCHITECTURE.md` for how it's built, `CONTRIBUTING.md` before opening a PR.
+Bun workspace: `backend/` (API Elysia + sync com o Pluggy + servidor MCP), `frontend/`
+(Vite + React), `shared/` (tipos compartilhados). Veja `ARCHITECTURE.md` (em inglês) /
+`backend/API-ARCHITECTURE.md` pros detalhes internos, `CONTRIBUTING.md` antes de abrir
+um PR.
 
-## Philosophy
+## Filosofia
 
-Built AI-agent-first for a Brazilian developer who already works with agents daily:
-every operation exists as an MCP tool (`backend/src/mcp-server.ts`) before it exists as
-a REST route with a form on top — Claude is the primary client today, but any
-MCP-capable agent drives it the same way. It ships with only the basics of personal
-finance and is deliberately unopinionated beyond that — if something doesn't fit how
-your money works, fork it and change the code instead of waiting for a setting.
+Construído com agente de IA em primeiro lugar: toda operação é uma ferramenta MCP
+(`backend/src/mcp-server.ts`) antes de ser uma rota REST — o Claude opera direto hoje,
+qualquer agente com MCP poderia. Vem só com o básico e é deliberadamente não opinativo
+além disso; bifurque e mude o código se algo não bater com o seu dinheiro.
 
-## Setup
+## Configuração
 
-This app only _reads_ from Pluggy — use [meu-pluggy](https://github.com/pluggyai/meu-pluggy)
-to actually connect a bank account and get an Item ID.
+Rode `/get-started` no Claude Code pra um passo a passo guiado. Versão manual:
 
-1. Copy `.env.example` to `.env` and set `SESSION_SECRET` (see the file for how).
-2. `bun install`
-3. `bun run dev` (backend + frontend together) — open the printed URL's `/setup` to
-   create the admin account, then add household members and everything else (Pluggy
-   credentials, cron schedule, notification providers) from `/config`.
+1. `bun install`, depois copie `.env.example` pra `.env` (os padrões já servem).
+2. `bun run dev`, acesse a URL impressa e defina uma senha. Isso criptografa o banco
+   de dados — salve o código de recuperação que aparece, ele é o único jeito de entrar
+   se você esquecer a senha e nunca é mostrado de novo.
+3. Pra usar pelo Claude Code (MCP): em `/config` → "Chaves de API", gere uma chave e
+   salve ela (só aparece uma vez) em `data/mcp-api-key` — só a chave, mais nada.
+4. Adicione pessoas e suas conexões com o Pluggy (um Item ID via
+   [meu-pluggy](https://github.com/pluggyai/meu-pluggy)) em `/config`.
 
-## Development
+Sem contas — só essa senha. O sync roda quando você desbloqueia, se já faz um tempo
+(ou quando quiser, em "Sincronizar agora"). Bloquear o app corta o acesso do MCP
+também. Feito pra ficar na sua máquina ou rede local, não na internet aberta (veja
+"Deploy").
+
+## Desenvolvimento
 
 - `bun run dev` / `bun run dev:backend` / `bun run dev:frontend`
-- `bun run build` / `bun run start` — production build + serve
+- `bun run build` / `bun run start` — build de produção + servir
 - `bun run typecheck` / `bun run test` / `bun run lint`
 
-## Notifications
-
-After each sync, rules in `backend/src/services/notifications/rules.ts` (large
-transaction, projected shortfall) can notify a person via Pushover and/or email —
-configure the app-wide Pushover token / SMTP relay and enable each person's own
-destination from `/config`.
-
-## Deploying
+## Deploy
 
 ```bash
 docker compose up -d --build
 ```
 
-Builds the image, runs migrations on boot, and persists SQLite at `./data` via a
-bind-mounted volume. Put it behind whatever reverse proxy you already run — the app
-itself just needs a port, and handles its own login and rate limiting.
+Builda a imagem, roda as migrations ao iniciar, serve em `127.0.0.1:8080` e persiste
+`./data` (o banco criptografado, o arquivo necessário pra desbloqueá-lo e a chave do
+MCP — faça backup disso como uma unidade só). Ainda sem contas, então não exponha isso
+na internet aberta — mantenha em localhost/rede local, ou acesse remotamente com algo
+como Tailscale.

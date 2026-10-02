@@ -1,12 +1,12 @@
 # Contributing
 
-This is a personal, self-hosted project (see the "Philosophy" section in `README.md`
+This is a personal, self-hosted project (see the "Philosophy" section in `README.en.md`
 before making structural changes) — but the same conventions apply whether you're the
 sole maintainer or a future contributor.
 
 ## Setup
 
-Follow `README.md`'s Setup section first. In short: `bun install`, copy `.env.example`
+Follow `README.en.md`'s Setup section first. In short: `bun install`, copy `.env.example`
 to `.env`, `bun run dev` (backend + frontend together).
 
 ## Before opening a PR / committing
