@@ -13,6 +13,7 @@
     "dev:frontend": "bun run --cwd frontend dev",
     "build": "bun run --cwd frontend build",
     "start": "bun backend/src/index.ts",
+    "setup": "bun backend/src/scripts/setup.ts",
     "categorize": "bun backend/src/scripts/categorize.ts",
     "typecheck": "bun run --cwd backend typecheck && bun run --cwd frontend typecheck",
     "test": "bun run --cwd backend test",

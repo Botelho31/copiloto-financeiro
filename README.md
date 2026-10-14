@@ -26,13 +26,12 @@ configurar — ele cuida de tudo (`/get-started`).
 
 Prefere fazer à mão?
 
-1. `bun install`, depois copie `.env.example` pra `.env` (os padrões já servem).
-2. `bun run dev`, acesse a URL impressa e defina uma senha. Isso criptografa o banco
-   de dados — salve o código de recuperação que aparece, ele é o único jeito de entrar
-   se você esquecer a senha e nunca é mostrado de novo.
-3. Pra usar pelo Claude Code (MCP): em `/config` → "Chaves de API", gere uma chave e
-   salve ela (só aparece uma vez) em `data/mcp-api-key` — só a chave, mais nada.
-4. Adicione pessoas e suas conexões com o Pluggy (um Item ID via
+1. `bun run setup` — instala as dependências se precisar, pede sua senha no
+   terminal (isso criptografa o banco; salve o código de recuperação que
+   aparece, ele é o único jeito de entrar se você esquecer a senha e nunca é
+   mostrado de novo), gera a primeira chave de API pro Claude Code e já sobe
+   o app.
+2. Adicione pessoas e suas conexões com o Pluggy (um Item ID via
    [meu-pluggy](https://github.com/pluggyai/meu-pluggy)) em `/config`.
 
 Sem contas — só essa senha. O sync roda quando você desbloqueia, se já faz um tempo

@@ -31,45 +31,39 @@ jargon — no "cash-flow projection engine" or "MCP tool server"):
 
 ## Steps
 
-1. **Get the server running.**
-   - Check whether `.env` exists; if not, copy `.env.example` to `.env`
-     (nothing in it needs filling in — it's just `PORT`/`DB_PATH` defaults).
-   - Run `bun install` if `node_modules` is missing.
-   - Tell the user to run `bun run dev` in a terminal (or point them at the
-     `run` skill), then open the printed URL.
+1. **Tell the user to run `bun run setup` in a terminal — you can't do this
+   part for them.** One command does everything that used to be three
+   separate steps: installs dependencies if `node_modules` is missing,
+   copies `.env.example` to `.env` if needed, asks for a password right in
+   the terminal (this encrypts the database — tell them plainly that this
+   is on them, and to **save the recovery code it prints** before
+   continuing past that prompt, it's the only way back in if they forget
+   the password and it's never shown again), generates the first MCP API
+   key and saves it to `data/mcp-api-key` itself, then starts the app. You
+   have no MCP tools until this finishes — none exist until the vault is
+   unlocked and that key file exists. If the project's already been set up
+   before (a vault already exists), the same command just starts the app
+   again, no prompts.
+   - If they'd rather do it the old way (the browser's own "Set a
+     password" screen, then generating a key from `/config` → "API Keys"
+     by hand), that still works — don't insist on the script if they
+     already started down that path.
+   - Once your MCP tools start working, if a call fails with "no valid API
+     key," `data/mcp-api-key` is still missing or has the wrong content —
+     don't guess further, ask the user to check it.
 
-2. **Set a password — browser-only, you can't do this part for them.** The
-   printed URL leads straight to a "Set a password" screen (this encrypts
-   the database). Tell the user plainly that this is on them: type a
-   password, then **save the recovery code the next screen shows** — it's
-   the only way back in if they forget the password, and it's never shown
-   again. You have no MCP tools yet at this point — none exist until the
-   vault is unlocked.
-
-3. **Generate an API key — also browser-only, and required before you can
-   do anything else in this skill.** Every MCP tool call (`list_users`,
-   everything below) needs an API key, and the very first one can only ever
-   be created from the browser (nothing else is authenticated yet to create
-   one on your behalf). Tell the user: open `/config` → "API Keys", generate
-   one named for this machine (e.g. "Claude Code"), and save the raw key
-   (shown once) to `data/mcp-api-key` in the project folder — a plain text
-   file, just the key, no quotes. Once that file exists, your MCP tools
-   start working; if a tool call fails with "no valid API key," that file is
-   still missing or has the wrong content — don't guess further, ask the
-   user to check it.
-
-4. **Find out who you're talking to.** Call `list_users`. A fresh install
+2. **Find out who you're talking to.** Call `list_users`. A fresh install
    always has exactly one person, named "Me" with no Pluggy credentials —
    if that's still the case, ask the user's name and `update_user` that
    same person (rename "Me") rather than creating a second profile. If
    `list_users` already shows real names or credentials, skip straight to
-   step 6 — this install is already further along than "fresh."
+   step 4 — this install is already further along than "fresh."
 
-5. **Ask about the rest of the household**, one at a time: "Anyone else
+3. **Ask about the rest of the household**, one at a time: "Anyone else
    sharing this with you?" For each additional person, `create_user` with
    just their name (color is optional, a sensible default is fine).
 
-6. **Pluggy, per person.** Ask: "Have you already connected a bank via
+4. **Pluggy, per person.** Ask: "Have you already connected a bank via
    meu-pluggy, or do you need to do that first?" If they need to, explain
    in one line: [meu-pluggy](https://github.com/pluggyai/meu-pluggy) is a
    separate tool that actually links a bank account and hands back a client
@@ -78,17 +72,17 @@ jargon — no "cash-flow projection engine" or "MCP tool server"):
    `create_user`). This step is fully skippable — say so — they can come
    back and run this skill again, or add it later from `/config`.
 
-7. **Card-spend goal, per person — optional, say so up front.** Ask if they
+5. **Card-spend goal, per person — optional, say so up front.** Ask if they
    want a standing monthly target for credit card spending, or would rather
    the app just use their real 3-month average (the default, no action
    needed). If they want one, `update_settings` for that person.
 
-8. **First sync.** Once at least one person has Pluggy credentials, run
+6. **First sync.** Once at least one person has Pluggy credentials, run
    `trigger_sync` so they see real data immediately instead of an empty app.
    Call `get_sync_status` after a few seconds to confirm it finished, and
    report the transaction count.
 
-9. **Wrap up.** Mention categories already come with sensible defaults
+7. **Wrap up.** Mention categories already come with sensible defaults
    (`list_categories` if they're curious) — nothing to set up there yet.
    Point to the other skills for later, once there's real transaction
    history: `add-category-rules`, `confirm-recurring-bills`,
@@ -102,9 +96,10 @@ jargon — no "cash-flow projection engine" or "MCP tool server"):
 
 - One question at a time — don't dump a form's worth of questions in one
   message.
-- Steps 2 and 3 are the only truly required ones (and the only ones you
-  cannot do yourself, at all — be upfront about that rather than attempting
-  a workaround). Everything from step 4 onward is optional and resumable —
+- Step 1 is the only truly required one (and the only one you cannot do
+  yourself, at all — be upfront about that rather than attempting a
+  workaround). Everything from step 2 onward is optional and resumable —
   say so as you go, don't make any of it feel mandatory.
 - Never ask the user to tell you their password or recovery code. You have
-  no use for either — only the API key (step 3) is ever meant to reach you.
+  no use for either — only the API key step 1 generates is ever meant to
+  reach you.

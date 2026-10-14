@@ -25,13 +25,11 @@ handles everything (`/get-started`).
 
 Prefer doing it by hand?
 
-1. `bun install`, then copy `.env.example` to `.env` (the defaults are fine).
-2. `bun run dev`, open the printed URL, and set a password. This encrypts the database
-   — save the recovery code it shows you, it's the only way back in if you forget the
-   password and it's never shown again.
-3. To use it from Claude Code (MCP): in `/config` → "API Keys", generate a key and
-   save it (shown once) to `data/mcp-api-key` — just the key, nothing else.
-4. Add people and their Pluggy connections (an Item ID via
+1. `bun run setup` — installs dependencies if needed, asks for your password right in
+   the terminal (this encrypts the database; save the recovery code it shows you, it's
+   the only way back in if you forget the password and it's never shown again),
+   generates the first API key for Claude Code, and starts the app.
+2. Add people and their Pluggy connections (an Item ID via
    [meu-pluggy](https://github.com/pluggyai/meu-pluggy)) from `/config`.
 
 No accounts — just that one password. Sync runs when you unlock, if it's been a while
