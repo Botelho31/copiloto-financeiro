@@ -9,7 +9,7 @@ import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { config } from "../config";
-import { getDb, hasVault, setupVault } from "../db";
+import { getDb, hasVault, setupVault, unlock } from "../db";
 import { generateApiKey, hashApiKey } from "../vault/crypto";
 
 function readLine(prompt: string): Promise<string> {
@@ -114,6 +114,18 @@ async function promptNewPassword(): Promise<string> {
   }
 }
 
+// Only for unlocking an *existing* vault (to generate a missing API key
+// below) — no confirmation, no length check, those only make sense when
+// choosing a brand-new password.
+async function promptExistingPassword(): Promise<string> {
+  const reader = createHiddenLineReader();
+  try {
+    return await reader.readHiddenLine("Password: ");
+  } finally {
+    reader.close();
+  }
+}
+
 async function ensureDeps(): Promise<void> {
   if (existsSync("node_modules")) return;
   console.log("Installing dependencies (bun install)...");
@@ -125,13 +137,19 @@ async function ensureDeps(): Promise<void> {
   }
 }
 
+// Same derivation as vault/store.ts (vault.json) and mcp-server.ts (reading
+// it back) — next to the database, following a custom DB_PATH.
+function mcpKeyPath(): string {
+  return join(dirname(config.dbPath), "mcp-api-key");
+}
+
 async function createMcpApiKey(): Promise<string> {
   const key = generateApiKey();
   await getDb().execute({
     sql: "INSERT INTO api_keys (name, key_hash) VALUES (?, ?)",
     args: ["Claude Code (setup script)", hashApiKey(key)],
   });
-  const keyPath = join(dirname(config.dbPath), "mcp-api-key");
+  const keyPath = mcpKeyPath();
   writeFileSync(keyPath, key + "\n", { mode: 0o600 });
   chmodSync(keyPath, 0o600);
   return keyPath;
@@ -162,7 +180,29 @@ async function main(): Promise<void> {
   }
 
   if (hasVault()) {
-    console.log("A vault already exists — nothing to set up. Starting the app...\n");
+    if (existsSync(mcpKeyPath())) {
+      console.log("A vault already exists — nothing to set up. Starting the app...\n");
+      await startApp();
+      return;
+    }
+
+    console.log(
+      "A vault already exists, but there's no MCP API key on file yet.\n" +
+        "Enter your password to unlock it and generate one."
+    );
+    const existingPassword = await promptExistingPassword();
+    try {
+      await unlock(existingPassword);
+    } catch {
+      console.error(
+        "\nWrong password — can't generate a key without unlocking. Try again, or " +
+          'generate one from the browser\'s /config → "API Keys" instead.'
+      );
+      process.exit(1);
+    }
+    const keyPath = await createMcpApiKey();
+    console.log(`\nMCP API key generated and saved to ${keyPath}.\n`);
+    console.log("Starting the app...\n");
     await startApp();
     return;
   }
