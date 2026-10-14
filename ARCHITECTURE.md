@@ -43,7 +43,7 @@ flowchart TB
     subgraph Server["Elysia server (backend/src/index.ts)"]
         LockGate["lock-gate<br>onBeforeHandle: isUnlocked() +<br>session cookie / X-API-Key"]
         VaultRoutes["routes/vault.ts<br>setup · unlock · lock · api-keys"]
-        ApiRoutes["routes/*.ts<br>accounts · transactions · categories · tags<br>bills · debts · goals · investments<br>projections · settings · sync"]
+        ApiRoutes["routes/*.ts<br>accounts · transactions · categories · tags<br>bills · debts · goals · investments<br>projections · settings · sync · users · appConfig"]
         Static["static file serving<br>frontend/dist + /public"]
     end
 
@@ -331,7 +331,7 @@ flowchart LR
     Layout --> Config["/config  manage people"]
 
     subgraph DataLayer["hooks/* (one per resource)"]
-        H["useAccounts · useTransactions · useCategories<br>useBills · useDebts · useGoals · useUsers<br>useInvestments · useProjections · useTags · useSettings"]
+        H["useAccounts · useTransactions · useCategories<br>useBills · useDebts · useGoals · useUsers<br>useInvestments · useProjections · useTags · useSettings<br>useVault · useAppConfig"]
     end
 
     Dashboard & Transactions & Bills & Debts & Projections & Household & Config --> DataLayer

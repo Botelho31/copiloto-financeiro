@@ -51,14 +51,25 @@ with nothing of its own to isolate.
 
 **Every mutation is a named, exported function, not inline in the Elysia handler** —
 `createBill`/`updateBill`/`deleteBill`, `createDebt`/`updateDebt`/`deleteDebt`, and so on
-for every resource. This is what lets `mcp-server.ts` call the exact same function a REST
-request would hit instead of maintaining its own parallel copy of the same `INSERT`/
-`UPDATE` SQL — before this pass, `bills.ts`, `debts.ts`, `goals.ts`, and `categories.ts`
-each had their create/update/delete logic duplicated once in the route handler and again
-in the matching MCP tool (two places for the same write to drift apart, the same failure
-mode as the frontend duplication above, just one layer over). `users.ts`/`tags.ts`
-already followed this pattern before the pass; everything else was brought in line with
-it.
+for every resource, called from that resource's route handler. Originally this was also
+what let `mcp-server.ts` call the exact same function a REST request would hit, instead
+of maintaining its own parallel copy of the same `INSERT`/`UPDATE` SQL — before that pass,
+`bills.ts`, `debts.ts`, `goals.ts`, and `categories.ts` each had their create/update/delete
+logic duplicated once in the route handler and again in the matching MCP tool (two places
+for the same write to drift apart, the same failure mode as the frontend duplication
+above, just one layer over). `users.ts`/`tags.ts` already followed this pattern before
+that pass; everything else was brought in line with it.
+
+That's no longer how MCP reaches these functions, though. Once the database was
+encrypted at rest (see `ARCHITECTURE.md`'s "Encryption & unlock"), the decryption key
+could only safely live in one process's memory — so `mcp-server.ts` stopped importing
+these functions at all and became a plain `fetch()` client of this same server's own
+`/api/*` routes instead, authenticated with an API key. That's actually a stronger
+version of the same guarantee, not a weaker one: a route and its matching MCP tool are
+now literally the same HTTP endpoint, not two callers of one function that could still
+each call it slightly differently. The named-function convention above still matters —
+it's what keeps each route handler itself thin and testable — just not for the
+MCP-sharing reason it originally was.
 
 ## Routes
 

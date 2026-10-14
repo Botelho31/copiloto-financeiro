@@ -40,9 +40,11 @@ full rationale.
 - **`services/*.ts`** — business logic, but only split into its own file when there's
   real computation to isolate (debts, the projection engine, categorization). A trivial
   resource (tags, settings, users) can keep its logic inline in `routes/*.ts`.
-- **Every mutation is a named, exported function**, never inline in the Elysia handler —
-  `backend/src/mcp-server.ts` reuses these exact functions instead of duplicating SQL, so
-  a route and an MCP tool can never quietly disagree about what a "create bill" does.
+- **Every mutation is a named, exported function**, never inline in the Elysia handler.
+  `backend/src/mcp-server.ts` doesn't call these directly — it's a `fetch()` client of
+  this same server's own `/api/*` routes (see `ARCHITECTURE.md`'s "MCP tool server"
+  section for why), so a route and its matching MCP tool can never disagree about what
+  a "create bill" does: the tool just calls the route.
 
 ### Frontend: pages, components, hooks, config
 
