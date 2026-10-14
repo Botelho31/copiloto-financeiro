@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ProjectionResult, Transaction } from "shared";
 import { FALLBACK_CATEGORY_COLOR, TOP_CATEGORY_COUNT } from "../../config";
 import { findProjectedMonth } from "../../lib/dashboardProjection";
@@ -134,7 +134,7 @@ export function DashboardTrendsSection(props: {
       </p>
       <div className="chart-container" style={{ height: 300 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={topCategoriesOverTime.monthly}>
+          <AreaChart data={topCategoriesOverTime.monthly}>
             <XAxis dataKey="label" stroke="var(--text-muted)" />
             <YAxis stroke="var(--text-muted)" />
             <Tooltip formatter={moneyTooltip} />
@@ -152,28 +152,34 @@ export function DashboardTrendsSection(props: {
                 </span>
               )}
             />
-            {topCategoriesOverTime.topNames.map((name) => (
-              <Line
-                key={name}
-                type="monotone"
-                dataKey={name}
-                name={name}
-                hide={hiddenTrendCategories.has(name)}
-                stroke={categoryColorByName.get(name) ?? FALLBACK_CATEGORY_COLOR}
-                dot={(props: any) => (
-                  <circle
-                    key={props.payload.label}
-                    cx={props.cx}
-                    cy={props.cy}
-                    r={3}
-                    fill={categoryColorByName.get(name) ?? FALLBACK_CATEGORY_COLOR}
-                    style={{ cursor: "pointer" }}
-                    onClick={() => onBarClick(props)}
-                  />
-                )}
-              />
-            ))}
-          </LineChart>
+            {topCategoriesOverTime.topNames.map((name) => {
+              const color = categoryColorByName.get(name) ?? FALLBACK_CATEGORY_COLOR;
+              return (
+                <Area
+                  key={name}
+                  type="monotone"
+                  dataKey={name}
+                  name={name}
+                  stackId="categories"
+                  hide={hiddenTrendCategories.has(name)}
+                  stroke={color}
+                  fill={color}
+                  fillOpacity={0.55}
+                  dot={(props: any) => (
+                    <circle
+                      key={props.payload.label}
+                      cx={props.cx}
+                      cy={props.cy}
+                      r={3}
+                      fill={color}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => onBarClick(props)}
+                    />
+                  )}
+                />
+              );
+            })}
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>
